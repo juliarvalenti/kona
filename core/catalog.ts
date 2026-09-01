@@ -49,7 +49,7 @@ export function catalogMarkdown(packages: AppletPackage[]): string {
 export function catalogLines(packages: AppletPackage[]): string[] {
   const width = Math.max(...packages.map((p) => p.def.id.length), 0);
   return packages.map((p) => {
-    const tag = p.source === "plugin" ? "  (plugin)" : "";
+    const tag = p.source === "repo" ? "" : `  (${p.source === "link" ? "linked" : "plugin"})`;
     return `${p.def.id.padEnd(width)}  ${p.def.summary ?? ""}${tag}`;
   });
 }

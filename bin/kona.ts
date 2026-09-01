@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-import { mkdirSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ensureDaemon, api, base, callVerb } from "../core/client.ts";
+import { ensureDaemon, api, base, callVerb, registerApplet } from "../core/client.ts";
 import { startDaemon } from "../server/daemon.ts";
 import { loadConfig, configDir, defaultConfigToml, resetConfig } from "../core/config.ts";
 import { loadPackages, type AppletPackage } from "../core/load.ts";
@@ -10,7 +10,8 @@ import { skillMarkdown } from "../core/skill.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { copyToClipboard, clipboardHelpers } from "../core/clipboard.ts";
 import { scaffoldApplet, validId } from "../core/scaffold.ts";
-import type { AppletCall, AuthProvider, ToolSpec } from "../sdk/index.ts";
+import { linkApplet, linkPath, linksFile, readLinks, unlinkApplet } from "../core/links.ts";
+import type { AnyApplet, AppletCall, AuthProvider, ToolSpec } from "../sdk/index.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -68,6 +69,82 @@ async function select(prompt: string, options: string[]): Promise<string> {
   });
 }
 
+/** A first argument that names a FILE rather than an applet id (ids are `[a-z0-9-]`). */
+const looksLikePath = (arg: string): boolean => arg.includes("/") || arg.endsWith(".ts");
+
+/**
+ * Read an applet module off disk, or die saying why. This is the gate every
+ * path-shaped invocation goes through — `kona <path>`, `kona link <path>`, and
+ * the shebang line that turns into the first of those.
+ */
+async function readModule(file: string): Promise<{ entry: string; def: AnyApplet }> {
+  const entry = linkPath(file);
+  if (!existsSync(entry) || !statSync(entry).isFile()) {
+    console.error(`no such file: ${entry}`);
+    process.exit(1);
+  }
+  let def: AnyApplet | undefined;
+  try {
+    def = ((await import(entry)) as { default?: AnyApplet }).default;
+  } catch (e) {
+    console.error(`could not load ${entry}: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+  if (!def?.id || !def.verbs || !def.view) {
+    console.error(`not an applet: ${entry} must default-export defineApplet(...)`);
+    process.exit(1);
+  }
+  // An id already claimed by an installed applet is refused here rather than
+  // silently losing to it in the loader — a file you ran on purpose deserves an
+  // answer, and `timer` must keep meaning the timer for every other client.
+  const clash = (await packages()).find((p) => p.def.id === def!.id && p.entry !== entry);
+  if (clash) {
+    console.error(`applet id "${def.id}" is already installed from ${clash.entry}`);
+    process.exit(1);
+  }
+  return { entry, def };
+}
+
+/**
+ * Remember the module and hand it to the daemon: linking is what makes it an
+ * applet for every OTHER client (an agent's `kona call`, the launcher, the
+ * manifest), and registering is what makes that true now rather than after the
+ * daemon's next restart. A module the loader already finds is left alone.
+ */
+async function installModule(entry: string, def: AnyApplet): Promise<void> {
+  if (!(await packages()).some((p) => p.entry === entry)) linkApplet(def.id, entry);
+  await ensureDaemon();
+  const res = await registerApplet(entry);
+  if (res.error) {
+    console.error(res.error);
+    process.exit(1);
+  }
+}
+
+/**
+ * Open an applet's TUI, after letting the applet turn its own command line into
+ * verb calls. Shared by `kona <applet>` and `kona <path>` so an executable
+ * applet gets exactly the treatment an installed one does — `./pomodoro 50m`
+ * lands in the same `cli.open` as `kona pomodoro 50m`.
+ */
+async function openApplet(def: AnyApplet, args: string[]): Promise<void> {
+  // What the positional args mean is the APPLET's business: `kona timer 5m`,
+  // `kona mycelium ship-kona`. It answers with the verbs to fire before the
+  // view opens, from its own `cli.open` — so this file knows no applet by
+  // name and a plugin gets the same treatment as a built-in.
+  const open = def.cli?.open;
+  if (open) {
+    const state = ((await api(`/applets/${def.id}/state`).catch(() => ({}))) ?? {}) as Record<string, unknown>;
+    const wanted = open(args, state);
+    const calls: AppletCall[] = wanted ? (Array.isArray(wanted) ? wanted : [wanted]) : [];
+    for (const c of calls) await callVerb(def.id, c.verb, c.args ?? {});
+  }
+  // Applets with a `refresh` verb (e.g. email) get an initial load on open.
+  await callVerb(def.id, "refresh", {}).catch(() => {});
+  const { runHost } = await import("../host/index.ts");
+  await runHost(def.id);
+}
+
 async function usage() {
   // Applet-specific invocations and sign-ins are printed from the applets
   // themselves, so this help text never has to learn a new applet's name.
@@ -79,9 +156,13 @@ async function usage() {
   kona                     the configured default applet, else the launcher
   kona launcher            always the launcher: pick an app
   kona <applet> [args]     open an applet's TUI
+  kona <file.ts> [args]    run an applet module directly — what a \`chmod +x\`
+                           applet with \`#!/usr/bin/env kona\` on line one does
+  kona link [file.ts]      keep a module loadable by id (no args: list links)
+  kona unlink <id|file>    forget one
   kona ls                  list applets
   kona new <id>            scaffold a new applet package (--plugin for one
-                           outside the repo)
+                           outside the repo, --executable for a runnable file)
   kona docs [applet]       the applet catalog, or one applet's README
   kona tools               list agent-callable verbs (the manifest)
   kona tools --json        the same manifest as JSON (args, keys, docs)
@@ -164,6 +245,48 @@ switch (cmd) {
     break;
   }
 
+  // An applet file lives outside every directory kona scans, so running one
+  // remembers it (see core/links.ts). `link` is that step without the TUI —
+  // what you want when the applet is for an agent to call, not for you to
+  // watch — and `unlink` is how a machine forgets one.
+  case "link": {
+    const target = rest[0];
+    if (!target) {
+      const links = readLinks();
+      if (!links.length) {
+        console.log(`no linked applets — \`kona link <file.ts>\`\n${linksFile()}`);
+        break;
+      }
+      const width = Math.max(...links.map((l) => l.id.length));
+      for (const l of links) {
+        console.log(`${l.id.padEnd(width)}  ${l.entry}${existsSync(l.entry) ? "" : "   (missing)"}`);
+      }
+      break;
+    }
+    const { entry, def } = await readModule(target);
+    await installModule(entry, def);
+    console.log(`linked ${def.id} -> ${entry}\n\nkona ${def.id}                 open it`);
+    console.log(`kona call ${def.id} <verb> [json]  ...and what an agent does instead`);
+    break;
+  }
+
+  case "unlink": {
+    const target = rest[0];
+    if (!target) {
+      console.error("usage: kona unlink <id|file.ts>");
+      process.exit(1);
+    }
+    const gone = unlinkApplet(target);
+    if (!gone) {
+      console.error(`not linked: ${target}`);
+      process.exit(1);
+    }
+    // The daemon keeps the applet until it restarts; say so rather than let a
+    // still-answering `kona call` look like the unlink failed.
+    console.log(`unlinked ${gone.id} (${gone.entry}) — konad drops it on its next restart`);
+    break;
+  }
+
   case "ls": {
     for (const line of catalogLines(await packages())) console.log(line);
     break;
@@ -197,9 +320,12 @@ switch (cmd) {
   case "new": {
     const id = rest[0];
     if (!id || !validId(id)) {
-      console.error("usage: kona new <id> [--plugin | --out <dir>]   (id: a-z, digits, dashes)");
+      console.error("usage: kona new <id> [--plugin | --out <dir>] [--executable]   (id: a-z, digits, dashes)");
       process.exit(1);
     }
+    // `--executable` writes the shebang and flips the mode bit, so the package
+    // you just scaffolded is also a command: `./applets/<id>/index.ts`.
+    const executable = rest.includes("--executable") || rest.includes("--exe");
     const outAt = rest.indexOf("--out");
     const explicit = outAt >= 0 ? rest[outAt + 1] : undefined;
     if (outAt >= 0 && !explicit) {
@@ -216,9 +342,12 @@ switch (cmd) {
       process.exit(1);
     }
     mkdirSync(dir, { recursive: true });
-    for (const file of scaffoldApplet(id, dir)) await Bun.write(join(dir, file.path), file.content);
+    const files = scaffoldApplet(id, dir, { executable });
+    for (const file of files) await Bun.write(join(dir, file.path), file.content);
+    if (executable) chmodSync(join(dir, "index.ts"), 0o755);
     console.log(`${dir}\n`);
-    for (const file of scaffoldApplet(id, dir)) console.log(`  ${file.path}`);
+    for (const file of files) console.log(`  ${file.path}${executable && file.path === "index.ts" ? "  (executable)" : ""}`);
+    if (executable) console.log(`\n${join(dir, "index.ts")}   run the file itself`);
     console.log(`\nkona ${id}          open it (the daemon restarts itself)`);
     console.log(`bun test ${dir === resolve("applets", id) ? `applets/${id}` : dir}   its own tests, discovered where they live`);
     break;
@@ -452,6 +581,18 @@ switch (cmd) {
   }
 
   default: {
+    // `kona <file.ts> [args...]` — the applet-as-executable path. This is what
+    // the kernel hands us for a `chmod +x` applet whose first line is
+    // `#!/usr/bin/env kona`: argv[1] is the file, the rest are its arguments.
+    // An applet id can never contain `/` or a `.ts` suffix, so the two spellings
+    // can't collide.
+    if (looksLikePath(cmd)) {
+      const { entry, def } = await readModule(cmd);
+      await installModule(entry, def);
+      await openApplet(def, rest);
+      break;
+    }
+
     // `kona <applet> [args...]` — open that applet's TUI.
     await ensureDaemon();
     const pkg = (await packages()).find((p) => p.def.id === cmd);
@@ -460,21 +601,7 @@ switch (cmd) {
       await usage();
       process.exit(1);
     }
-    // What the positional args mean is the APPLET's business: `kona timer 5m`,
-    // `kona mycelium ship-kona`. It answers with the verbs to fire before the
-    // view opens, from its own `cli.open` — so this file knows no applet by
-    // name and a plugin gets the same treatment as a built-in.
-    const open = pkg.def.cli?.open;
-    if (open) {
-      const state = ((await api(`/applets/${cmd}/state`).catch(() => ({}))) ?? {}) as Record<string, unknown>;
-      const wanted = open(rest, state);
-      const calls: AppletCall[] = wanted ? (Array.isArray(wanted) ? wanted : [wanted]) : [];
-      for (const c of calls) await callVerb(cmd, c.verb, c.args ?? {});
-    }
-    // Applets with a `refresh` verb (e.g. email) get an initial load on open.
-    await callVerb(cmd, "refresh", {}).catch(() => {});
-    const { runHost } = await import("../host/index.ts");
-    await runHost(cmd);
+    await openApplet(pkg.def, rest);
     break;
   }
 }

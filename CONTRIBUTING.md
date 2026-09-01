@@ -17,6 +17,7 @@ bug in the platform. Say so, or fix it.
 kona new pomodoro              # applets/pomodoro/ (ships with kona)
 kona new pomodoro --plugin     # ~/.config/kona/plugins/pomodoro (yours alone)
 kona new pomodoro --out ~/src/pomodoro
+kona new pomodoro --executable # ...and make index.ts a command (see below)
 ```
 
 You get a working applet, its snapshot fixtures, a unit test and a README:
@@ -156,11 +157,39 @@ kona loads applets from, in order:
 3. `plugins = ["~/src/mine"]` in `~/.config/kona/config.toml`, and
    `KONA_PLUGINS` (colon-separated). Each entry is one package (a dir with an
    `index.ts`) or a dir full of them.
+4. linked modules — single files you ran directly, listed in
+   `~/.config/kona/links.json` (below). The one source that is a file, not a
+   directory, so its entry need not be called `index.ts`.
 
 The first package to claim an id wins, so a broken plugin can never shadow a
 built-in; a plugin that throws on import is skipped with a warning rather than
 taking the daemon down. `KONA_NO_PLUGINS=1` limits a run to this repo — the test
-suite sets it so your installed plugins can't change what the suite sees.
+suite sets it so your installed plugins (and links) can't change what the suite
+sees.
+
+## An applet as an executable
+
+`kona` takes a path as well as an applet id, so an applet file can be a command
+of its own: put `#!/usr/bin/env kona` on line one, `chmod +x`, and `./index.ts`
+opens it. `kona new <id> --executable` writes both for you.
+
+```sh
+kona ~/src/pomodoro/index.ts   # run a module directly (what the shebang does)
+kona link ~/src/pomodoro/index.ts   # ...without opening the TUI
+kona unlink pomodoro                # forget it
+kona link                           # what is linked here
+```
+
+Running a module **links** it — the path is remembered in `links.json`, so the
+applet outlives the command and an agent can `kona call` it — and **registers**
+it with the running daemon (`POST /applets/register`), so it is callable
+immediately rather than after the next restart. A module whose id is already
+installed is refused, not merged: first-come, exactly as the loader does it.
+
+The file is an entry point, not a sandbox — a linked module is imported into
+konad like every other applet, so a wedged verb still wedges the daemon. The
+case for giving an applet its own process, with the numbers, is in
+[docs/applet-processes.md](docs/applet-processes.md).
 
 ## Before you open a PR
 

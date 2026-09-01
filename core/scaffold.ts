@@ -47,10 +47,27 @@ export function inRepo(dir: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
+/**
+ * The line that makes an applet file runnable on its own. `kona` takes a path
+ * as well as an id, so an applet that starts with this and is `chmod +x` can be
+ * launched as `./index.ts` — the kernel calls `kona <that file>`, which links
+ * the module and opens it. See core/links.ts.
+ */
+export const SHEBANG = "#!/usr/bin/env kona";
+
+export interface ScaffoldOpts {
+  /** Human title; defaults to the id, title-cased. */
+  title?: string;
+  /** Write the shebang, so the file can be `chmod +x` and run directly. */
+  executable?: boolean;
+}
+
 /** Every file a new applet package starts life with. */
-export function scaffoldApplet(id: string, dir: string, title = titleize(id)): ScaffoldFile[] {
+export function scaffoldApplet(id: string, dir: string, opts: ScaffoldOpts | string = {}): ScaffoldFile[] {
+  // The third argument used to be the title; keep that spelling working.
+  const { title = titleize(id), executable = false } = typeof opts === "string" ? { title: opts } : opts;
   const sdk = sdkPrefix(dir);
-  const index = `import { defineApplet, big, text, spacer, col, theme } from "${sdk}/index.ts";
+  const index = `${executable ? `${SHEBANG}\n` : ""}import { defineApplet, big, text, spacer, col, theme } from "${sdk}/index.ts";
 
 /**
  * ${title} — one applet, two callers.
@@ -133,13 +150,19 @@ test("bump adds to the count and emits", () => {
 });
 `;
 
+  // The three ways to drive it, aligned to whichever spelling is longest.
+  const invocations: Array<[string, string]> = [
+    [`kona ${id}`, "open it"],
+    ...(executable ? ([["./index.ts", "...or run the file itself"]] as Array<[string, string]>) : []),
+    [`kona call ${id} bump '{"by":5}'`, "...and what an agent does instead"],
+  ];
+  const cmdWidth = Math.max(...invocations.map(([cmd]) => cmd.length));
   const readme = `# ${id}
 
 TODO: what this applet is, in a paragraph.
 
 \`\`\`sh
-kona ${id}                       # open it
-kona call ${id} bump '{"by":5}'  # ...and what an agent does instead
+${invocations.map(([cmd, note]) => `${cmd.padEnd(cmdWidth)}  # ${note}`).join("\n")}
 \`\`\`
 
 | key | verb | what it does |

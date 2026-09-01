@@ -51,9 +51,11 @@ kona                       # your default applet, else the launcher
 kona launcher              # always the launcher: pick an app
 kona timer 5m              # open the timer, pre-started
 kona timer pomodoro        # ...or a 25/5 work-break cycle
-kona ls                    # list applets (plugins marked)
+kona ls                    # list applets (plugins and linked files marked)
 kona docs [applet]         # the applet catalog, or one applet's README
 kona new <id>              # scaffold a new applet package
+./applets/timer/index.ts   # an applet file with a shebang, run directly
+kona link <file.ts>        # ...or keep one loadable by id without opening it
 kona tools                 # the manifest an agent reads
 kona tools --json          # ...with docs, example args, and the key each verb binds
 kona tools --skill         # that manifest as a drop-in agent skill
@@ -527,6 +529,26 @@ and from anything named by `plugins` in config.toml or `KONA_PLUGINS`. The
 stable surface a plugin targets — `defineApplet`, the view vocabulary,
 `sdk/components.ts`, `AppletCtx`, `sdk/testing.ts` — is written down in
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### An applet as an executable
+
+`kona` takes a path as well as an id, so an applet file can be a command:
+
+```sh
+kona new pomodoro --plugin --executable   # writes `#!/usr/bin/env kona`, chmod +x
+~/.config/kona/plugins/pomodoro/index.ts  # ...and the file runs itself
+```
+
+Running a module remembers it (`~/.config/kona/links.json`) and hands it to the
+running daemon, so it is a first-class applet from that moment on — `kona call
+pomodoro bump`, the launcher, `kona docs`, the agent manifest — with no restart
+and no directory to install it into. `kona link <file>` is the same step without
+the TUI, `kona unlink <id|file>` forgets it, and an id that is already installed
+is refused rather than shadowed.
+
+The file is an entry point, not a boundary: a linked module is imported into
+konad like any other applet. Whether it should get its own *process* is measured
+out in [docs/applet-processes.md](docs/applet-processes.md).
 
 ### Typing into an applet
 

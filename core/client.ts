@@ -53,6 +53,19 @@ export async function api(path: string, init?: RequestInit) {
   return r.json();
 }
 
+/**
+ * Ask a running daemon to load an applet module now. Used by `kona <path>` so
+ * an executable applet is callable the moment you run it, instead of after the
+ * daemon's next restart.
+ */
+export async function registerApplet(entry: string): Promise<{ id?: string; added?: boolean; error?: string }> {
+  return api("/applets/register", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entry }),
+  }) as Promise<{ id?: string; added?: boolean; error?: string }>;
+}
+
 export async function callVerb(id: string, verb: string, args: Record<string, unknown> = {}) {
   return api(`/applets/${id}/verbs/${verb}`, {
     method: "POST",

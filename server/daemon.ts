@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { mkdirSync, watch } from "node:fs";
 import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
-import { loadApplets, pluginRoots, APPLETS_DIR } from "../core/load.ts";
+import { loadPackages, pluginRoots, APPLETS_DIR } from "../core/load.ts";
 import { skillMarkdown } from "../core/skill.ts";
 import { CronScheduler } from "./cron.ts";
 import { registerEvents } from "./notify.ts";
@@ -30,8 +30,17 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // How often the cron scheduler asks "what is due?". Cron is minute-granular,
   // but `@every 5s` isn't, so the pass is cheap and frequent.
   const SCHEDULER_MS = Number(process.env.KONA_SCHEDULER_MS ?? 1_000);
-  const applets = await loadApplets();
+  const packages = await loadPackages();
+  // Mutable: `POST /applets/register` teaches a RUNNING daemon about an applet
+  // module (an executable applet, see core/links.ts) without a restart, and
+  // everything downstream — /applets, /tools, /skill, cron — reads this array
+  // on each request or pass, so a late arrival is a first-class applet.
+  const applets: AppletDef[] = packages.map((p) => p.def);
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
+  // Which module each id came from, so re-registering the same file is a no-op
+  // and a DIFFERENT file claiming a loaded id is refused rather than shadowing
+  // it — the loader's first-come rule, held at runtime.
+  const entryById = new Map<string, string>(packages.map((p) => [p.def.id, p.entry]));
   // Applets declare the banners they can raise; nothing central lists them.
   registerEvents(applets);
 
@@ -60,6 +69,9 @@ export async function startDaemon(port = DEFAULT_PORT) {
 
   // Applets marked ephemeral (e.g. email) never touch disk — mail stays in RAM.
   const ephemeral = new Set(applets.filter((a) => a.ephemeral).map((a) => a.id));
+
+  /** One heartbeat per applet, whether it arrived at boot or was registered later. */
+  const ticks = new Map<string, ReturnType<typeof setInterval>>();
 
   // --- state, persisted so the daemon can restart without losing a countdown
   const states: StateMap = {};
@@ -125,6 +137,75 @@ export async function startDaemon(port = DEFAULT_PORT) {
     };
   }
 
+  /** An applet's one-shot init. A throwing applet is logged, never fatal. */
+  function initApplet(a: AppletDef) {
+    if (!a.init) return;
+    try {
+      a.init(ctxFor(a.id));
+    } catch (e) {
+      console.error(`[init:${a.id}]`, e);
+    }
+  }
+
+  /** Start an applet's heartbeat — the internal caller, same state, same emit. */
+  function startTick(a: AppletDef) {
+    clearInterval(ticks.get(a.id)); // never two heartbeats for one applet
+    ticks.delete(a.id);
+    if (!a.tick || !a.tickMs) return;
+    const iv = setInterval(() => {
+      try {
+        a.tick!(ctxFor(a.id));
+      } catch (e) {
+        console.error(`[tick:${a.id}]`, e);
+      }
+    }, a.tickMs);
+    iv.unref?.(); // the server keeps the daemon alive; ticks shouldn't pin it
+    ticks.set(a.id, iv);
+  }
+
+  /**
+   * Load an applet module into the RUNNING daemon — state slice, notification
+   * events, init and tick — and hand it the same seam everything else has.
+   * This is what makes an executable applet (`#!/usr/bin/env kona`) usable the
+   * moment you run it: without it the file would only be an applet after the
+   * next daemon restart, and `kona call` in between would 404.
+   *
+   * Registering the same module twice is a no-op; a DIFFERENT module claiming a
+   * loaded id is refused. That is the loader's first-come rule (a plugin can
+   * never shadow a built-in) held at runtime, and it is why an executable file
+   * cannot quietly replace `timer` for every other client of this daemon.
+   */
+  async function register(entry: string): Promise<{ id: string; added: boolean }> {
+    const known = [...entryById].find(([, e]) => e === entry)?.[0];
+    if (known) return { id: known, added: false };
+
+    let def: AppletDef | undefined;
+    try {
+      def = ((await import(entry)) as { default?: AppletDef }).default;
+    } catch (e) {
+      throw new Response(`could not load ${entry}: ${e instanceof Error ? e.message : String(e)}`, { status: 400 });
+    }
+    if (!def?.id || !def.verbs || !def.view) {
+      throw new Response(`not an applet: ${entry} must default-export defineApplet(...)`, { status: 400 });
+    }
+    const claimed = entryById.get(def.id);
+    if (claimed) throw new Response(`applet id "${def.id}" is already loaded from ${claimed}`, { status: 409 });
+
+    applets.push(def);
+    byId.set(def.id, def);
+    entryById.set(def.id, entry);
+    if (def.ephemeral) ephemeral.add(def.id);
+    states[def.id] = def.ephemeral ? fresh(def) : { ...fresh(def), ...saved[def.id] };
+    registerEvents([def]);
+    initApplet(def);
+    startTick(def);
+    // Everyone watching gets the new slice; the launcher and the manifest pick
+    // it up on their next read.
+    broadcast("snapshot", states);
+    console.error(`registered ${def.id} from ${entry}`);
+    return { id: def.id, added: true };
+  }
+
   // init + ticks run AFTER the port is bound (below) — a duplicate daemon that
   // can't bind must exit BEFORE hitting any applet init (which calls APIs),
   // otherwise a spawn storm becomes an API storm.
@@ -157,6 +238,30 @@ export async function startDaemon(port = DEFAULT_PORT) {
         return json(
           applets.map((a) => ({ id: a.id, title: a.title, summary: a.summary ?? "" })),
         );
+      }
+
+      // Hand the daemon an applet module to load right now. The caller is a
+      // `kona <path>` on this machine and the body is a local file path: konad
+      // binds localhost and already imports whatever `applets/`, the plugin
+      // roots and `links.json` name, so this widens WHEN a module is loaded,
+      // not WHOSE — anything that can reach this port can already write to
+      // those directories as you.
+      if (path === "/applets/register" && req.method === "POST") {
+        let entry: unknown;
+        try {
+          entry = ((await req.json()) as { entry?: unknown }).entry;
+        } catch {
+          return json({ error: "bad json body" }, 400);
+        }
+        if (typeof entry !== "string" || !isAbsolute(entry)) {
+          return json({ error: "entry must be an absolute path to an applet module" }, 400);
+        }
+        try {
+          return json({ ok: true, ...(await register(entry)) });
+        } catch (e) {
+          if (e instanceof Response) return json({ error: await e.text() }, e.status);
+          return json({ error: String(e) }, 500);
+        }
       }
 
       // The manifest an agent reads to learn what it can call.
@@ -244,29 +349,10 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // We bound the port (Bun.serve throws on EADDRINUSE) — safe to do work now.
 
   // --- init: one-shot on boot (e.g. email's first inbox load).
-  for (const a of applets) {
-    if (a.init) {
-      try {
-        a.init(ctxFor(a.id));
-      } catch (e) {
-        console.error(`[init:${a.id}]`, e);
-      }
-    }
-  }
+  for (const a of applets) initApplet(a);
 
   // --- ticks: internal caller, same state, same emit
-  for (const a of applets) {
-    if (a.tick && a.tickMs) {
-      const iv = setInterval(() => {
-        try {
-          a.tick!(ctxFor(a.id));
-        } catch (e) {
-          console.error(`[tick:${a.id}]`, e);
-        }
-      }, a.tickMs);
-      iv.unref?.(); // the server keeps the daemon alive; ticks shouldn't pin it
-    }
-  }
+  for (const a of applets) startTick(a);
 
   // --- the scheduler: the tick, generalized from a heartbeat to a calendar.
   // Applets declare cron jobs from their own live state (`cron(state)`), so a
