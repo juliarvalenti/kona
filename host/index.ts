@@ -94,34 +94,53 @@ export function launcherKey(
 }
 
 /** Stream the daemon's SSE, invoking onState for every state change. */
+// The server heartbeats every 15s to keep the socket warm; if a sleep/wake or
+// network change silently kills the TCP connection, no error ever surfaces —
+// reader.read() just hangs forever and the reconnect loop below never fires.
+// Race each read against a watchdog so a stalled (not just dropped) stream
+// still gets torn down and retried.
+const STALL_MS = 45_000;
+
 async function readStream(
   onSnapshot: (s: States) => void,
   onState: (id: string, s: AppletState) => void,
 ) {
-  const res = await fetch(`${base()}/events`);
+  const controller = new AbortController();
+  const res = await fetch(`${base()}/events`, { signal: controller.signal });
   if (!res.body) throw new Error("no event stream");
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let i: number;
-    while ((i = buf.indexOf("\n\n")) >= 0) {
-      const raw = buf.slice(0, i);
-      buf = buf.slice(i + 2);
-      let event = "message";
-      let data = "";
-      for (const line of raw.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
+  try {
+    while (true) {
+      let timer!: ReturnType<typeof setTimeout>;
+      const stall = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("stream stalled")), STALL_MS);
+      });
+      const { done, value } = await Promise.race([reader.read(), stall]).finally(() => clearTimeout(timer));
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i: number;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const raw = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        let event = "message";
+        let data = "";
+        for (const line of raw.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) data += line.slice(5).trim();
+        }
+        if (!data) continue;
+        const parsed = JSON.parse(data);
+        if (event === "snapshot") onSnapshot(parsed as States);
+        else if (event === "state") onState(parsed.applet, parsed.state);
       }
-      if (!data) continue;
-      const parsed = JSON.parse(data);
-      if (event === "snapshot") onSnapshot(parsed as States);
-      else if (event === "state") onState(parsed.applet, parsed.state);
     }
+  } finally {
+    // Stalled or not, make sure the dead socket actually gets torn down —
+    // otherwise it leaks and the next connection attempt has nothing to do
+    // with reclaiming it.
+    controller.abort();
   }
 }
 
