@@ -1,0 +1,4 @@
+[test]
+# Runs before any test file: puts external providers in no-live-call mode so
+# `bun test` can never touch a real account (see tests/setup.ts, issue #41).
+preload = ["./tests/setup.ts"]

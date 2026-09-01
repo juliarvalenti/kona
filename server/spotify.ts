@@ -171,6 +171,12 @@ async function accessToken(): Promise<string> {
 
 /** Authenticated Web API call. Returns null for 204 (nothing playing). */
 export async function api(path: string, init?: RequestInit): Promise<Record<string, unknown> & any> {
+  // Test/offline guard: never touch a real account under test. Without this, a
+  // `bun test` on a machine that happens to be signed in fires real playback
+  // commands (seek/volume/transfer) at the live account. Tests set this env;
+  // the proper fix is the provider mock layer (#41). Reads return empty, writes
+  // no-op — the verbs' optimistic state is what tests assert anyway.
+  if (process.env.KONA_FAKE_PROVIDERS === "1") throw new Error("spotify: fake-providers mode (no live API in tests)");
   const token = await accessToken();
   const res = await fetch(`https://api.spotify.com${path}`, {
     ...init,
@@ -195,6 +201,9 @@ export interface NowPlaying {
   positionMs: number;
   durationMs: number;
   device: string;
+  deviceId: string; // active device, so the picker can mark it
+  volumePct: number; // 0..100 (0 when the device reports none)
+  volumeSupported: boolean; // some Connect devices have no volume control
   context: string; // playlist name (or album/artist label)
   contextUri: string; // for navigating into it
   contextType: string; // playlist | album | artist | ""
@@ -251,6 +260,9 @@ export async function nowPlaying(): Promise<NowPlaying | null> {
     positionMs: p.progress_ms ?? 0,
     durationMs: item.duration_ms ?? 0,
     device: p.device?.name ?? "",
+    deviceId: p.device?.id ?? "",
+    volumePct: p.device?.volume_percent ?? 0,
+    volumeSupported: p.device?.supports_volume !== false,
     context: await contextLabel(p.context),
     contextUri: p.context?.uri ?? "",
     contextType: p.context?.type ?? "",
@@ -267,6 +279,19 @@ export const setShuffle = (on: boolean) =>
 
 export const setRepeat = (state: "off" | "context" | "track") =>
   api(`/v1/me/player/repeat?${new URLSearchParams({ state })}`, { method: "PUT" });
+
+/** Jump to an absolute position in the current track. */
+export const seek = (positionMs: number) =>
+  api(`/v1/me/player/seek?${new URLSearchParams({ position_ms: String(Math.max(0, Math.round(positionMs))) })}`, {
+    method: "PUT",
+  });
+
+/** Set the active device's volume (0..100). */
+export const setVolume = (pct: number) =>
+  api(
+    `/v1/me/player/volume?${new URLSearchParams({ volume_percent: String(Math.max(0, Math.min(100, Math.round(pct)))) })}`,
+    { method: "PUT" },
+  );
 
 export const play = () => api("/v1/me/player/play", { method: "PUT" });
 export const pause = () => api("/v1/me/player/pause", { method: "PUT" });
@@ -466,4 +491,37 @@ export const playContext = (context_uri: string) =>
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ context_uri }),
+  });
+
+/** A Spotify Connect device you can hand playback to. */
+export interface Device {
+  id: string;
+  name: string;
+  type: string; // Computer | Smartphone | Speaker | ...
+  active: boolean;
+  volumePct: number;
+  supportsVolume: boolean;
+}
+
+/** Every device this account can currently reach (Connect targets). */
+export async function devices(): Promise<Device[]> {
+  const r = await api("/v1/me/player/devices");
+  return ((r?.devices ?? []) as any[])
+    .filter((d) => d?.id) // restricted devices come back without an id
+    .map((d) => ({
+      id: d.id as string,
+      name: (d.name as string) ?? "",
+      type: (d.type as string) ?? "",
+      active: !!d.is_active,
+      volumePct: d.volume_percent ?? 0,
+      supportsVolume: d.supports_volume !== false,
+    }));
+}
+
+/** Move playback to another device. `play` keeps the current play/pause state. */
+export const transferPlayback = (deviceId: string, play = true) =>
+  api("/v1/me/player", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ device_ids: [deviceId], play }),
   });

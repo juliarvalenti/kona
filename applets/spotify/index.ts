@@ -16,6 +16,10 @@ import {
   home as fetchHome,
   playUris,
   playContext,
+  seek as seekTo,
+  setVolume,
+  devices as fetchDevices,
+  transferPlayback,
   type QueueItem,
   type Row,
 } from "../../server/spotify.ts";
@@ -23,8 +27,10 @@ import {
 /**
  * spotify — now-playing + transport control. The daemon holds the OAuth token
  * and drives the Spotify Web API, so YOU control playback with the keyboard and
- * an AGENT can call the same verbs ("skip this", "pause"). Reading now-playing
- * works on any account; play/pause/next/prev require Premium + an active device.
+ * an AGENT can call the same verbs ("skip this", "pause", "turn it down",
+ * "move it to the kitchen speaker"). Reading now-playing works on any account;
+ * play/pause/next/prev, seek, volume and device transfer all require Premium
+ * plus an active device.
  */
 
 interface SpotifyState {
@@ -35,6 +41,9 @@ interface SpotifyState {
   positionMs: number;
   durationMs: number;
   device: string;
+  deviceId: string;
+  volumePct: number;
+  volumeSupported: boolean;
   context: string;
   contextUri: string;
   contextType: string;
@@ -70,11 +79,13 @@ function nowTargets(s: SpotifyState): NowTarget[] {
   return t;
 }
 
-/** A selectable row: catalog Row plus a synthetic "play this whole thing" action. */
+/** A selectable row: catalog Row plus a synthetic "play this whole thing"
+ * action, a section header, and a Connect device (the device picker screen). */
 type BrowseRow =
   | Row
   | { kind: "play"; uri: string; name: string; subtitle: string }
-  | { kind: "header"; name: string };
+  | { kind: "header"; name: string }
+  | { kind: "device"; id: string; name: string; subtitle: string; active: boolean };
 interface Screen {
   title: string;
   rows: BrowseRow[];
@@ -141,6 +152,13 @@ async function pushDetail(state: SpotifyState, emit: () => void, kind: "artist" 
 
 const idOf = (uri: string) => uri.split(":").pop() ?? "";
 
+/** Title of the device-picker screen; also how we spot it on the stack. */
+const DEVICES_TITLE = "Devices";
+
+/** How far ←/→ scrub, and how much +/- move the volume. */
+const SEEK_STEP_MS = 10_000;
+const VOLUME_STEP = 5;
+
 export default defineApplet<SpotifyState>({
   id: "spotify",
   title: "Spotify",
@@ -154,6 +172,9 @@ export default defineApplet<SpotifyState>({
     positionMs: 0,
     durationMs: 0,
     device: "",
+    deviceId: "",
+    volumePct: 0,
+    volumeSupported: true,
     context: "",
     contextUri: "",
     contextType: "",
@@ -229,6 +250,96 @@ export default defineApplet<SpotifyState>({
       await Bun.sleep(300);
       await loadNow(state, emit);
       return { repeat: state.repeat };
+    },
+    // Scrub. Agents pass an absolute {positionMs}; the ←/→ keys pass {deltaMs}.
+    // Optimistic so the bar moves under your finger, then loadNow reconciles.
+    async seek(args, { state, emit }) {
+      if (!state.track) return {};
+      const base = args.positionMs !== undefined ? Number(args.positionMs) : state.positionMs + Number(args.deltaMs ?? 0);
+      const max = state.durationMs > 0 ? state.durationMs : base;
+      const pos = Math.max(0, Math.min(max, Math.round(base)));
+      state.positionMs = pos; // optimistic
+      emit();
+      try {
+        await seekTo(pos);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      }
+      await Bun.sleep(400); // the player reports the new position a beat later
+      await loadNow(state, emit);
+      return { positionMs: state.positionMs };
+    },
+    // Volume. {pct} sets an absolute level, {delta} nudges (the +/- keys).
+    async volume(args, { state, emit }) {
+      if (!state.volumeSupported) {
+        state.error = `${state.device || "this device"} has no volume control`;
+        emit();
+        return { volumePct: state.volumePct };
+      }
+      const base = args.pct !== undefined ? Number(args.pct) : state.volumePct + Number(args.delta ?? 0);
+      const pct = Math.max(0, Math.min(100, Math.round(base)));
+      state.volumePct = pct; // optimistic
+      emit();
+      try {
+        await setVolume(pct);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      }
+      await Bun.sleep(300);
+      await loadNow(state, emit);
+      return { volumePct: state.volumePct };
+    },
+    // Open the device picker: a browse screen of Connect targets. Selecting one
+    // transfers playback (see enter). Re-opening refreshes it in place rather
+    // than stacking another copy.
+    async devices(_a, { state, emit }) {
+      state.mode = "browse";
+      state.loading = true;
+      const top = state.stack[state.stack.length - 1];
+      if (top?.title !== DEVICES_TITLE) state.stack.push({ title: DEVICES_TITLE, rows: [], cursor: 0 });
+      emit();
+      let found: { id: string; name: string; active: boolean }[] = [];
+      try {
+        const ds = await fetchDevices();
+        found = ds.map((d) => ({ id: d.id, name: d.name, active: d.active }));
+        const scr = state.stack[state.stack.length - 1]!;
+        scr.rows = ds.map((d) => ({
+          kind: "device" as const,
+          id: d.id,
+          name: d.name,
+          subtitle: [d.type, d.supportsVolume ? `${d.volumePct}%` : ""].filter(Boolean).join("  ·  "),
+          active: d.active,
+        }));
+        scr.cursor = Math.max(0, ds.findIndex((d) => d.active));
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        state.loading = false;
+        emit();
+      }
+      return { devices: found };
+    },
+    // Hand playback to another device, by id or (for agents) by name.
+    async transfer(args, { state, emit }) {
+      const id = String(args.id ?? "");
+      const name = String(args.name ?? "").toLowerCase();
+      try {
+        let target = id;
+        if (!target && name) {
+          const ds = await fetchDevices();
+          target = ds.find((d) => d.name.toLowerCase().includes(name))?.id ?? "";
+          if (!target) throw new Error(`no device matching "${args.name}"`);
+        }
+        if (!target) throw new Error("transfer needs an id or a name");
+        await transferPlayback(target, state.playing);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+        emit();
+        return { device: state.device };
+      }
+      await Bun.sleep(600); // Connect handoff takes a beat to report
+      await loadNow(state, emit);
+      return { device: state.device };
     },
     async search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "");
@@ -319,6 +430,15 @@ export default defineApplet<SpotifyState>({
         const scr = state.stack[state.stack.length - 1];
         const r = scr?.rows[scr.cursor];
         if (!r || r.kind === "header") return {};
+        if (r.kind === "device") {
+          await transferPlayback(r.id, state.playing);
+          state.stack.pop(); // close the picker, back where you came from
+          if (state.stack.length === 0) state.mode = "now";
+          emit();
+          await Bun.sleep(600); // Connect handoff takes a beat to report
+          await loadNow(state, emit);
+          return { device: r.name };
+        }
         if (r.kind === "track") {
           // play in the track's album/playlist context so it continues
           if (r.contextUri) await playInContext(r.contextUri, r.uri);
@@ -389,10 +509,19 @@ export default defineApplet<SpotifyState>({
     else emit();
   },
 
+  // Declaration order is hint-bar priority: the footer keeps two lines and
+  // drops from the tail, so transport comes before the browse extras.
   keymap: {
     space: { verb: "playPause", label: "play/pause" },
+    // ←/→ scrub, but only on now-playing — in a list they stay navigation
+    // (back / open), which is what `when` guards.
+    left: { verb: "seek", args: { deltaMs: -SEEK_STEP_MS }, label: "seek", when: (s) => s.mode === "now" },
+    right: { verb: "seek", args: { deltaMs: SEEK_STEP_MS }, label: "seek", when: (s) => s.mode === "now" },
+    "+": { verb: "volume", args: { delta: VOLUME_STEP }, label: "vol" },
+    "-": { verb: "volume", args: { delta: -VOLUME_STEP }, label: "vol" },
     n: { verb: "next", label: "next" },
     p: { verb: "previous", label: "prev" },
+    d: { verb: "devices", label: "devices" },
     s: { verb: "shuffle", label: "shuffle" },
     r: { verb: "repeat", label: "repeat" },
     b: { verb: "home", label: "home" },
@@ -449,21 +578,24 @@ export default defineApplet<SpotifyState>({
     if (state.mode === "browse") {
       const scr = state.stack[state.stack.length - 1];
       const head = state.loading ? text("loading…", { color: AMBER }) : text(scr?.title ?? "", { dim: true });
-      const tag = (k: BrowseRow["kind"]) =>
-        k === "play" ? "▶" : k === "artist" ? "artist" : k === "album" ? "album" : k === "playlist" ? "playlist" : "";
+      const tag = (r: BrowseRow) => {
+        if (r.kind === "play") return "▶";
+        if (r.kind === "device") return r.active ? "● active" : "device";
+        return r.kind === "track" || r.kind === "header" ? "" : r.kind;
+      };
       const rows: ViewNode[] = (scr?.rows ?? []).map((r, i) => {
         if (r.kind === "header") return text(r.name.toUpperCase(), { color: GREEN });
         return recordRow(
           [
             { text: r.name, grow: true },
             { text: "subtitle" in r ? r.subtitle : "", width: Math.min(28, Math.floor(W * 0.3)) },
-            { text: tag(r.kind), width: 9, align: "right" },
+            { text: tag(r), width: 9, align: "right" },
           ],
           {
             width: W,
             selected: i === (scr?.cursor ?? -1),
             accent: GREEN,
-            color: r.kind === "play" ? GREEN : FG,
+            color: r.kind === "play" || (r.kind === "device" && r.active) ? GREEN : FG,
           },
         );
       });
@@ -516,7 +648,10 @@ export default defineApplet<SpotifyState>({
       spacer(),
       row(
         [
-          text(`${state.device ? `♪ ${state.device}` : ""}`, { dim: true }),
+          text(
+            `${state.device ? `♪ ${state.device}` : ""}${state.device && state.volumeSupported ? `  ·  vol ${state.volumePct}%` : ""}`,
+            { dim: true },
+          ),
           text(state.shuffle ? "   ⤮ shuffle" : "", { color: GREEN }),
           text(state.repeat === "context" ? "   ⟳ all" : state.repeat === "track" ? "   ⟳ one" : "", { color: GREEN }),
         ],
