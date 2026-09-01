@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { theme, type AppletCtx } from "../sdk/index.ts";
+import { theme, type AppletCtx, type ViewNode } from "../sdk/index.ts";
 import timer from "../applets/timer/index.ts";
 
 /**
@@ -8,6 +8,7 @@ import timer from "../applets/timer/index.ts";
  * HTTP, no clock — so a broken transition fails loudly and instantly.
  */
 type TimerState = typeof timer.initialState;
+type Timer = TimerState["timers"][number];
 
 function harness() {
   const state: TimerState = structuredClone(timer.initialState);
@@ -18,79 +19,194 @@ function harness() {
     emits: () => emits,
     call: (verb: string, args: Record<string, unknown> = {}) => timer.verbs[verb]!(args, ctx),
     tick: () => timer.tick!(ctx),
+    init: () => timer.init!(ctx),
+    at: (i: number) => state.timers[i]!,
+    sel: () => state.timers[state.cursor]!,
   };
 }
 
-test("start sets remaining + running and emits", () => {
+test("start appends a timer, selects it, and emits", () => {
   const h = harness();
-  h.call("start", { seconds: 90, label: "tea" });
-  expect(h.state.remaining).toBe(90);
-  expect(h.state.running).toBe(true);
-  expect(h.state.label).toBe("tea");
+  const res = h.call("start", { seconds: 90, label: "tea" }) as { id: string; running: boolean };
+  expect(h.state.timers).toHaveLength(1);
+  expect(h.at(0)).toMatchObject({ remaining: 90, total: 90, running: true, label: "tea" });
+  expect(h.state.cursor).toBe(0);
+  expect(res.id).toBe(h.at(0).id);
+  expect(res.running).toBe(true);
   expect(h.emits()).toBe(1);
 });
 
 test("start parses human durations", () => {
   const h = harness();
   h.call("start", { seconds: "5m" });
-  expect(h.state.remaining).toBe(300);
+  expect(h.sel().remaining).toBe(300);
   h.call("start", { seconds: "1h30m" });
-  expect(h.state.remaining).toBe(5400);
+  expect(h.sel().remaining).toBe(5400);
+  expect(h.state.timers).toHaveLength(2); // each start is a NEW countdown
 });
 
 test("start with zero duration does not run", () => {
   const h = harness();
   h.call("start", { seconds: 0 });
-  expect(h.state.running).toBe(false);
+  expect(h.sel().running).toBe(false);
 });
 
-test("tick counts down and stops at zero", () => {
+test("several timers run at once; tick decrements every running one", () => {
   const h = harness();
-  h.call("start", { seconds: 2 });
+  h.call("start", { seconds: 3, label: "tea" });
+  h.call("start", { seconds: 10, label: "pasta" });
+  h.call("pause", { label: "pasta" });
+  h.call("start", { seconds: 2, label: "eggs" });
+
   h.tick();
-  expect(h.state.remaining).toBe(1);
-  expect(h.state.running).toBe(true);
+  expect(h.at(0).remaining).toBe(2); // running
+  expect(h.at(1).remaining).toBe(10); // paused — frozen
+  expect(h.at(2).remaining).toBe(1); // running
+
   h.tick();
-  expect(h.state.remaining).toBe(0);
-  expect(h.state.running).toBe(false);
-  // a tick past zero is a no-op
+  expect(h.at(0).remaining).toBe(1);
+  expect(h.at(2)).toMatchObject({ remaining: 0, running: false }); // finished alone
+  expect(h.at(0).running).toBe(true); // ...without touching its neighbours
+});
+
+test("a tick with nothing running is a no-op", () => {
+  const h = harness();
+  h.call("start", { seconds: 5 });
+  h.call("pause");
   const before = h.emits();
   h.tick();
-  expect(h.state.remaining).toBe(0);
+  expect(h.at(0).remaining).toBe(5);
   expect(h.emits()).toBe(before);
 });
 
-test("pause freezes; resume only runs when time remains", () => {
+test("verbs act on the selected timer by default", () => {
+  const h = harness();
+  h.call("start", { seconds: 10, label: "a" });
+  h.call("start", { seconds: 20, label: "b" }); // selects b
+  h.call("toggle");
+  expect(h.at(1).running).toBe(false);
+  expect(h.at(0).running).toBe(true); // untouched
+  h.call("toggle");
+  expect(h.at(1).running).toBe(true);
+  h.call("add", { seconds: 60 });
+  expect(h.at(1)).toMatchObject({ remaining: 80, total: 80 });
+  expect(h.at(0).total).toBe(10);
+});
+
+test("an agent can address any timer by id, label, or index", () => {
+  const h = harness();
+  const a = h.call("start", { seconds: 10, label: "tea" }) as { id: string };
+  h.call("start", { seconds: 20, label: "pasta" }); // selection is now pasta
+
+  h.call("pause", { id: a.id });
+  expect(h.at(0).running).toBe(false);
+  h.call("resume", { label: "tea" });
+  expect(h.at(0).running).toBe(true);
+  h.call("add", { index: 0, seconds: 5 });
+  expect(h.at(0).remaining).toBe(15);
+  expect(h.at(1).remaining).toBe(20); // the selection never moved
+});
+
+test("resume only runs when time remains", () => {
   const h = harness();
   h.call("start", { seconds: 10 });
   h.call("pause");
-  expect(h.state.running).toBe(false);
   h.tick();
-  expect(h.state.remaining).toBe(10); // frozen
+  expect(h.sel().remaining).toBe(10); // frozen
   h.call("resume");
-  expect(h.state.running).toBe(true);
-  h.call("stop");
-  h.call("resume"); // nothing to resume
-  expect(h.state.running).toBe(false);
+  expect(h.sel().running).toBe(true);
+  h.call("start", { seconds: 0, label: "empty" });
+  h.call("resume");
+  expect(h.sel().running).toBe(false); // nothing to resume
 });
 
-test("toggle flips running; add extends; stop resets", () => {
+test("stop removes one timer; stop all empties the list", () => {
+  const h = harness();
+  h.call("start", { seconds: 10, label: "a" });
+  h.call("start", { seconds: 20, label: "b" });
+  h.call("start", { seconds: 30, label: "c" });
+
+  h.call("stop"); // the selected one (c)
+  expect(h.state.timers.map((t: Timer) => t.label)).toEqual(["a", "b"]);
+  expect(h.state.cursor).toBe(1); // clamped onto b
+
+  h.call("stop", { label: "a" });
+  expect(h.state.timers.map((t: Timer) => t.label)).toEqual(["b"]);
+  expect(h.state.cursor).toBe(0);
+
+  h.call("start", { seconds: 5 });
+  expect(h.call("stop", { all: true })).toMatchObject({ removed: 2 });
+  expect(h.state.timers).toEqual([]);
+});
+
+test("clear drops only the finished timers", () => {
+  const h = harness();
+  h.call("start", { seconds: 1, label: "done" });
+  h.call("start", { seconds: 60, label: "live" });
+  h.tick();
+  h.tick(); // "done" hits zero (and "live" keeps counting)
+  expect(h.at(0)).toMatchObject({ remaining: 0, running: false });
+
+  expect(h.call("clear")).toMatchObject({ removed: 1 });
+  expect(h.state.timers.map((t: Timer) => t.label)).toEqual(["live"]);
+});
+
+test("label renames a timer without restarting it", () => {
+  const h = harness();
+  h.call("start", { seconds: 60 });
+  h.call("label", { to: "tea" });
+  expect(h.sel()).toMatchObject({ label: "tea", remaining: 60, running: true });
+  const id = h.sel().id;
+  h.call("start", { seconds: 30, label: "pasta" });
+  h.call("label", { id, to: "green tea" }); // by id, not the selection
+  expect(h.at(0).label).toBe("green tea");
+  expect(h.at(1).label).toBe("pasta");
+});
+
+test("start with a known id restarts that timer in place", () => {
+  const h = harness();
+  const a = h.call("start", { seconds: 10, label: "tea" }) as { id: string };
+  h.call("start", { seconds: 30, label: "pasta" });
+  h.call("start", { id: a.id, seconds: 120 });
+  expect(h.state.timers).toHaveLength(2);
+  expect(h.at(0)).toMatchObject({ remaining: 120, total: 120, running: true, label: "tea" });
+  expect(h.state.cursor).toBe(0); // restarting selects it
+});
+
+test("up/down move the cursor and clamp at the ends", () => {
   const h = harness();
   h.call("start", { seconds: 10 });
-  h.call("toggle");
-  expect(h.state.running).toBe(false);
-  h.call("toggle");
-  expect(h.state.running).toBe(true);
-  h.call("add", { seconds: 60 });
-  expect(h.state.remaining).toBe(70);
-  h.call("stop");
-  expect(h.state).toMatchObject({ remaining: 0, running: false, label: "" });
+  h.call("start", { seconds: 20 });
+  h.call("start", { seconds: 30 }); // cursor: 2
+  h.call("up");
+  expect(h.state.cursor).toBe(1);
+  h.call("up");
+  h.call("up");
+  expect(h.state.cursor).toBe(0);
+  h.call("down");
+  h.call("down");
+  h.call("down");
+  expect(h.state.cursor).toBe(2);
+  h.call("select", { index: 1 });
+  expect(h.state.cursor).toBe(1);
+});
+
+test("keymap exposes the 5/15/25m presets", () => {
+  const presets = Object.entries(timer.keymap!).filter(([, b]) => typeof b === "object" && b.verb === "start");
+  expect(presets.map(([k]) => k)).toEqual(["1", "2", "3"]);
+  expect(presets.map(([, b]) => (b as { args: { seconds: number } }).args.seconds)).toEqual([300, 900, 1500]);
+
+  // ...and the preset keys really do start a fresh countdown.
+  const h = harness();
+  const b = timer.keymap!["2"] as { verb: string; args: Record<string, unknown> };
+  h.call(b.verb, b.args);
+  expect(h.sel()).toMatchObject({ remaining: 900, running: true });
 });
 
 // walk the view tree (rows/cols nest children) and collect every node
-function flatten(nodes: ReturnType<typeof timer.view>): Array<Exclude<import("../sdk/index.ts").ViewNode, string>> {
-  const out: Array<Exclude<import("../sdk/index.ts").ViewNode, string>> = [];
-  const visit = (n: import("../sdk/index.ts").ViewNode) => {
+function flatten(nodes: ReturnType<typeof timer.view>): Array<Exclude<ViewNode, string>> {
+  const out: Array<Exclude<ViewNode, string>> = [];
+  const visit = (n: ViewNode) => {
     if (typeof n === "string") return;
     out.push(n);
     if (n.kind === "row" || n.kind === "col") n.children.forEach(visit);
@@ -99,37 +215,65 @@ function flatten(nodes: ReturnType<typeof timer.view>): Array<Exclude<import("..
   return out;
 }
 
-test("view emits a big mm:ss hero and a status line", () => {
+test("view emits a big mm:ss hero and a status line for the selection", () => {
   const h = harness();
   h.call("start", { seconds: 65 });
   const all = flatten(timer.view(h.state));
-  const big = all.find((n) => n.kind === "big");
-  expect(big).toMatchObject({ kind: "big", text: "01:05" });
-  const hasStatus = all.some((n) => n.kind === "text" && n.text.includes("running"));
-  expect(hasStatus).toBe(true);
+  expect(all.find((n) => n.kind === "big")).toMatchObject({ kind: "big", text: "01:05" });
+  expect(all.some((n) => n.kind === "text" && n.text.includes("running"))).toBe(true);
 });
 
-test("total tracks the countdown for the progress bar", () => {
+test("view lists the other timers as rows with mini bars", () => {
   const h = harness();
-  h.call("start", { seconds: 100 });
-  expect(h.state.total).toBe(100);
+  h.call("start", { seconds: 120, label: "tea" });
+  h.call("start", { seconds: 60, label: "pasta" });
   h.tick();
-  expect(h.state.total).toBe(100); // total is fixed; only remaining moves
-  expect(h.state.remaining).toBe(99);
-  h.call("add", { seconds: 20 });
-  expect(h.state.total).toBe(120); // adding time extends the whole
-  h.call("stop");
-  expect(h.state.total).toBe(0);
+
+  const all = flatten(timer.view(h.state, { width: 62, height: 24 }));
+  expect(all.find((n) => n.kind === "big")).toMatchObject({ text: "00:59" }); // pasta, selected
+  const rows = all.filter((n) => n.kind === "text" && /█|░/.test(n.text));
+  expect(rows.length).toBeGreaterThanOrEqual(2); // a row per timer, each with a bar
+  expect(rows.some((n) => n.kind === "text" && n.text.includes("tea"))).toBe(true);
+  expect(rows.some((n) => n.kind === "text" && n.text.includes("pasta"))).toBe(true);
+  // the selected row is the focus target the host scrolls to
+  expect(rows.filter((n) => n.kind === "text" && n.focus)).toHaveLength(1);
+});
+
+test("view prompts for a preset when there are no timers", () => {
+  const h = harness();
+  const all = flatten(timer.view(h.state));
+  expect(all.some((n) => n.kind === "text" && n.text.includes("no timers"))).toBe(true);
+  expect(all.some((n) => n.kind === "text" && n.text.includes("5m"))).toBe(true);
 });
 
 // Roles, not hexes: the timer paints from the central theme, so this asserts
-// the state -> role mapping and stays true under any palette.
-test("accent color tracks timer state", () => {
+// the state -> role mapping over the SELECTED timer and stays true under any palette.
+test("accent color tracks the selected timer", () => {
   const t = theme();
   const h = harness();
-  expect(timer.accent!(h.state)).toBe(t.muted); // idle
+  expect(timer.accent!(h.state)).toBe(t.muted); // idle: nothing to show
   h.call("start", { seconds: 30 });
   expect(timer.accent!(h.state)).toBe(t.ok); // running
   h.call("pause");
   expect(timer.accent!(h.state)).toBe(t.warn); // paused
+  h.call("start", { seconds: 1, label: "x" });
+  h.tick();
+  expect(timer.accent!(h.state)).toBe(t.error); // done
+});
+
+test("init folds a persisted v0 countdown into the list", () => {
+  const h = harness();
+  // what the old single-countdown state looked like on disk
+  Object.assign(h.state, { remaining: 42, total: 60, running: true, label: "tea" });
+  h.init();
+  expect(h.state.timers).toHaveLength(1);
+  expect(h.at(0)).toMatchObject({ remaining: 42, total: 60, running: true, label: "tea" });
+  expect(h.state).not.toHaveProperty("remaining");
+
+  // a stopped v0 countdown migrates to nothing at all
+  const h2 = harness();
+  Object.assign(h2.state, { remaining: 0, total: 0, running: false, label: "" });
+  h2.init();
+  expect(h2.state.timers).toEqual([]);
+  expect(h2.state).not.toHaveProperty("running");
 });

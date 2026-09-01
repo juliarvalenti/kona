@@ -43,17 +43,18 @@ test("applets and tools manifests include the timer", async () => {
 });
 
 test("a verb call mutates shared state, readable by the next client", async () => {
-  const res = await call("timer", "start", { seconds: 5 });
+  const res = await call("timer", "start", { seconds: 5, label: "tea" });
   expect(res.ok).toBe(true);
-  expect(res.state.remaining).toBe(5);
-  expect(res.state.running).toBe(true);
+  expect(res.result).toMatchObject({ label: "tea", remaining: 5, running: true });
+  expect(res.state.timers).toHaveLength(1);
 
   // a *separate* request sees the same state — the whole point of the daemon
   const state = await get("/applets/timer/state");
-  expect(state.remaining).toBe(5);
+  expect(state.timers[0]).toMatchObject({ id: res.result.id, remaining: 5, running: true });
 
-  const paused = await call("timer", "pause", {});
-  expect(paused.state.running).toBe(false);
+  // ...and an agent can name that timer instead of the on-screen selection
+  const paused = await call("timer", "pause", { id: res.result.id });
+  expect(paused.state.timers[0].running).toBe(false);
 });
 
 test("unknown applet and verb 404 cleanly", async () => {
