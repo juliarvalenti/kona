@@ -38,6 +38,13 @@ export interface Hint {
  * than a reservation.
  */
 export const COPY_PROMPT_KEY = "y";
+/**
+ * The same keybind on the LAUNCHER, where a bare letter is not available: the
+ * launcher starts a filter on any printable key (#40), so copy-prompt takes the
+ * ctrl-combo of the same letter — `startsFilter` never claims a ctrl chord, and
+ * the finger memory carries over from the applets.
+ */
+export const LAUNCHER_COPY_PROMPT_KEY = "ctrl+y";
 // Kept short on purpose: the hint bar is charged against the viewport, and a
 // two-line footer costs every applet a row of content.
 export const COPY_PROMPT_LABEL = "prompt";
@@ -144,12 +151,15 @@ export function appletHints(def: AppletDef, state: AppletState): Hint[] {
   return hints;
 }
 
-/** The launcher's own three keys. */
+/** The launcher's own keys — nav, the filter, and the whole-set prompt. */
 export function launcherHints(): Hint[] {
   return [
     { key: "↑↓", label: "move" },
     { key: "enter", label: "open" },
     { key: "/", label: "filter" },
+    // Yields like the applet one: a prompt for the set is never worth a row of
+    // the list it describes.
+    { key: LAUNCHER_COPY_PROMPT_KEY, label: COPY_PROMPT_LABEL, optional: true },
     QUIT,
   ];
 }

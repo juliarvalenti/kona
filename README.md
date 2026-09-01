@@ -515,7 +515,8 @@ other half is *"teach my agent about the thing I am staring at, right now"*:
 press **`y`** in any applet and its whole surface is on your clipboard, ready to
 paste into an agent — the verbs, their example args, the key you'd press for
 each, and both seams (`kona call …` and the HTTP route at the port this host is
-talking to). Press it in the launcher and you get the whole set instead.
+talking to). In the launcher — where a bare letter is spent on type-to-filter —
+the key is **`ctrl+y`**, and what you get is the whole installed set instead.
 
 The same blurb from the command line:
 
@@ -533,9 +534,10 @@ says. The clipboard is `pbcopy` on macOS, `wl-copy`/`xclip`/`xsel` on Linux and
 `clip` on Windows; `KONA_CLIPBOARD="ssh mac pbcopy"` overrides the command,
 which is also how you copy out of an ssh session.
 
-`y` is a platform key, not an applet's: the host handles it for every applet and
-the launcher. An applet that binds `y` itself keeps it, and the hint bar yields
-the `y prompt` legend rather than spending a second footer line on it.
+`y` is a platform key, not an applet's: the host handles it for every applet,
+and `ctrl+y` for the launcher. An applet that binds `y` itself keeps it, and the
+hint bar yields the `y prompt` legend rather than spending a second footer line
+on it.
 
 ## Config
 

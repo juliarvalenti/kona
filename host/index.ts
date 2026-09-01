@@ -3,7 +3,7 @@ import { bindingFor, type AppletDef, type AppletState } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { filterApplets } from "../core/catalog.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
-import { createStage, COPY_PROMPT_KEY, type Draft } from "./stage.ts";
+import { createStage, COPY_PROMPT_KEY, LAUNCHER_COPY_PROMPT_KEY, type Draft } from "./stage.ts";
 import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
 import { resolveKey, keyName, isUp, isDown, isSelect, isBack, type InputContext } from "./input.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
@@ -52,6 +52,8 @@ export type LauncherAction =
   | { kind: "open"; index: number }
   /** The filter changed (`edit: null` closes it); the cursor restarts on it. */
   | { kind: "filter"; edit: Edit | null; cursor: number }
+  /** Copy an agent prompt for every installed applet (#62). */
+  | { kind: "prompt" }
   | { kind: "none" };
 
 /**
@@ -85,6 +87,11 @@ export function launcherKey(
     // holds it, so the first letter you type is never eaten.
     return { kind: "filter", edit: mkEdit(k.sequence === "/" ? "" : (k.sequence ?? "")), cursor: 0 };
   }
+
+  // Copy-prompt for the whole set. It sits after the filter (which only ever
+  // "ignores" a ctrl chord) and before the count guard, because a prompt for
+  // what is INSTALLED doesn't depend on what the filter currently matches.
+  if (keyName(k) === LAUNCHER_COPY_PROMPT_KEY) return { kind: "prompt" };
 
   if (!count) return { kind: "none" };
   if (isUp(k.name)) return { kind: "move", cursor: (cursor - 1 + count) % count };
@@ -403,6 +410,12 @@ export async function runHost(startAppletId: string | null) {
         } else if (act.kind === "open") {
           const pick = list[act.index];
           if (pick) openFromLauncher(pick.id);
+        } else if (act.kind === "prompt") {
+          // Draw first, then copy: copyPrompt() writes its result into the
+          // footer, and a render after it would wipe the note it just left.
+          render();
+          await copyPrompt();
+          return;
         }
         render();
         return;
