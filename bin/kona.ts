@@ -52,7 +52,8 @@ function usage() {
 
   kona                     the configured default applet, else the launcher
   kona launcher            always the launcher: pick an app
-  kona <applet> [args]     open an applet's TUI  (e.g. kona timer 5m)
+  kona <applet> [args]     open an applet's TUI  (e.g. kona timer 5m,
+                           kona timer pomodoro)
   kona ls                  list applets
   kona tools               list agent-callable verbs (the manifest)
   kona state <applet>      print an applet's current state
@@ -279,7 +280,10 @@ switch (cmd) {
     // an idle timer, so `kona timer` still just opens a countdown in progress.
     if (cmd === "timer") {
       const arg = rest[0] ?? "";
-      if (arg) {
+      if (arg === "pomodoro") {
+        // `kona timer pomodoro` — a session on the configured plan.
+        await callVerb("timer", "pomodoro.start", {});
+      } else if (arg) {
         await callVerb("timer", "start", { seconds: arg });
       } else {
         const preset = appletString("timer", "default", "");

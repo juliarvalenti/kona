@@ -50,6 +50,37 @@ test("timer shows the selection big and the rest as rows with mini bars", async 
   for (const glyph of ["▶", "⏸", "✓"]) expect(frame).toContain(glyph); // running/paused/done
 });
 
+test("timer in pomodoro mode leads with the phase, round and tally", async () => {
+  const frame = await snapshot(
+    "timer",
+    {
+      timers: [{ id: "t1", label: "tea", remaining: 125, total: 300, running: true }],
+      cursor: 0,
+      pomodoro: {
+        active: true,
+        phase: "short",
+        round: 2,
+        remaining: 180,
+        total: 300,
+        running: true,
+        awaiting: false,
+        completed: 3,
+        day: "2026-01-01",
+        plan: { work: 1500, short: 300, long: 900, every: 4, auto: true },
+      },
+    },
+    62,
+    30,
+  );
+  expect(frame).toContain("pomodoro");
+  expect(frame).toContain("short break");
+  expect(frame).toContain("round 2/4");
+  expect(frame).toContain("● ● ○ ○"); // two rounds banked this cycle
+  expect(frame).toContain("3 done today");
+  expect(frame).toContain("tea"); // the plain countdowns keep their roster
+  expect(frame).toContain("02:05");
+});
+
 test("timer with nothing running points at the presets", async () => {
   const frame = await snapshot("timer", undefined, 62, 14);
   expect(frame).toContain("no timers");

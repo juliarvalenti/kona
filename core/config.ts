@@ -266,6 +266,15 @@ accent = "#1db954"
 [applets.timer]
 default = "5m"       # \`kona timer\` with no argument
 
+# Pomodoro mode (\`p\` in the TUI, \`timer.pomodoro.start\` for an agent).
+# Durations may be written "25m" or as a bare number of MINUTES.
+[applets.timer.pomodoro]
+work  = "25m"
+short = "5m"
+long  = "15m"
+every = 4            # long break after every 4th work phase
+auto  = true         # false: wait for \`p\` at each phase boundary
+
 [applets.email]
 page = 20            # threads per fetch
 `;

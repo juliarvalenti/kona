@@ -41,6 +41,7 @@ bun install
 kona                       # your default applet, else the launcher
 kona launcher              # always the launcher: pick an app
 kona timer 5m              # open the timer, pre-started
+kona timer pomodoro        # ...or a 25/5 work-break cycle
 kona ls                    # list applets
 kona tools                 # the manifest an agent reads
 kona call timer start '{"seconds":300}'   # ← exactly what an agent does
@@ -54,6 +55,33 @@ The daemon (`konad`) autostarts on first use; state lives in
 In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes back,
 and `/` searches. The mouse works the same way: click a row to select and open
 it, scroll the wheel to scroll.
+
+### Pomodoro
+
+The timer also runs a pomodoro cycle — work → short break → … → long break —
+alongside the plain countdowns, not instead of them. Each phase counts down in
+the daemon, hands itself to the next one, and banners the desktop on the way
+past (`timer.pomodoro`, toggleable on its own). The view shows the phase, the
+round you're on and how many you've banked today.
+
+```sh
+kona timer pomodoro                                  # or `p` in the TUI
+kona call timer pomodoro.start '{"work":"50m","short":"10m"}'
+kona call timer pomodoro.skip '{}'                   # "skip this break"
+kona call timer pomodoro.pause '{}'                  # ...and .resume/.toggle/.stop
+```
+
+In the TUI: `p` starts a session and pauses/resumes it, `n` skips the current
+phase, `x` ends the session. The shape of the cycle lives in the config file:
+
+```toml
+[applets.timer.pomodoro]
+work  = "25m"   # a duration string, or a bare number of MINUTES
+short = "5m"
+long  = "15m"
+every = 4       # long break after every 4th work phase
+auto  = false   # wait for `p` at each boundary instead of rolling on
+```
 
 ### Desktop notifications
 
@@ -172,6 +200,8 @@ bg     = "#0b0b0b"    # text on an accent fill
 accent = "#1db954"    # `accent` retints any applet's frame
 [applets.timer]
 default = "5m"        # `kona timer` with no argument
+[applets.timer.pomodoro]
+work  = "25m"         # the cycle: see "Pomodoro" above
 [applets.email]
 page = 20             # threads per fetch
 ```

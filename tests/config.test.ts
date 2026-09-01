@@ -91,6 +91,31 @@ page = 50
   expect(appletNumber("email", "page", 20)).toBe(50);
 });
 
+test("[applets.timer.pomodoro] shapes the cycle a session starts under", () => {
+  withConfig(`[applets.timer.pomodoro]
+work  = "50m"
+short = 10        # a bare number is MINUTES
+long  = "20m"
+every = 3
+auto  = false
+`);
+  const state = structuredClone(timer.initialState);
+  const started = timer.verbs["pomodoro.start"]!({}, { state, emit: () => {} }) as {
+    remaining: number;
+    rounds: number;
+  };
+  expect(started.remaining).toBe(3000); // 50m of work
+  expect(started.rounds).toBe(3);
+  expect(state.pomodoro.plan).toEqual({ work: 3000, short: 600, long: 1200, every: 3, auto: false });
+});
+
+test("a malformed pomodoro block falls back to the classic 25/5/15", () => {
+  withConfig(`[applets.timer]\npomodoro = "yes please"\n`);
+  const state = structuredClone(timer.initialState);
+  timer.verbs["pomodoro.start"]!({}, { state, emit: () => {} });
+  expect(state.pomodoro.plan).toEqual({ work: 1500, short: 300, long: 900, every: 4, auto: true });
+});
+
 test("unset applet settings fall back to the caller's default", () => {
   withConfig(`[applets.spotify]\naccent = "#123456"\n`);
   expect(appletAccent("dash", "#1db954")).toBe("#1db954");

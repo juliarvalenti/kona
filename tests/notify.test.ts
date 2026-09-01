@@ -160,6 +160,34 @@ test("freshIds adopts the first batch silently, then reports only new ids", () =
   expect(again.fresh).toEqual([]);
 });
 
+test("every pomodoro phase boundary banners its own event", () => {
+  const state = structuredClone(timer.initialState);
+  const ctx: AppletCtx<typeof state> = { state, emit: () => {} };
+  timer.verbs["pomodoro.start"]!({ work: "2s", short: "1s", every: 2 }, ctx);
+
+  timer.tick!(ctx);
+  expect(sent).toHaveLength(0); // mid-phase: nothing to say
+
+  timer.tick!(ctx); // work -> break
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.event).toBe("timer.pomodoro"); // its own key: toggleable on its own
+  expect(sent[0]!.title).toBe("Time for a break");
+  expect(sent[0]!.body).toContain("1 done today");
+
+  timer.tick!(ctx); // break -> work, a distinct key so it doesn't dedupe away
+  expect(sent).toHaveLength(2);
+  expect(sent[1]!.title).toBe("Break's over, back to it");
+  expect(sent[1]!.body).toContain("round 2/2");
+});
+
+test("skipping a phase by hand stays quiet — you are already here", () => {
+  const state = structuredClone(timer.initialState);
+  const ctx: AppletCtx<typeof state> = { state, emit: () => {} };
+  timer.verbs["pomodoro.start"]!({ work: "2s" }, ctx);
+  timer.verbs["pomodoro.skip"]!({}, ctx);
+  expect(sent).toHaveLength(0);
+});
+
 test("a countdown reaching zero notifies once, with its label", async () => {
   const state = structuredClone(timer.initialState);
   const ctx: AppletCtx<typeof state> = { state, emit: () => {} };
