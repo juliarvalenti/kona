@@ -1,0 +1,20 @@
+{
+  "name": "kona",
+  "version": "0.0.1",
+  "description": "Bimodal terminal applets — a view you browse and verbs an agent calls, over one shared state.",
+  "type": "module",
+  "bin": {
+    "kona": "./bin/kona.ts",
+    "konad": "./bin/konad.ts"
+  },
+  "scripts": {
+    "daemon": "bun run bin/konad.ts",
+    "dev": "bun run bin/konad.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
