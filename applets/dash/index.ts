@@ -12,7 +12,7 @@ import { notify, freshIds } from "../../server/notify.ts";
 
 interface DashState {
   np: { track: string; artist: string; playing: boolean; shuffle: boolean } | null;
-  timer: { remaining: number; running: boolean } | null;
+  timer: { remaining: number; running: boolean; label: string; more: number } | null;
   unread: number;
   emailAuthed: boolean;
   gh: GhItem[];
@@ -102,8 +102,14 @@ function aggregate(state: DashState, peek?: (id: string) => Record<string, unkno
   const sp = peek?.("spotify") as { track?: string; artist?: string; playing?: boolean; shuffle?: boolean } | undefined;
   state.np = sp?.track ? { track: sp.track, artist: sp.artist ?? "", playing: !!sp.playing, shuffle: !!sp.shuffle } : null;
 
-  const tm = peek?.("timer") as { remaining?: number; running?: boolean } | undefined;
-  state.timer = tm && ((tm.remaining ?? 0) > 0 || tm.running) ? { remaining: tm.remaining ?? 0, running: !!tm.running } : null;
+  // The timer applet holds a LIST now; surface the one that expires soonest
+  // (running beats paused) and how many others are still on the clock.
+  const tm = peek?.("timer") as { timers?: Array<{ remaining: number; running: boolean; label: string }> } | undefined;
+  const live = (tm?.timers ?? []).filter((t) => t.running || t.remaining > 0);
+  const soonest = [...live].sort((a, b) => Number(b.running) - Number(a.running) || a.remaining - b.remaining)[0];
+  state.timer = soonest
+    ? { remaining: soonest.remaining, running: soonest.running, label: soonest.label, more: live.length - 1 }
+    : null;
 
   const em = peek?.("email") as { threads?: Array<{ unread?: boolean }>; authed?: boolean } | undefined;
   state.emailAuthed = !!em?.authed;
@@ -198,7 +204,9 @@ export default defineApplet<DashState>({
 
     // Timer (only when active)
     if (state.timer) {
-      nodes.push(text(`⏲ ${fmt(state.timer.remaining)}${state.timer.running ? "" : "  (paused)"}`, { color: AMBER }));
+      const t = state.timer;
+      const extra = t.more > 0 ? `  +${t.more} more` : "";
+      nodes.push(text(`⏲ ${fmt(t.remaining)}${t.label ? `  ${t.label}` : ""}${t.running ? "" : "  (paused)"}${extra}`, { color: AMBER }));
     }
 
     // Mail

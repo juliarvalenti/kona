@@ -155,10 +155,10 @@ test("a themed palette reaches applets and components", () => {
   withConfig(`[theme]\nok = "#abcdef"\nmuted = "#010101"\nbg = "#fedcba"\naccent = "#222222"\n`);
   expect(theme().ok).toBe("#abcdef");
 
-  // the timer paints from roles, so retheming retints it
-  const idle = { remaining: 0, total: 0, running: false, label: "" };
-  expect(timer.accent!(idle)).toBe("#010101");
-  expect(timer.accent!({ ...idle, remaining: 30, running: true })).toBe("#abcdef");
+  // the timer paints from roles, so retheming retints it (over the selected timer)
+  expect(timer.accent!({ timers: [], cursor: 0 })).toBe("#010101"); // muted: nothing selected
+  const running = { id: "t1", label: "", remaining: 30, total: 30, running: true };
+  expect(timer.accent!({ timers: [running], cursor: 0 })).toBe("#abcdef");
 
   // a selected record row draws `bg` on the theme accent
   expect(recordRow([{ text: "row", grow: true }], { width: 20, selected: true })).toMatchObject({

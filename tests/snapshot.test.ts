@@ -19,7 +19,7 @@ test("launcher lists applets with a cursor and title", async () => {
 test("timer shows status, label, and a partly-filled bar", async () => {
   const frame = await snapshot(
     "timer",
-    { remaining: 125, total: 300, running: true, label: "tea" },
+    { timers: [{ id: "t1", label: "tea", remaining: 125, total: 300, running: true }], cursor: 0 },
     62,
     24,
   );
@@ -27,6 +27,34 @@ test("timer shows status, label, and a partly-filled bar", async () => {
   expect(frame).toContain("tea");
   expect(frame).toContain("█"); // bar has fill
   expect(frame).toContain("░"); // ...and empty remainder
+});
+
+test("timer shows the selection big and the rest as rows with mini bars", async () => {
+  const frame = await snapshot(
+    "timer",
+    {
+      timers: [
+        { id: "t1", label: "tea", remaining: 125, total: 300, running: true },
+        { id: "t2", label: "pasta", remaining: 540, total: 900, running: false },
+        { id: "t3", label: "pomodoro", remaining: 0, total: 1500, running: false },
+      ],
+      cursor: 0,
+    },
+    62,
+    26,
+  );
+  expect(frame).toContain("3 timers");
+  expect(frame).toContain("02:05"); // the selected timer's row
+  expect(frame).toContain("09:00"); // ...alongside the others
+  expect(frame).toContain("00:00");
+  for (const glyph of ["▶", "⏸", "✓"]) expect(frame).toContain(glyph); // running/paused/done
+});
+
+test("timer with nothing running points at the presets", async () => {
+  const frame = await snapshot("timer", undefined, 62, 14);
+  expect(frame).toContain("no timers");
+  expect(frame).toContain("5m");
+  expect(frame).toContain("25m");
 });
 
 test("storybook renders every component; bars fill mid-sweep", async () => {
