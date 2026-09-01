@@ -215,6 +215,41 @@ taking the daemon down. `KONA_NO_PLUGINS=1` limits a run to this repo — the te
 suite sets it so your installed plugins (and links) can't change what the suite
 sees.
 
+### Installing one
+
+Discovery is half the story; `kona plugin install` is the other half — getting
+a package someone else built into (2) without a hand-rolled `git clone`. An
+applet that can never live in this repo (a private API, an internal SSO) ships
+as its own package and arrives this way.
+
+```sh
+kona plugin install git@github.com:me/kona-tome.git   # clone into the plugin dir
+kona plugin install ~/src/kona-tome [--link]          # copy a local package, or symlink it
+kona plugin install <src> --as tome                   # name the directory yourself
+kona plugin list                                      # ids, kind, and where each came from
+kona plugin remove tome                               # delete it
+```
+
+The rules it holds to:
+
+- The destination is always `~/.config/kona/plugins/<name>/` — the dir the
+  loader already scans, so an install registers nothing and edits no config.
+- A path that exists beats any git spelling, so `./thing.git` on disk is copied,
+  not fetched. A copy leaves `node_modules` and `.git` behind.
+- `bun install` runs in a cloned or copied package that has a `package.json`,
+  and never in a `--link`ed one: that directory is somebody's working checkout.
+- An install that produced no `index.ts` is undone, and a failed clone leaves
+  nothing behind — a half-installed directory the loader silently ignores is
+  worse than an error.
+- `kona plugin remove <name>` deletes the directory, or, for a `--link`, the
+  symlink and not the checkout behind it.
+- The filesystem is the source of truth. `~/.config/kona/plugins.json` records
+  only where each install came from, so a package you copied in by hand lists
+  and removes like any other, and deleting that file loses provenance, never an
+  applet.
+- `plugins = [...]` roots are loaded but not managed here: `kona plugin remove`
+  only ever touches the plugin dir.
+
 ## An applet as an executable
 
 `kona` takes a path as well as an applet id, so an applet file can be a command

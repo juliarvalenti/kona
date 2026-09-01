@@ -18,7 +18,8 @@ import { linkedEntries } from "./links.ts";
  *
  * Packages are discovered, never listed:
  *   1. `applets/<name>/` in this repo — what ships with kona.
- *   2. `~/.config/kona/plugins/<name>/` — installed plugins.
+ *   2. `~/.config/kona/plugins/<name>/` — installed plugins (`kona plugin
+ *      install <git-url|path>` puts them there; see ./plugins.ts).
  *   3. `plugins = [...]` in config.toml, and `KONA_PLUGINS` (colon-separated).
  *      Each entry is either one package (a dir with an `index.ts`) or a dir
  *      full of them.
@@ -104,12 +105,19 @@ async function entries(): Promise<Array<[string, AppletSource]>> {
   return unique;
 }
 
-/** The package dirs under one root — or the root itself, if it is a package. */
-async function packageDirs(root: string): Promise<string[]> {
+/**
+ * The package dirs under one root — or the root itself, if it is a package.
+ *
+ * Symlinks are followed, because a package under a plugin root may BE one:
+ * `kona plugin install <path> --link` points `~/.config/kona/plugins/<name>`
+ * at a checkout you keep editing, and a plugin you can install but not load
+ * would be no plugin at all.
+ */
+export async function packageDirs(root: string): Promise<string[]> {
   if (!isDir(root)) return [];
   if (existsSync(join(root, "index.ts"))) return [root];
   const dirs: string[] = [];
-  for await (const rel of new Glob("*/index.ts").scan({ cwd: root })) {
+  for await (const rel of new Glob("*/index.ts").scan({ cwd: root, followSymlinks: true })) {
     dirs.push(join(root, dirname(rel)));
   }
   return dirs.sort();
