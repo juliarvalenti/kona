@@ -39,4 +39,39 @@ export function badge(label: string, color: Color): ViewNode {
   return text(`[${label}]`, { color });
 }
 
+/** A progress bar that labels itself with a percentage. */
+export function gauge(value: number, opts: { width?: number; color?: Color } = {}): ViewNode {
+  return progress(value, { ...opts, label: `${Math.round(value * 100)}%` });
+}
+
+/** A horizontal rule. */
+export function divider(width = 32, opts: { color?: Color } = {}): ViewNode {
+  return text("─".repeat(width), { color: opts.color, dim: !opts.color });
+}
+
+/** A section heading. */
+export function heading(label: string, color?: Color): ViewNode {
+  return text(label, { color, dim: !color });
+}
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** An animated spinner. `frame` is any monotonically increasing counter. */
+export function spinner(frame: number, color?: Color): ViewNode {
+  const i = ((frame % SPINNER_FRAMES.length) + SPINNER_FRAMES.length) % SPINNER_FRAMES.length;
+  return text(SPINNER_FRAMES[i]!, { color });
+}
+
+/** A column-aligned table: dim header row + body rows. */
+export function table(headers: string[], rows: string[][], opts: { color?: Color } = {}): ViewNode[] {
+  const widths = headers.map((h, c) =>
+    Math.max(h.length, ...rows.map((r) => (r[c] ?? "").length)),
+  );
+  const fmtRow = (cells: string[]) => cells.map((cell, c) => (cell ?? "").padEnd(widths[c]!)).join("  ");
+  return [
+    text(fmtRow(headers), { dim: true }),
+    ...rows.map((r) => text(fmtRow(r), { color: opts.color })),
+  ];
+}
+
 export { spacer };

@@ -160,8 +160,13 @@ export async function runHost(startAppletId: string | null) {
       }
       case "bar": {
         const width = node.width ?? 24;
-        const filled = Math.round(node.value * width);
-        const content = "█".repeat(filled) + "░".repeat(Math.max(0, width - filled));
+        // Sub-cell resolution: full blocks + one fractional block = 8x smoother,
+        // so slow bars visibly move instead of looking frozen.
+        const PARTIALS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
+        const eighths = Math.round(node.value * width * 8);
+        const full = Math.floor(eighths / 8);
+        const partial = PARTIALS[eighths % 8]!;
+        const content = ("█".repeat(full) + partial).padEnd(width, "░");
         return new TextRenderable(renderer, { id, content, fg: node.color ?? FG });
       }
     }

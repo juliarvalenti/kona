@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { progress, keyValue, list, badge } from "../sdk/components.ts";
+import { progress, keyValue, list, badge, gauge, divider, spinner, table } from "../sdk/components.ts";
 import type { ViewNode } from "../sdk/index.ts";
 
 // helper: narrow a node to an object kind
@@ -40,4 +40,36 @@ test("list marks the cursor row and dims the rest", () => {
 
 test("badge brackets a colored label", () => {
   expect(badge("LIVE", "#0f0")).toMatchObject({ kind: "text", text: "[LIVE]", color: "#0f0" });
+});
+
+test("gauge appends a percentage label", () => {
+  const n = gauge(0.42);
+  expect(kind(n)).toBe("row");
+  if (typeof n !== "string" && n.kind === "row") {
+    expect(n.children[1]).toMatchObject({ text: expect.stringContaining("42%") });
+  }
+});
+
+test("divider is a rule of the requested width", () => {
+  const n = divider(10);
+  expect(n).toMatchObject({ kind: "text", text: "──────────" });
+});
+
+test("spinner advances with frame and wraps", () => {
+  const a = spinner(0);
+  const b = spinner(1);
+  if (typeof a !== "string" && a.kind === "text" && typeof b !== "string" && b.kind === "text") {
+    expect(a.text).not.toBe(b.text);
+  }
+  // wraps cleanly and never throws on large / negative frames
+  expect(() => spinner(9999)).not.toThrow();
+});
+
+test("table aligns columns and dims the header", () => {
+  const nodes = table(["k", "label"], [["space", "x"]]);
+  expect(nodes[0]).toMatchObject({ dim: true });
+  // header 'k' padded to width of 'space' (5) + 2-space gap
+  if (typeof nodes[0] !== "string" && nodes[0]!.kind === "text") {
+    expect(nodes[0]!.text).toBe("k      label");
+  }
 });
