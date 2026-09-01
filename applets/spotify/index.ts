@@ -336,7 +336,7 @@ export default defineApplet<SpotifyState>({
           [
             { text: r.kind === "play" ? r.name : r.name, grow: true },
             { text: r.subtitle, width: Math.min(28, Math.floor(W * 0.3)) },
-            { text: tag(r.kind), width: 6, align: "right" },
+            { text: tag(r.kind), width: 9, align: "right" },
           ],
           {
             width: W,

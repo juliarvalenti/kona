@@ -263,6 +263,17 @@ export interface Row {
 }
 
 const artistsOf = (x: any): string => (x?.artists ?? []).map((a: any) => a.name).join(", ");
+
+/** ISO timestamp -> compact relative age ("3m", "2h", "4d"). */
+function ago(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 const trackRow = (t: any): Row => ({ kind: "track", id: t.id, uri: t.uri, name: t.name ?? "", subtitle: artistsOf(t) });
 
 let _market: string | null = null;
@@ -366,9 +377,8 @@ export async function home(): Promise<Row[]> {
   }));
   const seen = new Set<string>();
   const recents: Row[] = ((recent?.items ?? []) as any[])
-    .map((it) => it.track)
-    .filter((t) => t && !seen.has(t.id) && (seen.add(t.id), true))
-    .map(trackRow);
+    .filter((it) => it.track && !seen.has(it.track.id) && (seen.add(it.track.id), true))
+    .map((it) => ({ ...trackRow(it.track), subtitle: `${artistsOf(it.track)}  ·  ${ago(it.played_at)}` }));
   return [...playlists, ...artists, ...recents];
 }
 
