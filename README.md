@@ -25,7 +25,7 @@ just another client.
 ## Shape
 
 ```
-server/    konad — owns state (KV, persisted), runs the cron tick, streams SSE
+server/    konad — owns state (KV, persisted), runs the cron scheduler, streams SSE
 host/      OpenTUI client — launcher ("pick an app") → applet view → keymap
 sdk/       defineApplet({ view, verbs, keymap, tick }) + the tool manifest
 core/      applet loader, config/theme, HTTP client — shared by daemon and host
@@ -46,6 +46,7 @@ kona ls                    # list applets
 kona tools                 # the manifest an agent reads
 kona tools --json          # ...with docs, example args, and the key each verb binds
 kona tools --skill         # that manifest as a drop-in agent skill
+kona workflows            # named sequences of verbs; enter opens one
 kona call timer start '{"seconds":300}'   # ← exactly what an agent does
 kona state timer           # read current state
 kona config                # show the resolved config (init writes a starter)
@@ -268,6 +269,71 @@ kona posts as `kona`; set another name with `[applets.mycelium] agent = "…"` i
 `config.toml` or `MYCELIUM_AGENT`. Turn on `kona notify on mycelium.message` for
 a banner when a room gets busy while you're elsewhere.
 
+### Workflows
+
+A **workflow** is a named, ordered sequence of verb calls — kona's answer to
+Shortcuts, except the steps are applet verbs and both you and an agent can
+define, run and schedule them:
+
+```sh
+kona call workflows define '{"name":"morning","cron":"30 8 * * 1-5","steps":[
+  "email.refresh",
+  "notes.add {\"text\":\"{{steps.0.unread}} unread\"}",
+  "timer.start {\"seconds\":1500,\"label\":\"focus\"}"]}'
+
+kona call workflows run '{"name":"morning"}'
+kona workflows                      # the list: steps, schedule, last run
+```
+
+In the TUI, `n` names a new one, `a` adds a step (`applet.verb {json}` — the
+same line an agent writes), `c` schedules it, `r` runs it, `p` pauses the
+schedule and `enter` inside a workflow tests the step under the cursor. Every
+one of those keys fills in the arguments of the verb an agent calls directly;
+there is no keyboard-only path.
+
+| key | verb | what it does |
+| --- | --- | --- |
+| `n` | `define` | name a new workflow |
+| `a` | `addStep` | append a step |
+| `c` | `schedule` | put it on the daemon's clock |
+| `r` | `run` | run it now |
+| `p` | `toggle` | pause/resume the schedule |
+| `enter` | `runStep` | fire the selected step on its own |
+
+**Steps talk to each other.** Any string in a step's args can reference the run:
+`{{params.room}}` (what the caller passed), `{{steps.0.unread}}` or
+`{{steps.<as>.…}}` (an earlier result), `{{last.id}}`, `{{now}}`. A reference on
+its own keeps its type; one inside a sentence is interpolated. A step may also
+carry `when` — `when={{steps.0.unread}}`, `when=steps.0.count > 0` — and is
+skipped when it is false. A step that fails stops the run, and the failure is on
+the workflow's history and the applet's frame.
+
+**Scheduling is the daemon's.** `schedule` takes a 5-field cron expression, an
+`@daily`-style shorthand, or `@every 10m`; the daemon fires the steps itself,
+with no terminal open, exactly as an internal caller hitting the same verbs.
+That generalizes kona's per-applet `tick` from a heartbeat to a calendar: an
+applet can now declare `cron(state) -> CronJob[]` and the daemon schedules it
+from live state (see `server/cron.ts`). The dash shows what runs next.
+
+**Workflows are text, not a walled garden.** `export` renders one as a
+SKILL.md-shaped document — YAML frontmatter plus literal `kona call` lines — and
+`import` reads it back, including skills someone wrote by hand:
+
+~~~md
+---
+name: morning
+description: Start the day
+schedule: 30 8 * * 1-5
+---
+
+## Steps
+
+```sh
+kona call email refresh  # as=inbox
+kona call notes add '{"text":"{{steps.inbox.unread}} unread"}'
+```
+~~~
+
 ### Ticker
 
 The `ticker` applet needs no account — quotes come from a keyless public
@@ -400,8 +466,25 @@ to the overlay's own keymap — bind `tab` there to move between fields. See the
 new-room dialog in `applets/mycelium/index.ts`. `submitLabel`/`cancelLabel` name
 what enter and esc do in the hint bar ("enter send" beats "enter save").
 
+### Composing and scheduling
+
+Two optional fields let an applet reach past its own state. `ctx.call(applet,
+verb, args)` fires another applet's verb through the same entry point HTTP uses
+— that is how one workflow step runs — and `cron(state)` hands the daemon verb
+calls to make on a calendar:
+
+```ts
+cron: (s) => s.jobs.map((j) => ({ id: j.id, cron: "30 8 * * 1-5", verb: "run", args: { id: j.id } })),
+```
+
+The daemon re-reads `cron(state)` on every scheduler pass, so a job appears,
+changes or disappears the moment a verb edits state — no registration step. Use
+`tick`/`tickMs` for a heartbeat ("every N ms while loaded") and `cron` for a
+calendar ("08:30 on weekdays"); expressions take the 5 standard fields,
+`@daily`-style shorthands, or `@every 10m`.
+
 ## Status
 
-v0 walking skeleton. The daemon, SDK, agent seam, cron tick, and shared-state
-loop are verified. The OpenTUI host is written against the pinned API and runs
+v0 walking skeleton. The daemon, SDK, agent seam, cron scheduler, and
+shared-state loop are verified. The OpenTUI host is written against the pinned API and runs
 in a real terminal (it needs a TTY; it won't render under a pipe).

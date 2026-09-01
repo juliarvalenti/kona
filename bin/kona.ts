@@ -349,6 +349,10 @@ switch (cmd) {
         if (preset && !(live?.remaining ?? 0)) await callVerb("timer", "start", { seconds: preset });
       }
     }
+    // `kona workflows <name>` opens straight into that workflow's steps.
+    if (cmd === "workflows" && rest[0]) {
+      await callVerb("workflows", "open", { name: rest.join(" ") });
+    }
     // `kona mycelium <room>` opens straight into that room's chat.
     if (cmd === "mycelium" && rest[0]) {
       await callVerb("mycelium", "open", { room: rest[0] });

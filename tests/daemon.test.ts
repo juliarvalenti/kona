@@ -15,6 +15,7 @@ let url: string;
 beforeAll(async () => {
   process.env.KONA_NO_WATCH = "1"; // don't let the applets-dir watcher exit the test
   process.env.KONA_STATE_DIR = mkdtempSync(join(tmpdir(), "kona-test-"));
+  process.env.KONA_SCHEDULER_MS = "50"; // the cron pass, fast enough to watch
   server = await startDaemon(0); // 0 = ephemeral port
   url = `http://localhost:${server.port}`;
 });
@@ -78,4 +79,50 @@ test("unknown applet and verb 404 cleanly", async () => {
   expect(a.status).toBe(404);
   const v = await call("timer", "nope", {});
   expect(v.error).toBeDefined();
+});
+
+test("a workflow runs other applets' verbs through the daemon's own seam", async () => {
+  // The point of ctx.call: an applet composing applets is just another caller,
+  // so a workflow's step is indistinguishable from an agent's POST.
+  const defined = await call("workflows", "define", {
+    name: "test-focus",
+    steps: [`timer.start {"seconds":90,"label":"from a workflow"}`, `notes.add {"text":"focus at {{steps.0.id}}"}`],
+  });
+  expect(defined.result).toMatchObject({ id: "test-focus", steps: 2 });
+
+  const run = await call("workflows", "run", { name: "test-focus" });
+  expect(run.result.ok).toBe(true);
+
+  // ...and the OTHER applets really moved.
+  const timers = (await get("/applets/timer/state")) as { timers: Array<{ label: string; remaining: number }> };
+  expect(timers.timers.some((t) => t.label === "from a workflow" && t.remaining === 90)).toBe(true);
+  const notes = (await get("/applets/notes/state")) as { notes: Array<{ text: string }> };
+  // The second step's text carried the first step's result into it.
+  const stamped = notes.notes.find((n) => n.text.startsWith("focus at "));
+  expect(stamped?.text).not.toBe("focus at "); // an id, not an empty reference
+});
+
+test("the daemon fires a scheduled workflow with nobody watching", async () => {
+  await call("workflows", "define", {
+    name: "test-tick",
+    cron: "@every 1s",
+    steps: [`notes.add {"text":"scheduled run"}`],
+  });
+
+  // No client involved from here: the daemon's scheduler is the only caller.
+  const deadline = Date.now() + 5_000;
+  let ran = 0;
+  while (Date.now() < deadline) {
+    const state = (await get("/applets/workflows/state")) as { runs: Array<{ name: string; trigger: string }> };
+    ran = state.runs.filter((r) => r.name === "test-tick" && r.trigger === "cron").length;
+    if (ran > 0) break;
+    await Bun.sleep(100);
+  }
+  expect(ran).toBeGreaterThan(0);
+
+  const notes = (await get("/applets/notes/state")) as { notes: Array<{ text: string }> };
+  expect(notes.notes.some((n) => n.text === "scheduled run")).toBe(true);
+
+  // Take it off the clock so it can't keep firing through the rest of the suite.
+  await call("workflows", "schedule", { name: "test-tick", cron: null });
 });

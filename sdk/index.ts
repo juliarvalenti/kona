@@ -26,6 +26,14 @@ export interface AppletCtx<S = AppletState> {
    * the daemon regardless of what's on screen, so a dashboard can compose them.
    */
   peek?: (appletId: string) => AppletState | undefined;
+  /**
+   * Fire another applet's verb — the SAME entry point an agent's POST and a
+   * keypress land on, so an applet composing others is just one more caller.
+   * This is what makes `workflows` possible without the engine knowing HTTP.
+   * Resolves with the verb's return value; rejects if the applet or verb is
+   * unknown, exactly as the HTTP seam 404s.
+   */
+  call?: (appletId: string, verb: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
 export type AppletState = Record<string, unknown>;
@@ -324,8 +332,29 @@ export interface AppletDef<S extends object = AppletState> {
   /** If set, the daemon calls tick every tickMs while the applet is "live". */
   tick?: (ctx: AppletCtx<S>) => void;
   tickMs?: number;
+  /**
+   * Verb calls the daemon should make on a CALENDAR rather than a heartbeat.
+   * `tick` answers "every N ms while loaded"; this answers "08:30 on weekdays".
+   * The daemon reads it from live state on every scheduler pass, so a job
+   * appears, changes or disappears the moment a verb edits state — which is how
+   * `workflows` schedules itself without the daemon knowing what a workflow is.
+   */
+  cron?: (state: S) => CronJob[];
   /** Called once when the daemon boots — good for an initial data load. */
   init?: (ctx: AppletCtx<S>) => void;
+}
+
+/**
+ * One scheduled verb call. `id` names it within the applet (the daemon keys the
+ * schedule on `<applet>:<id>:<cron>`, so editing the expression reschedules by
+ * construction), `cron` is a 5-field expression, an `@daily`-style shorthand or
+ * `@every 10m` — see server/cron.ts.
+ */
+export interface CronJob {
+  id: string;
+  cron: string;
+  verb: string;
+  args?: Record<string, unknown>;
 }
 
 /** Identity helper — gives you types and a stable shape. */

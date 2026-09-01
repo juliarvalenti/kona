@@ -5,6 +5,7 @@ import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
 import { loadApplets, APPLETS_DIR } from "../core/load.ts";
 import { skillMarkdown } from "../core/skill.ts";
+import { CronScheduler } from "./cron.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
 
@@ -25,6 +26,9 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // under it. Both env-tunable so tests can force an idle timeout in ~1s.
   const IDLE_TIMEOUT = Math.min(255, Number(process.env.KONA_IDLE_TIMEOUT ?? 120));
   const HEARTBEAT_MS = Number(process.env.KONA_HEARTBEAT_MS ?? 15_000);
+  // How often the cron scheduler asks "what is due?". Cron is minute-granular,
+  // but `@every 5s` isn't, so the pass is cheap and frequent.
+  const SCHEDULER_MS = Number(process.env.KONA_SCHEDULER_MS ?? 1_000);
   const applets = await loadApplets();
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
 
@@ -59,7 +63,11 @@ export async function startDaemon(port = DEFAULT_PORT) {
     saved = {};
   }
   for (const a of applets) {
-    states[a.id] = ephemeral.has(a.id) ? { ...a.initialState } : { ...a.initialState, ...saved[a.id] };
+    // Deep-clone: a shallow spread would share the applet module's own arrays
+    // and objects, so the first verb that pushed a row would mutate the
+    // module's `initialState` and every later boot would start from it.
+    const fresh = structuredClone(a.initialState) as AppletState;
+    states[a.id] = ephemeral.has(a.id) ? fresh : { ...fresh, ...saved[a.id] };
   }
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,6 +97,18 @@ export async function startDaemon(port = DEFAULT_PORT) {
         persist();
       },
       peek: (other) => states[other], // read another applet's live state
+      // Fire another applet's verb through the SAME entry point HTTP uses, so
+      // an applet composing others (workflows) is just one more caller. The
+      // HTTP layer's 404 Response becomes a plain rejection here — a caller in
+      // the daemon wants an error it can read, not a status code.
+      call: async (other, verb, callArgs) => {
+        try {
+          return await invoke(other, verb, callArgs ?? {});
+        } catch (e) {
+          if (e instanceof Response) throw new Error(`${other}.${verb}: ${await e.text()}`);
+          throw e;
+        }
+      },
     };
   }
 
@@ -234,6 +254,38 @@ export async function startDaemon(port = DEFAULT_PORT) {
       iv.unref?.(); // the server keeps the daemon alive; ticks shouldn't pin it
     }
   }
+
+  // --- the scheduler: the tick, generalized from a heartbeat to a calendar.
+  // Applets declare cron jobs from their own live state (`cron(state)`), so a
+  // workflow scheduled a second ago is picked up on the next pass and one that
+  // was deleted stops firing — the daemon never learns what a workflow is.
+  const scheduler = new CronScheduler();
+  const jobsNow = () =>
+    applets
+      .filter((a) => a.cron)
+      .flatMap((a) =>
+        (a.cron!(states[a.id]!) ?? []).map((job) => ({ key: `${a.id}:${job.id}:${job.cron}`, applet: a.id, job })),
+      );
+
+  const scheduleTick = () => {
+    let entries: ReturnType<typeof jobsNow>;
+    try {
+      entries = jobsNow();
+    } catch (e) {
+      console.error("[cron] collecting jobs", e);
+      return;
+    }
+    const due = new Set(scheduler.due(entries.map(({ key, job }) => ({ key, cron: job.cron }))));
+    for (const { key, applet, job } of entries) {
+      if (!due.has(key)) continue;
+      void Promise.resolve(invoke(applet, job.verb, { ...(job.args ?? {}) })).catch((e) =>
+        console.error(`[cron:${key}]`, e instanceof Response ? e.status : e),
+      );
+    }
+  };
+
+  const schedIv = setInterval(scheduleTick, SCHEDULER_MS);
+  schedIv.unref?.();
 
   console.error(`konad up on http://localhost:${server.port}  (${applets.length} applets)`);
   return server;

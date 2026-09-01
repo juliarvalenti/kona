@@ -562,3 +562,113 @@ test("ticker with an empty watchlist explains how to fill it", async () => {
   expect(frame).toContain("Watchlist empty");
   expect(frame).toContain("ticker.json");
 });
+
+const WF_MORNING = {
+  id: "morning",
+  name: "morning",
+  summary: "Start the day",
+  steps: [
+    { applet: "email", verb: "refresh", as: "inbox" },
+    { applet: "notes", verb: "add", args: { text: "{{steps.inbox.unread}} unread" }, when: "steps.inbox.unread" },
+  ],
+  cron: "30 8 * * 1-5",
+  enabled: true,
+  createdAt: 0,
+  updatedAt: 0,
+};
+
+test("workflows lists what each one does, when it runs, and how it went", async () => {
+  const frame = await snapshot(
+    "workflows",
+    {
+      workflows: [
+        WF_MORNING,
+        { id: "triage", name: "triage", steps: [{ applet: "email", verb: "refresh" }], cron: null, enabled: true, createdAt: 0, updatedAt: 0 },
+      ],
+      runs: [{ id: "r1", workflow: "morning", name: "morning", at: Date.now() - 120_000, ms: 42, ok: true, trigger: "cron", steps: [] }],
+      cursor: 0,
+    },
+    84,
+    20,
+  );
+  expect(frame).toContain("2 defined");
+  expect(frame).toContain("1 scheduled");
+  expect(frame).toContain("weekdays at"); // the cron expression, in words
+  expect(frame).toContain("2 steps");
+  expect(frame).toContain("manual"); // the unscheduled one
+  expect(frame).toContain("✓ 2m ago");
+  expect(frame).toContain("next: morning");
+});
+
+test("an empty workflows applet shows both ways to make one", async () => {
+  const frame = await snapshot("workflows", {}, 84, 16);
+  expect(frame).toContain("no workflows yet");
+  expect(frame).toContain("press n"); // the keyboard's way
+  expect(frame).toContain("workflows define"); // ...and the agent's
+});
+
+test("opening a workflow shows its steps and its last runs", async () => {
+  const frame = await snapshot(
+    "workflows",
+    {
+      workflows: [WF_MORNING],
+      open: "morning",
+      cursor: 0,
+      runs: [
+        {
+          id: "r1",
+          workflow: "morning",
+          name: "morning",
+          at: Date.now(),
+          ms: 42,
+          ok: true,
+          trigger: "cron",
+          steps: [
+            { applet: "email", verb: "refresh", args: {}, ok: true, ms: 30 },
+            { applet: "notes", verb: "add", args: {}, ok: true, ms: 12 },
+          ],
+        },
+      ],
+    },
+    84,
+    24,
+  );
+  expect(frame).toContain("MORNING");
+  expect(frame).toContain("Start the day");
+  expect(frame).toContain("email.refresh");
+  expect(frame).toContain("as inbox");
+  expect(frame).toContain("when steps.inbox.u"); // the conditional, on its row
+  expect(frame).toContain("RUNS");
+  expect(frame).toContain("✓✓"); // one mark per step
+  expect(frame).toContain("cron");
+  expect(frame).toContain("enter test step"); // enter tests a step in here
+});
+
+test("the schedule dialog says what the typed expression means", async () => {
+  const frame = await snapshot(
+    "workflows",
+    {
+      workflows: [{ ...WF_MORNING, cron: null }],
+      dialog: { kind: "cron", target: "morning", value: "30 8 * * 1-5" },
+    },
+    84,
+    18,
+  );
+  expect(frame).toContain("schedule"); // the modal's title
+  expect(frame).toContain("30 8 * * 1-5"); // ...the field
+  expect(frame).toContain("weekdays at 08:30"); // ...and the live gloss under it
+  expect(frame).toContain("enter save");
+  expect(frame).toContain("╔"); // a real overlay, not drawn inline
+});
+
+test("the step builder names the format it wants", async () => {
+  const frame = await snapshot(
+    "workflows",
+    { workflows: [WF_MORNING], dialog: { kind: "step", target: "morning", value: "" } },
+    84,
+    18,
+  );
+  expect(frame).toContain("add step");
+  expect(frame).toContain('timer.start {"seconds":300}'); // the placeholder
+  expect(frame).toContain("kona tools");
+});
