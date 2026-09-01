@@ -47,7 +47,7 @@ state after the call — so you rarely need a follow-up read.
 
 ## Applets on this machine
 
-Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `ticker`, `timer`, `weather`.
+Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `ticker`, `timer`, `weather`, `webex`.
 
 ### clock — World Clock
 
@@ -220,6 +220,22 @@ Current conditions and the week ahead, from open-meteo.
 Cursor verbs (the keyboard's business — address a row by id or index instead): `up`, `down`, `back`.
 
 Searchable: `weather.search` takes `{"q": "..."}`.
+
+### webex — Webex
+
+Spaces, their messages, and a verb that posts back.
+
+- `webex.refresh`  ·  `kona call webex refresh`, key `r`
+- `webex.search`  ·  `kona call webex search`
+- `webex.open`  ·  `kona call webex open`
+- `webex.compose`  ·  `kona call webex compose`, key `c`
+- `webex.cancel`  ·  `kona call webex cancel`
+- `webex.post`  ·  `kona call webex post`
+- `webex.read`  ·  `kona call webex read`, key `a`
+
+Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `up`, `down`.
+
+Searchable: `webex.search` takes `{"q": "..."}`.
 
 ## Worked examples
 
