@@ -355,9 +355,11 @@ export async function runHost(startAppletId: string | null) {
   renderer.keyInput.on(
     "keypress",
     async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
-      // ctrl+c: exit cleanly on the first press. (The state machine also maps
-      // this to `quit`, but the launcher branch below returns before we reach
-      // it, so it has to be handled here too.)
+      // ctrl+c: exit on the first press, before anything else — building the
+      // input context calls the applet's own overlay(state), and a view that
+      // throws must never sit between you and the exit. (The state machine also
+      // maps this to `quit`, but the launcher branch below returns before we
+      // reach it, so it has to be handled here too.)
       if (k.ctrl && k.name === "c") return shutdown();
 
       // Launcher: the type-to-filter list has its own mini state machine
