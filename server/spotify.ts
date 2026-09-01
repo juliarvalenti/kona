@@ -269,9 +269,15 @@ async function market(): Promise<string> {
   return _market;
 }
 
-/** Typed catalog search: artists, then albums, then tracks. */
-export async function search(query: string): Promise<Row[]> {
-  if (!query.trim()) return [];
+export interface SearchPage {
+  rows: Row[];
+  trackOffset: number; // how many track results we've consumed
+  trackTotal: number; // total tracks available (for pagination)
+}
+
+/** Typed catalog search: artists, then albums, then a first page of tracks. */
+export async function search(query: string): Promise<SearchPage> {
+  if (!query.trim()) return { rows: [], trackOffset: 0, trackTotal: 0 };
   const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "artist,album,track", limit: "6" })}`);
   const artists: Row[] = ((r?.artists?.items ?? []) as any[]).slice(0, 4).map((a) => ({
     kind: "artist",
@@ -287,8 +293,14 @@ export async function search(query: string): Promise<Row[]> {
     name: a.name ?? "",
     subtitle: artistsOf(a),
   }));
-  const tracks: Row[] = ((r?.tracks?.items ?? []) as any[]).slice(0, 6).map(trackRow);
-  return [...artists, ...albums, ...tracks];
+  const tracks: Row[] = ((r?.tracks?.items ?? []) as any[]).map(trackRow);
+  return { rows: [...artists, ...albums, ...tracks], trackOffset: tracks.length, trackTotal: r?.tracks?.total ?? tracks.length };
+}
+
+/** Next page of TRACK results (for viewport fill / infinite scroll). */
+export async function searchMoreTracks(query: string, offset: number): Promise<{ rows: Row[]; total: number }> {
+  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "track", limit: "10", offset: String(offset) })}`);
+  return { rows: ((r?.tracks?.items ?? []) as any[]).map(trackRow), total: r?.tracks?.total ?? offset };
 }
 
 export interface Detail {

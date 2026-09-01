@@ -7,6 +7,7 @@ import {
   next,
   previous,
   search,
+  searchMoreTracks,
   artistDetail,
   albumDetail,
   playUris,
@@ -47,6 +48,8 @@ interface Screen {
   title: string;
   rows: BrowseRow[];
   cursor: number;
+  /** Present on search screens: track pagination cursor for viewport fill. */
+  more?: { query: string; offset: number; total: number };
 }
 
 const GREEN = "#1db954"; // Spotify green
@@ -147,7 +150,10 @@ export default defineApplet<SpotifyState>({
       state.loading = true;
       emit();
       try {
-        state.stack[0]!.rows = await search(state.query);
+        const page = await search(state.query);
+        const scr = state.stack[0]!;
+        scr.rows = page.rows;
+        scr.more = { query: state.query, offset: page.trackOffset, total: page.trackTotal };
       } catch (e) {
         state.error = e instanceof Error ? e.message : String(e);
       } finally {
@@ -155,6 +161,24 @@ export default defineApplet<SpotifyState>({
         emit();
       }
       return { query: state.query, count: state.stack[0]?.rows.length ?? 0 };
+    },
+    // Append the next page of track results (viewport fill / infinite scroll).
+    async more(_a, { state, emit }) {
+      const scr = state.stack[state.stack.length - 1];
+      if (!scr?.more || scr.more.offset >= scr.more.total || state.loading) return;
+      state.loading = true;
+      emit();
+      try {
+        const { rows, total } = await searchMoreTracks(scr.more.query, scr.more.offset);
+        scr.rows.push(...rows);
+        scr.more.total = total;
+        scr.more.offset += rows.length || total; // no rows -> stop
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        state.loading = false;
+        emit();
+      }
     },
     // enter: play a track / play-a-context, or drill into an artist/album.
     async enter(_a, { state, emit }) {
@@ -243,6 +267,21 @@ export default defineApplet<SpotifyState>({
   },
 
   search: { verb: "search", placeholder: "search spotify (artists, albums, tracks)…" },
+
+  // Fill the viewport with more track results on a search screen (else the box
+  // sits mostly empty). Only search screens paginate; detail screens are bounded.
+  paginate: {
+    more: "more",
+    count: (s) => (s.mode === "browse" ? (s.stack[s.stack.length - 1]?.rows.length ?? 999) : 999),
+    hasMore: (s) => {
+      const m = s.stack[s.stack.length - 1]?.more;
+      return !!m && m.offset < m.total;
+    },
+    atEnd: (s) => {
+      const scr = s.stack[s.stack.length - 1];
+      return scr ? scr.cursor >= scr.rows.length - 1 : false;
+    },
+  },
 
   crumb: (s) => (s.mode === "browse" ? (s.stack[s.stack.length - 1]?.title ?? null) : null),
 
