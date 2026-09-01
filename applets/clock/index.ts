@@ -236,6 +236,7 @@ export default defineApplet<ClockState>({
   id: "clock",
   title: "World Clock",
   summary: "Every city you care about, at a glance. Add zones by hand or by agent.",
+  labels: ["time"],
   initialState: {
     zones: SEED,
     cursor: 0,

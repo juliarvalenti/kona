@@ -32,18 +32,37 @@ export interface EventSpec {
 }
 
 /**
- * The catalogue of notifiable events. Applets notify against these keys and
- * `kona notify` lists them; adding an event here is what makes it toggleable.
+ * The notifiable events on THIS machine — the platform's own, plus whatever the
+ * loaded applets declare in their `notifications` block. It is a registry the
+ * loader fills, not a list to append to: an applet says which banners it can
+ * raise where it raises them, and `kona notify` lists what is installed.
+ *
+ * Unregistered events are off, so a banner can never fire from a name nobody
+ * declared.
  */
 export const EVENTS: Record<string, EventSpec> = {
-  "timer.done": { summary: "a countdown reaches zero", default: true },
-  "timer.pomodoro": { summary: "a pomodoro work or break phase ends", default: true },
-  "github.new": { summary: "a PR or issue involving you shows up", default: true },
-  "email.unread": { summary: "unread mail arrives", default: false },
-  "webex.message": { summary: "a Webex space gets new messages", default: false },
-  "mycelium.message": { summary: "a coordination room you watch gets new messages", default: false },
   "kona.test": { summary: "`kona notify test` — a hand-fired banner", default: true },
 };
+
+/**
+ * Fold applets' declared events into EVENTS. The daemon calls this at boot and
+ * the CLI before it prints the switchboard; both hand over the applets they
+ * loaded. Idempotent, and the first declaration of an event wins.
+ */
+export function registerEvents(applets: Array<{ id: string; notifications?: Record<string, { summary: string; default?: boolean }> }>): void {
+  for (const applet of applets) {
+    for (const [event, spec] of Object.entries(applet.notifications ?? {})) {
+      EVENTS[event] ??= { summary: spec.summary, default: spec.default ?? false };
+    }
+  }
+}
+
+/** Register the events of every applet installed here. */
+export async function loadEvents(): Promise<Record<string, EventSpec>> {
+  const { loadApplets } = await import("../core/load.ts");
+  registerEvents(await loadApplets());
+  return EVENTS;
+}
 
 export interface NotifyConfig {
   /** Master switch. Absent = on. */

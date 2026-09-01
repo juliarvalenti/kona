@@ -2,7 +2,7 @@ import { test, expect, afterAll, beforeEach } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AppletCtx, ViewNode } from "../sdk/index.ts";
+import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
 
 /**
  * Three layers, none of them touching a real Webex org:
@@ -35,9 +35,9 @@ import {
   unreadCount,
   resetAuth,
   type Space,
-} from "../server/webex.ts";
-import webex from "../applets/webex/index.ts";
-import { snapshot } from "../bin/snapshot.ts";
+} from "../../server/webex.ts";
+import webex from "./index.ts";
+import { renderApplet } from "../../sdk/testing.ts";
 
 // --- fixture Webex ----------------------------------------------------------
 
@@ -436,7 +436,7 @@ test("a long conversation is anchored at its newest message", async () => {
 });
 
 test("the applet renders through the real host stage", async () => {
-  const frame = await snapshot("webex");
+  const frame = await renderApplet("webex");
   expect(frame).toContain("Webex");
   expect(frame).toContain("Not connected");
 });

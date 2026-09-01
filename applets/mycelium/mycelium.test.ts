@@ -25,7 +25,7 @@ import {
   slug,
   WriteUnsupported,
   PENDING_TTL_MS,
-} from "../server/mycelium.ts";
+} from "../../server/mycelium.ts";
 
 /**
  * Two halves: the tolerant parsers (pure — every backend spells its fields
@@ -376,7 +376,7 @@ async function chat() {
   const home = fakeHome();
   process.env.KONA_MYCELIUM_HOME = home;
   process.env.KONA_MYCELIUM_BIN = join(home, "no-such-mycelium");
-  const applet = (await import("../applets/mycelium/index.ts")).default;
+  const applet = (await import("./index.ts")).default;
   const state = structuredClone(applet.initialState);
   const ctx = ctxOn(state as unknown as Record<string, unknown>);
   await applet.verbs.refresh!({}, ctx);
@@ -432,7 +432,7 @@ test("a read-only backend puts the composer away and keeps what you typed", asyn
   process.env.KONA_MYCELIUM_HOME = home;
   process.env.KONA_MYCELIUM_BIN = join(home, "no-such-mycelium");
   try {
-    const applet = (await import("../applets/mycelium/index.ts")).default;
+    const applet = (await import("./index.ts")).default;
     const state = structuredClone(applet.initialState);
     const ctx = ctxOn(state as unknown as Record<string, unknown>);
     await applet.verbs.refresh!({}, ctx);

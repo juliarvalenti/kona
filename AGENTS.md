@@ -37,6 +37,29 @@ Applets feed it from their own definition: a `docs` block (one line per verb,
 plus example args) and `recipes` (multi-step flows). Document a verb where you
 write it and the skill follows.
 
+The rendered file is generated, never committed — `bun run skill` writes it, and
+a `SessionStart` hook does that for you. If it looks stale, regenerate it; if it
+disagrees with `kona tools --json`, the manifest wins.
+
+## Building an applet
+
+If you are here to ADD an applet, the rule is that you edit **no shared file**:
+
+```sh
+kona new <id>            # applets/<id>/ — applet, fixtures, test, README
+kona new <id> --plugin   # ...or ~/.config/kona/plugins/<id>, outside the repo
+bun test applets/<id> && bun run check
+```
+
+Everything the platform needs it reads out of that one directory: the loader
+finds `index.ts`, `bun test` finds `<id>.test.ts`, the snapshot runner finds
+`snapshots.ts`, `kona docs <id>` prints `README.md`. Your applet's own
+definition also declares its desktop notifications, its `kona login` provider,
+its CLI arguments and its config block — so there is no registry to append to
+and your branch cannot conflict with another agent's. `CONTRIBUTING.md` has the
+full contract; if you find yourself editing a file outside your package to make
+your applet work, that is a platform bug worth reporting.
+
 ## Notifications
 
 Verbs you fire can reach the human's screen: applets call `notify()` from

@@ -1,8 +1,8 @@
 import { test, expect, afterEach } from "bun:test";
-import type { AppletCtx, ViewNode } from "../sdk/index.ts";
-import weather, { sparkline } from "../applets/weather/index.ts";
-import { describeCode, iconForCode, isWet, parseForecast, placeLabel, windArrow } from "../server/weather.ts";
-import { snapshot } from "../bin/snapshot.ts";
+import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
+import weather, { sparkline } from "./index.ts";
+import { describeCode, iconForCode, isWet, parseForecast, placeLabel, windArrow } from "../../server/weather.ts";
+import { renderApplet } from "../../sdk/testing.ts";
 
 /**
  * The weather applet has two halves worth testing without a network: the pure
@@ -86,7 +86,7 @@ afterEach(() => {
 /** Drive the applet exactly like the daemon does, over a stubbed network. */
 function harness(state: WeatherState = structuredClone(weather.initialState)) {
   const urls: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
     const url = String(input);
     urls.push(url);
     const body = url.includes("geocoding") ? geocodePayload : forecastPayload();
@@ -190,7 +190,7 @@ test("refresh reports the reading an agent asked for", async () => {
 
 test("a failed fetch surfaces as an error, not a crash", async () => {
   const h = harness(loadedState() as WeatherState);
-  globalThis.fetch = (async () => new Response(JSON.stringify({ reason: "Latitude must be in range" }), { status: 400 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ reason: "Latitude must be in range" }), { status: 400 })) as unknown as typeof fetch;
   await h.call("refresh");
   expect(h.state.error).toBe("Latitude must be in range");
   expect(h.state.loading).toBe(false);
@@ -290,7 +290,7 @@ test("the week view is a big hero temp, an hourly strip, and a row per day", () 
 });
 
 test("snapshot: the week renders place, conditions, the strip and the daily rows", async () => {
-  const frame = await snapshot("weather", loadedState(), 84, 34);
+  const frame = await renderApplet("weather", loadedState(), 84, 34);
   expect(frame).toContain("Seattle, Washington");
   expect(frame).toContain("Partly cloudy");
   expect(frame).toContain("61% humidity");
@@ -303,7 +303,7 @@ test("snapshot: the week renders place, conditions, the strip and the daily rows
 });
 
 test("snapshot: opening a day lists its hours", async () => {
-  const frame = await snapshot("weather", { ...loadedState(), mode: "day", dayIndex: 1 }, 84, 30);
+  const frame = await renderApplet("weather", { ...loadedState(), mode: "day", dayIndex: 1 }, 84, 30);
   expect(frame).toContain("high / low");
   expect(frame).toContain("68°F / 54°F");
   expect(frame).toContain("12a");
@@ -311,14 +311,14 @@ test("snapshot: opening a day lists its hours", async () => {
 });
 
 test("snapshot: with no location, the view says how to get one", async () => {
-  const frame = await snapshot("weather", {}, 70, 14);
+  const frame = await renderApplet("weather", {}, 70, 14);
   expect(frame).toContain("No location yet");
   expect(frame).toContain("locate by IP");
 });
 
 test("every row stays inside the frame at any width", async () => {
   for (const width of [50, 62, 84, 120]) {
-    const frame = await snapshot("weather", loadedState(), width, 34);
+    const frame = await renderApplet("weather", loadedState(), width, 34);
     for (const line of frame.split("\n")) expect([...line].length).toBeLessThanOrEqual(width);
   }
 });

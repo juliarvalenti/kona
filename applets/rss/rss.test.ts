@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { parseConfig, parseFeed, decodeXml, tagText, tagAttr, textify, matches } from "../server/rss.ts";
-import { snapshot } from "../bin/snapshot.ts";
+import { parseConfig, parseFeed, decodeXml, tagText, tagAttr, textify, matches } from "../../server/rss.ts";
+import { renderApplet } from "../../sdk/testing.ts";
 
 /** Pure feed parsing + rendering — no network, no config file. */
 
@@ -120,7 +120,7 @@ const ITEMS = [
 ];
 
 test("rss river lists feed, title and unread dots", async () => {
-  const frame = await snapshot(
+  const frame = await renderApplet(
     "rss",
     { configured: true, feeds: 2, items: ITEMS, read: [ITEMS[1]!.id], cursor: 0 },
     88,
@@ -134,7 +134,7 @@ test("rss river lists feed, title and unread dots", async () => {
 });
 
 test("rss reader shows title, source, link and body", async () => {
-  const frame = await snapshot("rss", { configured: true, feeds: 2, items: ITEMS, open: ITEMS[2] }, 88, 14);
+  const frame = await renderApplet("rss", { configured: true, feeds: 2, items: ITEMS, open: ITEMS[2] }, 88, 14);
   expect(frame).toContain("Barrel");
   expect(frame).toContain("xkcd.com");
   expect(frame).toContain("Randall");
@@ -143,13 +143,13 @@ test("rss reader shows title, source, link and body", async () => {
 });
 
 test("rss prompts for a config file when no feeds are set up", async () => {
-  const frame = await snapshot("rss", {}, 72, 16);
+  const frame = await renderApplet("rss", {}, 72, 16);
   expect(frame).toContain("No feeds configured");
   expect(frame).toContain("rss.toml");
 });
 
 test("rss surfaces a per-feed fetch error next to the items that did load", async () => {
-  const frame = await snapshot(
+  const frame = await renderApplet(
     "rss",
     { configured: true, feeds: 2, items: ITEMS, feedErrors: [{ feed: "lobste.rs", message: "HTTP 503" }] },
     88,

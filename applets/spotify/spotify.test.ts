@@ -5,8 +5,8 @@
 process.env.KONA_FAKE_PROVIDERS = "1";
 
 import { test, expect } from "bun:test";
-import spotify from "../applets/spotify/index.ts";
-import type { AppletState } from "../sdk/index.ts";
+import spotify from "./index.ts";
+
 
 /**
  * Transport math, exercised through the real verbs. The Web API call is
@@ -14,8 +14,10 @@ import type { AppletState } from "../sdk/index.ts";
  * we assert here is the optimistic state the verb leaves behind, which is what
  * the TUI draws before the API answers.
  */
-const st = (over: Record<string, unknown>) => ({ ...spotify.initialState, ...over }) as AppletState;
-const call = (verb: string, args: Record<string, unknown>, state: AppletState) =>
+type SpotifyState = typeof spotify.initialState;
+
+const st = (over: Record<string, unknown>) => ({ ...spotify.initialState, ...over }) as SpotifyState;
+const call = (verb: string, args: Record<string, unknown>, state: SpotifyState) =>
   spotify.verbs[verb]!(args, { state, emit: () => {} });
 
 test("seek clamps to the track and moves the bar optimistically", async () => {

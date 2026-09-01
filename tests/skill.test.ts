@@ -1,8 +1,7 @@
 import { test, expect } from "bun:test";
-import { join } from "node:path";
 import { defineApplet, toolsForApplet, type AnyApplet } from "../sdk/index.ts";
 import { skillMarkdown, exampleCall } from "../core/skill.ts";
-import { loadApplets, REPO_ROOT } from "../core/load.ts";
+import { loadApplets } from "../core/load.ts";
 
 /**
  * The agent seam's documentation half: a manifest rich enough to drive kona
@@ -74,8 +73,19 @@ test("the skill is generated from the applets that are actually loaded", () => {
   expect(md).not.toContain("- `demo.up`");
 });
 
-test("the checked-in skill matches the generator — it can't rot in place", async () => {
+test("the skill describes every applet the loader found, and nothing else", async () => {
+  // The skill is generated, never committed: `bun run skill` (and a
+  // SessionStart hook) renders it from the applets this machine has, so it
+  // cannot describe a verb that isn't installed — and adding an applet doesn't
+  // mean committing a regenerated file that collides with somebody else's.
   const applets = await loadApplets();
-  const onDisk = await Bun.file(join(REPO_ROOT, ".claude", "skills", "kona", "SKILL.md")).text();
-  expect(onDisk).toBe(skillMarkdown(applets));
+  const md = skillMarkdown(applets);
+  for (const a of applets) {
+    expect(md).toContain(`### ${a.id} — ${a.title}`);
+    for (const verb of Object.keys(a.verbs)) {
+      if (a.docs?.[verb]) expect(md).toContain(`\`${a.id}.${verb}\``);
+    }
+  }
+  expect(md).toContain(`Installed: ${applets.map((a) => `\`${a.id}\``).join(", ")}.`);
+  expect(md).not.toContain("### nonexistent");
 });

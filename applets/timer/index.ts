@@ -1,4 +1,4 @@
-import { defineApplet, big, text, spacer, col, theme, appletConfig, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer, col, theme, appletConfig, appletString, type ViewNode } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
 
@@ -429,6 +429,37 @@ export default defineApplet<TimerState>({
   id: "timer",
   title: "Timer",
   summary: "Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.",
+  labels: ["time", "focus"],
+  // `kona timer 5m`, `kona timer pomodoro`, and the configured preset — the CLI
+  // learns all three from here rather than special-casing this applet.
+  cli: {
+    usage: "kona timer 5m | kona timer pomodoro",
+    open: (args, state) => {
+      const arg = args[0] ?? "";
+      if (arg === "pomodoro") return { verb: "pomodoro.start" };
+      if (arg) return { verb: "start", args: { seconds: arg } };
+      // With no argument the config preset starts a countdown — but only when
+      // nothing is already ticking, so `kona timer` just opens what's running.
+      const preset = appletString("timer", "default", "");
+      const busy = state.timers.some((t) => t.running) || state.pomodoro.active;
+      return preset && !busy ? { verb: "start", args: { seconds: preset } } : null;
+    },
+  },
+  notifications: {
+    "timer.done": { summary: "a countdown reaches zero", default: true },
+    "timer.pomodoro": { summary: "a pomodoro work or break phase ends", default: true },
+  },
+  configSample: `[applets.timer]
+default = "5m"       # \`kona timer\` with no argument
+
+# Pomodoro mode (\`p\` in the TUI, \`timer.pomodoro.start\` for an agent).
+# Durations may be written "25m" or as a bare number of MINUTES.
+[applets.timer.pomodoro]
+work  = "25m"
+short = "5m"
+long  = "15m"
+every = 4            # long break after every 4th work phase
+auto  = true         # false: wait for \`p\` at each phase boundary`,
   initialState: {
     timers: [],
     cursor: 0,

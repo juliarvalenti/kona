@@ -212,6 +212,15 @@ export default defineApplet<WebexState>({
   id: "webex",
   title: "Webex",
   summary: "Spaces, their messages, and a verb that posts back.",
+  labels: ["chat", "network"],
+  requires: ["a Webex token or OAuth client: `kona login webex`"],
+  auth: { webex: () => import("../../server/webex.ts") },
+  notifications: {
+    "webex.message": { summary: "a Webex space gets new messages", default: false },
+  },
+  configSample: `[applets.webex]
+spaces = 25          # how many spaces to list
+page   = 30          # messages per space`,
   ephemeral: true, // messages live in RAM; only read receipts touch disk
   initialState: {
     spaces: [],

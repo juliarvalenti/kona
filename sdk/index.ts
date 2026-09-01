@@ -273,6 +273,47 @@ export interface Overlay {
   keymap?: Record<string, KeyBinding>;
 }
 
+/**
+ * A verb call, named declaratively so a caller that is NOT the daemon (the CLI,
+ * a script) can fire it over HTTP.
+ */
+export interface AppletCall {
+  verb: string;
+  args?: Record<string, unknown>;
+}
+
+/** How an applet extends the `kona` command line. */
+export interface AppletCli<S extends object = AppletState> {
+  /** One line for `kona --help`, e.g. "kona timer 5m | kona timer pomodoro". */
+  usage?: string;
+  /**
+   * Turn `kona <id> <args...>` into verbs fired before the TUI opens. Runs in
+   * the CLI process with the applet's live state in hand, so it can decide
+   * from state (the timer only applies its preset to an idle clock). Return
+   * null for "just open it".
+   */
+  open?: (args: string[], state: S) => AppletCall | AppletCall[] | null;
+}
+
+/** Sign-in for one service, as `kona login <name>` / `kona logout <name>`. */
+export interface AuthProvider {
+  /** Run the flow; resolve with who signed in. */
+  login: () => Promise<string>;
+  /** Drop one account (or all of them, with no argument). */
+  logout: (who?: string) => void | Promise<void>;
+}
+
+/**
+ * An event this applet can raise as a desktop banner. `kona notify` lists what
+ * an applet declares here, so the switchboard has no list of its own.
+ */
+export interface NotificationSpec {
+  /** What fires it, shown by `kona notify`. */
+  summary: string;
+  /** On when the config says nothing? Defaults to false (opt in). */
+  default?: boolean;
+}
+
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
@@ -280,6 +321,10 @@ export interface AppletDef<S extends object = AppletState> {
   title: string;
   /** One-line description for the "pick an app" launcher. */
   summary?: string;
+  /** Free-form tags for the catalog (`kona docs`), e.g. ["network", "mail"]. */
+  labels?: string[];
+  /** What the applet needs to be useful — an account, a config file, a binary. */
+  requires?: string[];
   /** State the applet boots with. */
   initialState: S;
   /** If true, state is held in memory only — never persisted to disk (e.g. mail). */
@@ -343,6 +388,32 @@ export interface AppletDef<S extends object = AppletState> {
   cron?: (state: S) => CronJob[];
   /** Called once when the daemon boots — good for an initial data load. */
   init?: (ctx: AppletCtx<S>) => void;
+
+  // --- the package manifest: what an applet tells the PLATFORM about itself.
+  // Everything below replaces an entry an applet used to have to add to a
+  // shared file, which is what makes a new applet a new directory and nothing
+  // else. All of it is optional.
+
+  /** Extends `kona <id> ...`; see AppletCli. */
+  cli?: AppletCli<S>;
+  /**
+   * Services this applet can sign into, keyed by the name `kona login <name>`
+   * takes. The value loads the provider lazily, so an OAuth module is only
+   * imported when someone actually signs in:
+   * `{ gmail: () => import("../../server/google.ts") }`.
+   */
+  auth?: Record<string, () => Promise<AuthProvider>>;
+  /**
+   * Desktop notifications this applet raises, keyed by the `event` it passes to
+   * `notify()`. Declaring one here is what makes it listable and toggleable by
+   * `kona notify` — there is no central catalogue.
+   */
+  notifications?: Record<string, NotificationSpec>;
+  /**
+   * A commented `[applets.<id>]` block for the starter file `kona config init`
+   * writes. Document your settings where you read them.
+   */
+  configSample?: string;
 }
 
 /**

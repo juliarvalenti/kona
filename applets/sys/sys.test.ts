@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { parseDf, parseMeminfo, parsePmset, parseVmStat, resetCpuBaseline, sampleCpu, sample } from "../server/sys.ts";
-import { sparkline, meter } from "../sdk/components.ts";
+import { parseDf, parseMeminfo, parsePmset, parseVmStat, resetCpuBaseline, sampleCpu, sample } from "../../server/sys.ts";
+import { sparkline, meter } from "../../sdk/components.ts";
 
 /** Pure parsing of the OS's own output — no subprocess, no machine assumptions. */
 
@@ -134,8 +134,8 @@ test("meter is a padded label, a bar, its own percentage, and a note", () => {
  * state object, no HTTP. These touch the real machine (that IS the applet), but
  * only assert on things every machine has.
  */
-import sys from "../applets/sys/index.ts";
-import type { AppletCtx } from "../sdk/index.ts";
+import sys from "./index.ts";
+import type { AppletCtx } from "../../sdk/index.ts";
 
 type SysState = typeof sys.initialState;
 

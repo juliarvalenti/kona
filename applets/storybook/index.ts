@@ -54,6 +54,7 @@ export default defineApplet<StoryState>({
   id: "storybook",
   title: "Storybook",
   summary: "Live gallery of kona components.",
+  labels: ["dev"],
   initialState: { frame: 0, name: "", editing: false, confirm: false, note: null, noteUntil: 0 },
 
   // Every verb is bimodal: a keypress fires it and so does `kona call storybook

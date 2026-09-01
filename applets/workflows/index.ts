@@ -321,6 +321,11 @@ export default defineApplet<WorkflowsState>({
   id: "workflows",
   title: "Workflows",
   summary: "Named sequences of applet verbs — run them by hand, or on a cron.",
+  cli: {
+    usage: "kona workflows <name>",
+    // `kona workflows morning` opens straight into that workflow's steps.
+    open: (args) => (args[0] ? { verb: "open", args: { name: args.join(" ") } } : null),
+  },
   initialState: { workflows: [], runs: [], cursor: 0, open: null, dialog: null, running: [], error: null },
 
   docs: {

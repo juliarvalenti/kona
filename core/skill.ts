@@ -22,12 +22,24 @@ export interface SkillOpts {
   base?: string;
 }
 
-const FRONTMATTER_DESCRIPTION =
-  "Drive kona applets as an agent: discover what is installed from the live " +
-  "tool manifest, read applet state, fire verbs, and watch the event stream. " +
-  "Use when asked to start or check a timer, control Spotify playback, triage " +
-  "the inbox, read RSS/weather/ticker/system stats, inspect mycelium rooms, " +
-  "take notes, or otherwise act on a kona applet from the command line.";
+/**
+ * The frontmatter description decides when an agent reaches for this skill, so
+ * it names the applets — but it names the INSTALLED ones, from the manifest.
+ * Nothing here to update when an applet lands.
+ */
+function description(applets: AnyApplet[]): string {
+  const named = applets.map((a) => {
+    const title = a.title.toLowerCase();
+    return title === a.id ? a.id : `${a.id} (${title})`;
+  });
+  return (
+    "Drive kona applets as an agent: discover what is installed from the live " +
+    "tool manifest, read applet state, fire verbs, and watch the event stream. " +
+    "Use when asked to act on a kona applet from the command line" +
+    (named.length ? ` — ${list(named)}` : "") +
+    "."
+  );
+}
 
 /** `["a","b","c"]` -> "a, b, c" */
 const list = (xs: string[]) => xs.join(", ");
@@ -80,10 +92,12 @@ export function skillMarkdown(applets: AnyApplet[], opts: SkillOpts = {}): strin
   const base = opts.base ?? "http://localhost:4177";
   const recipes = applets.flatMap((a) => a.recipes ?? []);
   const ids = applets.map((a) => a.id);
+  // Which applets actually have a refresh verb is the manifest's business too.
+  const refreshable = applets.filter((a) => "refresh" in a.verbs).map((a) => `\`${a.id}\``);
 
   const head = `---
 name: ${name}
-description: ${FRONTMATTER_DESCRIPTION}
+description: ${description(applets)}
 ---
 
 # Driving kona
@@ -114,8 +128,9 @@ state after the call — so you rarely need a follow-up read.
 
 ## Rules of engagement
 
-1. **Discover, don't hardcode.** Applets are files in \`applets/\`; a machine can
-   have more (or fewer) than the ones below. Start from \`kona tools --json\` and
+1. **Discover, don't hardcode.** An applet is a directory — in kona's own
+   \`applets/\`, or installed as a plugin — so a machine can have more (or
+   fewer) than the ones below. Start from \`kona tools --json\` and
    act on what is actually installed. If this file and the manifest disagree,
    the manifest wins — regenerate with \`kona tools --skill\`.
 2. **Address rows by name, not by cursor.** Verbs that act on a selection take
@@ -124,9 +139,8 @@ state after the call — so you rarely need a follow-up read.
 3. **Read the result.** The state a verb returns tells you whether it landed
    (e.g. a timer's \`status\`, an applet's \`error\` field). Applets report failure
    in state rather than throwing HTTP errors.
-4. **Refresh before you read** an applet backed by a network service
-   (\`refresh\` on email, spotify, rss, weather, ticker, sys, mycelium), unless
-   its tick has been running.
+4. **Refresh before you read** an applet backed by a network service, unless its
+   tick has been running${refreshable.length ? ` — \`refresh\` on ${list(refreshable)}` : ""}.
 
 ## Applets on this machine
 

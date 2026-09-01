@@ -1,6 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
-import { quote, quotes, watchlist, normalizeSymbol, webUrl, DEFAULT_WATCHLIST } from "../server/ticker.ts";
-import { sparkText, sparkline } from "../sdk/components.ts";
+import { quote, quotes, watchlist, normalizeSymbol, webUrl, DEFAULT_WATCHLIST } from "../../server/ticker.ts";
+import { sparkText, sparkline } from "../../sdk/components.ts";
 
 /**
  * The quote layer, driven against a local fixture server (KONA_TICKER_API) that

@@ -112,6 +112,8 @@ export default defineApplet<TickerState>({
   id: "ticker",
   title: "Ticker",
   summary: "Watchlist board — stocks and crypto, price, %chg, sparkline.",
+  labels: ["markets", "network"],
+  requires: ["a watchlist: ~/.config/kona/ticker.json (or KONA_TICKER_SYMBOLS)"],
   initialState: {
     symbols: [],
     quotes: [],

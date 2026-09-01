@@ -9,3 +9,9 @@
 //
 // This is the stopgap; the real provider mock layer is tracked in #41.
 process.env.KONA_FAKE_PROVIDERS = "1";
+
+// Hermetic applet set: the suite loads whatever is in `applets/`, never the
+// plugins a developer happens to have installed under ~/.config/kona/plugins
+// (a foreign applet would change the launcher, the manifest and the skill).
+// A loader test that WANTS plugins clears this itself.
+process.env.KONA_NO_PLUGINS = "1";
