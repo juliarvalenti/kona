@@ -10,6 +10,7 @@ const [cmd, ...rest] = process.argv.slice(2);
 const AUTH_PROVIDERS: Record<string, string> = {
   gmail: "../server/google.ts",
   spotify: "../server/spotify.ts",
+  webex: "../server/webex.ts",
 };
 
 /** Minimal arrow-key selector for the CLI (↑/↓/j/k, enter, esc). */
@@ -63,7 +64,7 @@ function usage() {
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
   kona config [init]       show the resolved config (init writes a starter file)
-  kona login [gmail|spotify]  connect an account (default gmail)
+  kona login [gmail|spotify|webex]  connect an account (default gmail)
   kona notify              desktop notifications: list / on / off / test
   kona daemon              run konad in the foreground
 `);

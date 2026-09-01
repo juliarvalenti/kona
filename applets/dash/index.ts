@@ -5,9 +5,9 @@ import { notify, freshIds } from "../../server/notify.ts";
 
 /**
  * dash — an always-open cockpit. It doesn't own much data of its own; it PEEKS
- * the other applets' live state (spotify, timer, email — their ticks run in the
- * daemon regardless of what's on screen) and adds GitHub notifications. Leave it
- * open and it stays current: the song, the countdown, new PRs/issues.
+ * the other applets' live state (spotify, timer, email, webex — their ticks run
+ * in the daemon regardless of what's on screen) and adds GitHub notifications.
+ * Leave it open and it stays current: the song, the countdown, new PRs/issues.
  */
 
 interface DashState {
@@ -15,6 +15,7 @@ interface DashState {
   timer: { remaining: number; running: boolean; label: string; more: number } | null;
   unread: number;
   emailAuthed: boolean;
+  webex: { unread: number; spaces: number } | null;
   gh: GhItem[];
   ghError: string | null;
   cursor: number; // index into the selectable targets (now-playing + gh rows)
@@ -114,6 +115,10 @@ function aggregate(state: DashState, peek?: (id: string) => Record<string, unkno
   const em = peek?.("email") as { threads?: Array<{ unread?: boolean }>; authed?: boolean } | undefined;
   state.emailAuthed = !!em?.authed;
   state.unread = (em?.threads ?? []).filter((t) => t.unread).length;
+
+  // Webex sits beside mail: the same "how much is waiting for me" question.
+  const wx = peek?.("webex") as { unread?: number; spaces?: unknown[]; authed?: boolean } | undefined;
+  state.webex = wx?.authed ? { unread: wx.unread ?? 0, spaces: (wx.spaces ?? []).length } : null;
 }
 
 export default defineApplet<DashState>({
@@ -121,7 +126,7 @@ export default defineApplet<DashState>({
   title: "Dashboard",
   summary: "Live cockpit — now playing, timer, mail, GitHub. Leave it open.",
   ephemeral: true,
-  initialState: { np: null, timer: null, unread: 0, emailAuthed: false, gh: [], ghError: null, cursor: 0 },
+  initialState: { np: null, timer: null, unread: 0, emailAuthed: false, webex: null, gh: [], ghError: null, cursor: 0 },
 
   docs: {
     refresh: "Re-aggregate the dashboard from the other applets' live state, and refetch GitHub.",
@@ -220,6 +225,16 @@ export default defineApplet<DashState>({
         ? text(`✉ ${state.unread} unread`, { color: state.unread ? BLUE : DIM })
         : text("✉ mail not connected", { dim: true }),
     );
+
+    // Webex — spaces with something new in them.
+    if (state.webex) {
+      const { unread, spaces } = state.webex;
+      nodes.push(
+        text(`◇ ${unread} space${unread === 1 ? "" : "s"} with new messages  ·  ${spaces} total`, {
+          color: unread ? BLUE : DIM,
+        }),
+      );
+    }
 
     // GitHub
     nodes.push(spacer(), divider(W - 1), text(`GITHUB  ·  ${state.gh.length} open, involving you`, { color: GREEN }));

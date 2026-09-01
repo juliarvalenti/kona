@@ -40,6 +40,7 @@ export const EVENTS: Record<string, EventSpec> = {
   "timer.pomodoro": { summary: "a pomodoro work or break phase ends", default: true },
   "github.new": { summary: "a PR or issue involving you shows up", default: true },
   "email.unread": { summary: "unread mail arrives", default: false },
+  "webex.message": { summary: "a Webex space gets new messages", default: false },
   "kona.test": { summary: "`kona notify test` — a hand-fired banner", default: true },
 };
 
