@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { defineApplet, toolsForApplet } from "../sdk/index.ts";
+import { bindingFor, defineApplet, toolsForApplet } from "../sdk/index.ts";
 
 test("toolsForApplet produces <id>.<verb> manifest entries", () => {
   const applet = defineApplet({
@@ -33,4 +33,25 @@ test("defineApplet is an identity passthrough", () => {
     view: () => "",
   });
   expect(def.id).toBe("x");
+});
+
+test("bindingFor resolves a key only when the applet claims it", () => {
+  const applet = defineApplet({
+    id: "player",
+    title: "Player",
+    initialState: { mode: "now" as "now" | "browse" },
+    verbs: {},
+    view: () => "",
+    keymap: {
+      space: "playPause",
+      left: { verb: "seek", args: { deltaMs: -10_000 }, label: "seek", when: (s) => s.mode === "now" },
+    },
+  });
+
+  // Unbound keys are never claimed, so navigation keeps them.
+  expect(bindingFor(applet, "q", { mode: "now" })).toBeNull();
+  expect(bindingFor(applet, "space", { mode: "browse" })).toBe("playPause");
+  // `when` decides per state: ← seeks on now-playing, navigates in a list.
+  expect(bindingFor(applet, "left", { mode: "now" })).toMatchObject({ verb: "seek" });
+  expect(bindingFor(applet, "left", { mode: "browse" })).toBeNull();
 });

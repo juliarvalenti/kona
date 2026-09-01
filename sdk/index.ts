@@ -39,10 +39,32 @@ export type Verb<S = AppletState> = (
  * A key can fire a verb by name, or a verb with fixed args and a display label.
  * The `label` is what the host's keybind hint bar shows (falls back to the verb
  * name), so keybinds document themselves.
+ *
+ * A binding may also claim a key only in certain states via `when`: the host
+ * checks the keymap BEFORE the navigation intents, so an applet can take over
+ * ←/→ on one screen (spotify scrubs while now-playing) and leave them to
+ * navigation everywhere else. `when` gates the hint bar too, so the footer
+ * always shows the keys that actually do something right now.
  */
-export type KeyBinding =
+export type KeyBinding<S = AppletState> =
   | string
-  | { verb: string; args?: Record<string, unknown>; label?: string };
+  | { verb: string; args?: Record<string, unknown>; label?: string; when?: (state: S) => boolean };
+
+/**
+ * The binding a key fires in this state, or null if the applet doesn't claim
+ * it (unbound, or its `when` guard is false). One place decides, so the host's
+ * dispatch and the hint bar can never disagree.
+ */
+export function bindingFor<S extends object>(
+  def: Pick<AppletDef<S>, "keymap">,
+  key: string,
+  state: S,
+): KeyBinding<S> | null {
+  const b = def.keymap?.[key];
+  if (!b) return null;
+  if (typeof b !== "string" && b.when && !b.when(state)) return null;
+  return b;
+}
 
 /** Hex color, e.g. "#00d488". */
 export type Color = string;
@@ -253,8 +275,10 @@ export interface AppletDef<S extends object = AppletState> {
   };
   /** Breadcrumb for the current sub-view, shown in the title (e.g. open email). */
   crumb?: (state: S) => string | null;
-  /** key -> verb for NON-navigation actions (e.g. { r: "refresh" }). */
-  keymap?: Record<string, KeyBinding>;
+  /** key -> verb for actions (e.g. { r: "refresh" }). Bindings are matched
+   * before the navigation intents, so a `when`-guarded entry may claim a nav
+   * key (←/→) on a specific screen. */
+  keymap?: Record<string, KeyBinding<S>>;
   /** If set, the daemon calls tick every tickMs while the applet is "live". */
   tick?: (ctx: AppletCtx<S>) => void;
   tickMs?: number;

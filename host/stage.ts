@@ -11,7 +11,7 @@ import {
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding, Overlay, ViewNode, LayoutOpts, InputNode } from "../sdk/index.ts";
+import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay, type ViewNode, type LayoutOpts, type InputNode } from "../sdk/index.ts";
 import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
 
 /**
@@ -67,6 +67,29 @@ function bindingLabel(b: KeyBinding): string {
 /** Focusable leaves: a selected list row, or the text field with the keyboard. */
 const isFocused = (n: ViewNode): boolean =>
   typeof n === "object" && (n.kind === "text" || n.kind === "input") && !!n.focus;
+
+/** Arrow/space keys read better as glyphs in the hint bar than as names. */
+const KEY_GLYPH: Record<string, string> = { left: "←", right: "→", up: "↑", down: "↓", return: "enter" };
+const glyph = (key: string) => KEY_GLYPH[key] ?? key;
+
+/**
+ * Hints for the applet's own keymap, in declaration order. Bindings whose
+ * `when` guard is false are dropped (the key does nothing right now), and
+ * adjacent bindings sharing a label collapse into one hint — so a pair like
+ * ← seek / → seek reads as "←→ seek" instead of eating the footer twice.
+ */
+function keymapHints(def: AppletDef, state: AppletState): Hint[] {
+  const hints: Hint[] = [];
+  for (const key of Object.keys(def.keymap ?? {})) {
+    const b = bindingFor(def, key, state);
+    if (!b) continue;
+    const label = bindingLabel(b);
+    const last = hints[hints.length - 1];
+    if (last && last.label === label) last.key += glyph(key);
+    else hints.push({ key: glyph(key), label });
+  }
+  return hints;
+}
 
 /**
  * Line offset of the focused node (the selected list row), so the host can
@@ -154,11 +177,14 @@ export function createStage(renderer: CliRenderer): Stage {
   const { DIM, FG, ACCENT, KEY } = COLORS;
 
   // Inner content size = terminal size minus fixed chrome. Width: stage pad 2 +
-  // border 2 + frame pad 2 + scrollbar column 1 = 7. Height: same 6 + footer 1.
-  // Derived from the renderer, which knows the terminal size immediately.
+  // border 2 + frame pad 2 + scrollbar column 1 = 7. Height: the same 6, plus
+  // however many lines the hint bar currently occupies (it wraps to two when an
+  // applet has a lot of keys). Derived from the renderer, which knows the
+  // terminal size immediately.
   const term = renderer as unknown as { width: number; height: number };
+  let footerLines = 1;
   const innerWidth = () => Math.max(20, term.width - 7);
-  const innerHeight = () => Math.max(6, term.height - 7);
+  const innerHeight = () => Math.max(6, term.height - 6 - footerLines);
 
   // The frame fills the terminal (minus a 1-cell margin), with the hint bar
   // pinned below. A bounded width is also what lets long lines word-wrap.
@@ -207,16 +233,56 @@ export function createStage(renderer: CliRenderer): Stage {
   });
   frame.add(overlayLayer);
   stage.add(frame);
-  const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1, wrapMode: "none" });
+  const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1, wrapMode: "word" });
   renderer.root.add(stage);
   renderer.root.add(footer);
 
+  // The hint bar wraps rather than clipping mid-label, but never past two lines
+  // — an applet with many keys gives up its least important hints (the tail of
+  // its keymap) instead of eating the viewport.
+  const FOOTER_MAX_LINES = 2;
+  const HINT_GAP = 4;
+  const hintWidth = (h: Hint) => h.key.length + 1 + h.label.length;
+
+  /** Lines this legend needs at `cap` columns (greedy, like the text wrap). */
+  function linesFor(hints: Hint[], cap: number): number {
+    let lines = 1;
+    let used = 0;
+    for (const h of hints) {
+      const w = hintWidth(h);
+      if (used && used + HINT_GAP + w > cap) {
+        lines++;
+        used = w;
+      } else {
+        used += (used ? HINT_GAP : 0) + w;
+      }
+    }
+    return lines;
+  }
+
+  /** Trim hints until the legend fits, keeping the last two (back, quit) —
+   * whatever else goes, you can always leave the applet. */
+  function fitHints(hints: Hint[], cap: number): Hint[] {
+    const pinned = hints.slice(-2);
+    const rest = hints.slice(0, -2);
+    let shown = hints;
+    let n = rest.length;
+    while (n > 0 && linesFor(shown, cap) > FOOTER_MAX_LINES) {
+      n--;
+      shown = [...rest.slice(0, n), { key: "…", label: "" }, ...pinned];
+    }
+    return shown;
+  }
+
   function setFooter(hints: Hint[]) {
+    const cap = Math.max(20, term.width - 1); // paddingLeft
+    const shown = fitHints(hints, cap);
+    footerLines = Math.min(FOOTER_MAX_LINES, linesFor(shown, cap));
     const chunks: TextChunk[] = [];
-    hints.forEach((h, i) => {
+    shown.forEach((h, i) => {
       if (i) chunks.push(fg(DIM)("    "));
       chunks.push(fg(KEY)(bold(h.key)));
-      chunks.push(fg(DIM)(` ${h.label}`));
+      chunks.push(fg(DIM)(h.label ? ` ${h.label}` : ""));
     });
     footer.content = new StyledText(chunks);
     renderer.requestRender();
@@ -422,15 +488,20 @@ export function createStage(renderer: CliRenderer): Stage {
         return;
       }
 
-      // Hint bar = navigation intents + non-nav keymap + meta back/quit.
+      // Hint bar = navigation intents + the applet's keymap + meta back/quit.
+      // A keymap entry that claims ←/→ in this state wins over the nav intent
+      // (the host dispatches the same way), so the hints name the key that
+      // still navigates: enter to select, esc to go back.
       const nav = def.nav;
+      const km = keymapHints(def, state);
+      const claims = (key: string) => !!bindingFor(def, key, state);
       const hints: Hint[] = [];
       if (nav?.up || nav?.down) hints.push({ key: "↑↓", label: "move" });
-      if (nav?.select) hints.push({ key: "→", label: nav.selectLabel ?? "open" });
+      if (nav?.select) hints.push({ key: claims("right") ? "enter" : "→", label: nav.selectLabel ?? "open" });
       if (def.search) hints.push({ key: "/", label: "search" });
-      for (const [key, b] of Object.entries(def.keymap ?? {})) hints.push({ key, label: bindingLabel(b) });
+      hints.push(...km);
       const canBack = nav?.canBack?.(state) ?? false;
-      hints.push({ key: "←/esc", label: canBack ? (nav?.backLabel ?? "back") : "menu" });
+      hints.push({ key: claims("left") ? "esc" : "←/esc", label: canBack ? (nav?.backLabel ?? "back") : "menu" });
       hints.push({ key: "ctrl+c", label: "quit" });
       setFooter(hints);
     },

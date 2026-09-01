@@ -1,5 +1,5 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding, Overlay } from "../sdk/index.ts";
+import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
 import { createStage, type Draft } from "./stage.ts";
@@ -310,6 +310,17 @@ export async function runHost(startAppletId: string | null) {
         return;
       }
 
+    // The applet's own keymap is matched FIRST, so a `when`-guarded binding can
+    // claim a navigation key on one screen (spotify scrubs with ←/→ while
+    // now-playing) without stealing it everywhere else. Unclaimed keys fall
+    // through to the canonical nav intents below.
+    const claimed = bindingFor(def, n, state);
+    if (claimed) {
+      const { verb, args } = resolveBinding(claimed);
+      await callVerb(def.id, verb, args).catch(() => {});
+      return;
+    }
+
     // Back is browser-like: pop an internal view if the applet has one,
     // otherwise return to the launcher. Either way, reset scroll.
     if (isBack(n)) {
@@ -347,13 +358,6 @@ export async function runHost(startAppletId: string | null) {
         render();
       }
       return;
-    }
-
-    // Non-nav actions from the keymap (letters like r).
-    const binding = def.keymap?.[n];
-    if (binding) {
-      const { verb, args } = resolveBinding(binding);
-      await callVerb(def.id, verb, args).catch(() => {});
     }
   });
 

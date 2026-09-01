@@ -222,6 +222,59 @@ test("mycelium lists rooms with agent and message counts", async () => {
   expect(frame).toContain("●"); // recent chatter marker on ship-kona
 });
 
+test("spotify now-playing shows the active device and its volume", async () => {
+  const frame = await snapshot(
+    "spotify",
+    {
+      authed: true,
+      playing: true,
+      track: "Rave Green",
+      positionMs: 78000,
+      durationMs: 214000,
+      device: "MacBook Pro",
+      volumePct: 65,
+      volumeSupported: true,
+    },
+    80,
+    20,
+  );
+  expect(frame).toContain("MacBook Pro");
+  expect(frame).toContain("vol 65%");
+  // ←/→ scrub here (the applet claims them), so the hint bar says so and
+  // offers enter for select instead of →.
+  expect(frame).toContain("seek");
+  expect(frame).toContain("enter open/play");
+});
+
+test("spotify device picker lists devices and marks the active one", async () => {
+  const frame = await snapshot(
+    "spotify",
+    {
+      authed: true,
+      mode: "browse",
+      stack: [
+        {
+          title: "Devices",
+          cursor: 0,
+          rows: [
+            { kind: "device", id: "d1", name: "MacBook Pro", subtitle: "Computer  ·  65%", active: true },
+            { kind: "device", id: "d2", name: "Living Room", subtitle: "Speaker  ·  30%", active: false },
+          ],
+        },
+      ],
+    },
+    80,
+    20,
+  );
+  expect(frame).toContain("Devices");
+  expect(frame).toContain("MacBook Pro");
+  expect(frame).toContain("● active");
+  expect(frame).toContain("Living Room");
+  // In a list ←/→ go back to being navigation — no seek hint.
+  expect(frame).toContain("←/esc back");
+  expect(frame).not.toContain("seek");
+});
+
 test("mycelium room view shows agents, messages, and shared memory", async () => {
   const frame = await snapshot(
     "mycelium",
