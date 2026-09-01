@@ -1,6 +1,7 @@
 import { defineApplet, text, spacer, col, row, theme, appletAccent, type ViewNode } from "../../sdk/index.ts";
 import { divider, recordRow } from "../../sdk/components.ts";
 import { openItems, type GhItem } from "../../server/github.ts";
+import { notify, freshIds } from "../../server/notify.ts";
 
 /**
  * dash — an always-open cockpit. It doesn't own much data of its own; it PEEKS
@@ -42,6 +43,38 @@ function fmt(sec: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
+// Which GitHub items we have already announced. null until the first fetch
+// lands: a daemon boot ADOPTS whatever is open rather than bannering twelve
+// PRs you already know about.
+let announced: Set<string> | null = null;
+
+/** Banner anything that appeared since the last fetch; batch a flood into one. */
+function announceGh(items: GhItem[]) {
+  const { seen, fresh } = freshIds(announced, items.map((i) => i.url));
+  announced = seen;
+  if (!fresh.length) return;
+  const rows = fresh.map((url) => items.find((i) => i.url === url)!).filter(Boolean);
+  if (rows.length > 3) {
+    void notify({
+      event: "github.new",
+      title: "GitHub",
+      body: `${rows.length} new items involve you`,
+      key: `github.new:batch:${rows.length}:${rows[0]!.url}`,
+    });
+    return;
+  }
+  for (const r of rows) {
+    void notify({
+      event: "github.new",
+      title: `${r.type === "PullRequest" ? "PR" : "Issue"}  ·  ${r.repo}`,
+      body: r.title,
+      url: r.url,
+      key: r.url,
+      dedupeMs: 6 * 3_600_000, // an item that drops off the list and returns stays quiet
+    });
+  }
+}
+
 // GitHub search is rate-limited (~30/min). Refresh at most once a minute, and
 // back off for 5 min on error (rate limit) so we don't hammer it.
 let nextGhAt = 0;
@@ -52,6 +85,7 @@ async function refreshGh(state: DashState, emit: () => void) {
   try {
     state.gh = await openItems(12);
     state.ghError = null;
+    announceGh(state.gh);
     nextGhAt = Date.now() + 60_000;
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);

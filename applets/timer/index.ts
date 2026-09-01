@@ -1,5 +1,6 @@
 import { defineApplet, big, text, spacer, col, theme } from "../../sdk/index.ts";
 import { progress } from "../../sdk/components.ts";
+import { notify } from "../../server/notify.ts";
 
 // state -> theme role: ok running, warn paused, error done, muted idle. The
 // hexes live in ~/.config/kona/config.toml, so retheming kona retints the timer.
@@ -102,6 +103,14 @@ export default defineApplet<TimerState>({
     if (state.remaining <= 0) {
       state.remaining = 0;
       state.running = false;
+      // The whole point of a timer you can walk away from: the daemon counts
+      // down whether or not the view is open, so tell the desktop.
+      void notify({
+        event: "timer.done",
+        title: state.label ? `Timer — ${state.label}` : "Timer done",
+        body: `${fmt(state.total)} is up.`,
+        key: `timer.done:${state.label}:${state.total}`,
+      });
     }
     emit();
   },
