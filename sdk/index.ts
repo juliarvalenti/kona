@@ -103,6 +103,8 @@ export interface AppletDef<S extends object = AppletState> {
   summary?: string;
   /** State the applet boots with. */
   initialState: S;
+  /** If true, state is held in memory only — never persisted to disk (e.g. mail). */
+  ephemeral?: boolean;
   /** Actions. Keyed by verb name. */
   verbs: Record<string, Verb<S>>;
   /** Pure render: current state -> what the host draws (lines or view nodes). */

@@ -13,6 +13,7 @@ function usage() {
   kona tools               list agent-callable verbs (the manifest)
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
+  kona login                connect Gmail (Google OAuth, read-only)
   kona daemon              run konad in the foreground
 `);
 }
@@ -21,6 +22,25 @@ switch (cmd) {
   case "daemon": {
     await startDaemon();
     await new Promise(() => {});
+    break;
+  }
+
+  case "login": {
+    const { login } = await import("../server/google.ts");
+    try {
+      const who = await login();
+      console.log(`signed in as ${who}`);
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+    break;
+  }
+
+  case "logout": {
+    const { logout } = await import("../server/google.ts");
+    logout();
+    console.log("removed Gmail token from the keychain");
     break;
   }
 
@@ -94,6 +114,8 @@ switch (cmd) {
     if (rest.length && cmd === "timer") {
       await callVerb("timer", "start", { seconds: rest[0] });
     }
+    // Applets with a `refresh` verb (e.g. email) get an initial load on open.
+    await callVerb(cmd, "refresh", {}).catch(() => {});
     const { runHost } = await import("../host/index.ts");
     await runHost(cmd);
     break;

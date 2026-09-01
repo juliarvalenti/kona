@@ -35,3 +35,49 @@ test("storybook renders every component; bars fill mid-sweep", async () => {
   }
   expect(frame).toContain("█"); // progress/gauge have fill at frame 45
 });
+
+test("email inbox list shows senders, subjects, and a cursor", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      cursor: 1,
+      threads: [
+        { id: "1", from: "GitHub", subject: "PR merged", snippet: "", date: "", unread: true },
+        { id: "2", from: "Ada Lovelace", subject: "dinner friday?", snippet: "", date: "", unread: false },
+      ],
+    },
+    80,
+    16,
+  );
+  expect(frame).toContain("GitHub");
+  expect(frame).toContain("Ada Lovelace");
+  expect(frame).toContain("dinner friday?");
+  expect(frame).toContain("▸"); // cursor
+  expect(frame).toContain("●"); // unread dot on the GitHub row
+});
+
+test("email reader shows subject, sender, and body", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      open: {
+        id: "2",
+        subject: "dinner friday?",
+        messages: [{ from: "Ada Lovelace", date: "Mon 18:22", body: "still on for friday?" }],
+      },
+    },
+    80,
+    18,
+  );
+  expect(frame).toContain("dinner friday?");
+  expect(frame).toContain("Ada Lovelace");
+  expect(frame).toContain("still on for friday?");
+});
+
+test("email shows a sign-in prompt when unauthenticated", async () => {
+  const frame = await snapshot("email", {}, 72, 14);
+  expect(frame).toContain("Not signed in");
+  expect(frame).toContain("kona login");
+});

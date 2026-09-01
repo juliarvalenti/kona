@@ -27,13 +27,19 @@ export async function startDaemon(port = DEFAULT_PORT) {
   const applets = await loadApplets();
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
 
+  // Applets marked ephemeral (e.g. email) never touch disk — mail stays in RAM.
+  const ephemeral = new Set(applets.filter((a) => a.ephemeral).map((a) => a.id));
+
   // --- state, persisted so the daemon can restart without losing a countdown
   const states: StateMap = {};
+  let saved: StateMap = {};
   try {
-    const saved = JSON.parse(await Bun.file(STATE_FILE).text()) as StateMap;
-    for (const a of applets) states[a.id] = { ...a.initialState, ...saved[a.id] };
+    saved = JSON.parse(await Bun.file(STATE_FILE).text()) as StateMap;
   } catch {
-    for (const a of applets) states[a.id] = { ...a.initialState };
+    saved = {};
+  }
+  for (const a of applets) {
+    states[a.id] = ephemeral.has(a.id) ? { ...a.initialState } : { ...a.initialState, ...saved[a.id] };
   }
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,7 +49,8 @@ export async function startDaemon(port = DEFAULT_PORT) {
       flushTimer = null;
       try {
         mkdirSync(STATE_DIR, { recursive: true });
-        Bun.write(STATE_FILE, JSON.stringify(states, null, 2));
+        const onDisk = Object.fromEntries(Object.entries(states).filter(([id]) => !ephemeral.has(id)));
+        Bun.write(STATE_FILE, JSON.stringify(onDisk, null, 2), { mode: 0o600 });
       } catch {}
     }, 400);
   }
