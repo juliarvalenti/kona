@@ -1,23 +1,56 @@
 import { defineSnapshots } from "../../sdk/testing.ts";
 
+const NOTES = [
+  {
+    id: "a1",
+    title: "release plan",
+    body: "cut rc1 friday\nfreeze monday\nship when the suite is green",
+    at: Date.now() - 7_200_000,
+    updated: Date.now(),
+  },
+  { id: "b2", title: "groceries", body: "milk\neggs\ncoffee", at: Date.now() - 86_400_000, updated: Date.now() - 86_400_000 },
+];
+
 export default defineSnapshots([
   {
-    name: "lists jotted lines with a header count",
-    state: () => ({
-      cursor: 1,
-      notes: [
-        { id: "a1", text: "ship the notes applet", at: Date.now() },
-        { id: "b2", text: "milk, eggs, coffee", at: Date.now() - 7_200_000 },
-      ],
-    }),
+    name: "lists titles with a preview and a count",
+    state: () => ({ notes: NOTES, cursor: 1, query: "", open: null, draft: null }),
     width: 72,
     height: 16,
-    contains: ["SCRATCHPAD", "2 notes", "ship the notes applet", "milk, eggs, coffee"],
+    contains: ["NOTEPAD", "2 notes", "release plan", "groceries", "milk"],
   },
   {
-    name: "an empty pad shows how to jot the first line",
+    name: "an open note shows its body a line at a time",
+    state: () => ({ notes: NOTES, cursor: 0, query: "", open: "a1", draft: null }),
+    width: 72,
+    height: 18,
+    contains: ["release plan", "cut rc1 friday", "freeze monday", "ship when the suite is green"],
+  },
+  {
+    name: "a filter says what it matched, and never creates",
+    state: () => ({ notes: NOTES, cursor: 0, query: "milk", open: null, draft: null }),
     width: 72,
     height: 14,
-    contains: ["0 notes", "nothing jotted yet", "notes.add"],
+    contains: ["1 note", "groceries", "matching"],
+    excludes: ["release plan"],
+  },
+  {
+    name: "the composer floats over the list with both fields",
+    state: () => ({
+      notes: NOTES,
+      cursor: 0,
+      query: "",
+      open: null,
+      draft: { id: null, title: "standup", body: "kona notes\nthe multi-line editor", field: "body" },
+    }),
+    width: 72,
+    height: 22,
+    contains: ["new note", "standup", "kona notes", "the multi-line editor", "tab switches field"],
+  },
+  {
+    name: "an empty pad shows how to write the first note",
+    width: 72,
+    height: 14,
+    contains: ["0 notes", "no notes yet", "notes.add"],
   },
 ]);

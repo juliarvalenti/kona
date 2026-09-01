@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage } from "../host/stage.ts";
 import { edit } from "../host/editor.ts";
-import { defineApplet, col, input, text, type AppletState } from "../sdk/index.ts";
+import { defineApplet, col, input, textarea, text, type AppletState } from "../sdk/index.ts";
 
 /**
  * The text-field primitive, driven through the real stage on OpenTUI's headless
@@ -120,4 +120,96 @@ test("an empty field shows its placeholder, focused or not", async () => {
 
   const focused = await mount({ name: "", editing: true });
   expect(await focused.draw()).toContain("your name");
+});
+
+/**
+ * The textarea: the same node with `multiline`, drawn as a block of lines with
+ * the caret inside it. The wrapping is the editor's, so what the stage adds is
+ * the rows, the trough and the hint bar that names the exit key.
+ */
+
+interface BodyState {
+  body: string;
+  editing: boolean;
+}
+
+const composer = defineApplet<BodyState>({
+  id: "composer",
+  title: "Composer",
+  initialState: { body: "", editing: false },
+  verbs: {},
+  view: (s) => [
+    text("note"),
+    textarea("body", s.body, {
+      placeholder: "write something",
+      width: 20,
+      rows: 4,
+      focus: s.editing,
+      submit: "save",
+      submitLabel: "create",
+      cancel: "dismiss",
+      cancelLabel: "discard",
+    }),
+  ],
+});
+
+async function mountArea(state: BodyState, width = 56, height = 14) {
+  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width, height });
+  const stage = createStage(renderer);
+  const draw = async () => {
+    stage.renderApplet(composer as never, state as unknown as AppletState);
+    await renderOnce();
+    return captureCharFrame();
+  };
+  return { stage, draw };
+}
+
+test("a textarea draws every line of its value", async () => {
+  const { stage, draw } = await mountArea({ body: "milk\neggs\ncoffee", editing: false });
+  const frame = await draw();
+  for (const line of ["milk", "eggs", "coffee"]) expect(frame).toContain(line);
+  expect(stage.focusedInput()).toBeNull();
+});
+
+test("a focused textarea says ctrl+d saves and enter makes a newline", async () => {
+  const { stage, draw } = await mountArea({ body: "milk", editing: true });
+  const frame = await draw();
+  expect(stage.focusedInput()).toMatchObject({ id: "body", multiline: true, submit: "save" });
+  expect(frame).toContain("ctrl+d create");
+  expect(frame).toContain("enter newline");
+  expect(frame).toContain("esc discard");
+});
+
+test("a draft's newlines land on separate rows while typing", async () => {
+  const { stage, draw } = await mountArea({ body: "", editing: true });
+  stage.setDraft({ id: "body", edit: edit("one\ntwo\nthree") });
+  const frame = await draw();
+  const rows = frame.split("\n");
+  for (const line of ["one", "two", "three"]) {
+    expect(rows.filter((r) => r.includes(line))).toHaveLength(1);
+  }
+});
+
+test("a line longer than the field wraps instead of scrolling sideways", async () => {
+  const { stage, draw } = await mountArea({ body: "", editing: true });
+  stage.setDraft({ id: "body", edit: edit("alpha beta gamma delta") });
+  const frame = await draw();
+  // 20 cells wide, one column reserved for the caret: the break is at a space.
+  expect(frame).toContain("alpha beta gamma");
+  expect(frame).toContain("delta");
+});
+
+test("a body taller than the field scrolls to follow the caret", async () => {
+  const { stage, draw } = await mountArea({ body: "", editing: true });
+  stage.setDraft({ id: "body", edit: edit("one\ntwo\nthree\nfour\nfive\nsix") });
+  const frame = await draw();
+  expect(frame).toContain("six"); // the caret's line is on screen
+  expect(frame).not.toContain("one"); // ...and the head has scrolled off
+});
+
+test("an empty textarea shows its placeholder", async () => {
+  const blurred = await mountArea({ body: "", editing: false });
+  expect(await blurred.draw()).toContain("write something");
+  const focused = await mountArea({ body: "", editing: true });
+  expect(await focused.draw()).toContain("write something");
 });

@@ -548,6 +548,19 @@ kona call storybook save '{"value":"ada"}'
 Pass `change` instead of waiting for `enter` to get a verb per keystroke; see
 the `input` section of the storybook applet for a live one.
 
+`textarea(id, value, opts)` is the same field with room for paragraphs — a note
+body, a message you are writing. `enter` inserts a newline there, so **`ctrl+d`**
+is what submits; long lines word-wrap inside the field, `↑`/`↓` walk the lines,
+and the block scrolls under the caret. `rows` sets its height (6 by default):
+
+```ts
+textarea("note.body", state.draft.body, { rows: 8, width: 50, submit: "save", change: "field" })
+```
+
+The value keeps its newlines all the way through — into state, into the verb's
+`{ id, value }`, and back out to an agent reading `kona state notes`. See the
+composer in `applets/notes/index.ts`.
+
 A field works inside an `overlay` too, which is what makes a dialog a *form*:
 while one is up the host routes keys to the field (enter submits, esc cancels,
 `←`/`→` move the caret) and any other key the editor doesn't want falls through
