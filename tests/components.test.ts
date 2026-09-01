@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { progress, keyValue, list, badge, gauge, divider, spinner, table } from "../sdk/components.ts";
+import { progress, keyValue, list, badge, gauge, divider, spinner, table, recordRow } from "../sdk/components.ts";
 import type { ViewNode } from "../sdk/index.ts";
 
 // helper: narrow a node to an object kind
@@ -63,6 +63,30 @@ test("spinner advances with frame and wraps", () => {
   }
   // wraps cleanly and never throws on large / negative frames
   expect(() => spinner(9999)).not.toThrow();
+});
+
+test("recordRow spans the full width and marks selection", () => {
+  const plain = recordRow([{ text: "GitHub", width: 10 }, { text: "hi", grow: true }], { width: 40 });
+  if (typeof plain !== "string" && plain.kind === "text") {
+    expect(plain.text.length).toBe(40); // fills the full width exactly
+    expect(plain.focus).toBeFalsy(); // not selected
+  }
+  const sel = recordRow([{ text: "GitHub", width: 10 }], { width: 40, selected: true, accent: "#abc" });
+  expect(sel).toMatchObject({ kind: "text", bg: "#abc", focus: true });
+});
+
+test("recordRow right-aligns a column and truncates overflow", () => {
+  const r = recordRow(
+    [
+      { text: "a very long sender name that overflows", width: 10 },
+      { text: "31 Aug", width: 8, align: "right" },
+    ],
+    { width: 40 },
+  );
+  if (typeof r !== "string" && r.kind === "text") {
+    expect(r.text).toContain("…"); // long cell truncated
+    expect(r.text.trimEnd()).toMatch(/31 Aug$/); // right-aligned date at the end
+  }
 });
 
 test("table aligns columns and dims the header", () => {

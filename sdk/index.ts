@@ -139,6 +139,12 @@ export interface AppletDef<S extends object = AppletState> {
   /** Navigation intents (arrows + vim + browser-like back). */
   nav?: Nav<S>;
   /**
+   * Makes the applet searchable. The host binds `/` to open a search line;
+   * submitting fires `verb` with `{ q: <typed query> }`. First-class across
+   * any applet — the host owns the input UI.
+   */
+  search?: { verb: string; placeholder?: string };
+  /**
    * Infinite pagination. The host fires the `more` verb to fetch+append the
    * next page when the user reaches the end (down + `atEnd` + `hasMore`) AND,
    * on open/resize, keeps firing while `count(state)` is below the number of

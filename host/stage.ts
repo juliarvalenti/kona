@@ -99,6 +99,7 @@ export interface Stage {
   renderApplet(def: AppletDef, state: AppletState): void;
   renderLauncher(applets: AppletDef[], cursor: number): void;
   footerNote(text: string, color?: string): void;
+  searchBar(query: string, placeholder?: string): void;
   scrollBy(lines: number): void;
   scrollTop(): number;
   viewportHeight(): number;
@@ -109,11 +110,11 @@ export interface Stage {
 export function createStage(renderer: CliRenderer): Stage {
   const { DIM, FG, ACCENT, KEY } = COLORS;
 
-  // Inner content size = terminal size minus fixed chrome (stage padding 2 +
-  // border 2 + frame padding 2 = 6 wide; + footer 1 = 7 tall). Derived from the
-  // renderer, which knows the terminal size immediately — no layout wait.
+  // Inner content size = terminal size minus fixed chrome. Width: stage pad 2 +
+  // border 2 + frame pad 2 + scrollbar column 1 = 7. Height: same 6 + footer 1.
+  // Derived from the renderer, which knows the terminal size immediately.
   const term = renderer as unknown as { width: number; height: number };
-  const innerWidth = () => Math.max(20, term.width - 6);
+  const innerWidth = () => Math.max(20, term.width - 7);
   const innerHeight = () => Math.max(6, term.height - 7);
 
   // The frame fills the terminal (minus a 1-cell margin), with the hint bar
@@ -261,6 +262,7 @@ export function createStage(renderer: CliRenderer): Stage {
       const hints: Hint[] = [];
       if (nav?.up || nav?.down) hints.push({ key: "↑↓", label: "move" });
       if (nav?.select) hints.push({ key: "→", label: nav.selectLabel ?? "open" });
+      if (def.search) hints.push({ key: "/", label: "search" });
       for (const [key, b] of Object.entries(def.keymap ?? {})) hints.push({ key, label: bindingLabel(b) });
       const canBack = nav?.canBack?.(state) ?? false;
       hints.push({ key: "←/esc", label: canBack ? (nav?.backLabel ?? "back") : "menu" });
@@ -282,6 +284,16 @@ export function createStage(renderer: CliRenderer): Stage {
     },
     footerNote(text, color = COLORS.RED) {
       footer.content = new StyledText([fg(color)(text)]);
+      renderer.requestRender();
+    },
+    searchBar(query, placeholder) {
+      const shown = query.length ? query : (placeholder ?? "");
+      footer.content = new StyledText([
+        fg(COLORS.ACCENT)(bold("search ")),
+        query.length ? fg(COLORS.FG)(shown) : fg(COLORS.DIM)(shown),
+        fg(COLORS.ACCENT)("█"),
+        fg(COLORS.DIM)("    enter apply · esc cancel"),
+      ]);
       renderer.requestRender();
     },
     scrollBy(lines) {

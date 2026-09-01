@@ -1,5 +1,5 @@
 import { defineApplet, text, spacer, col, type ViewNode } from "../../sdk/index.ts";
-import { keyValue, divider } from "../../sdk/components.ts";
+import { keyValue, divider, recordRow } from "../../sdk/components.ts";
 import { listInbox, getThread, type MailThread, type OpenThread } from "../../server/gmail.ts";
 
 const PAGE = 20;
@@ -31,6 +31,12 @@ const UNREAD = "#00d488";
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
+}
+
+/** RFC-2822 date header -> "31 Aug" (compact for the list). */
+function shortDate(d: string): string {
+  const m = d.match(/(\d{1,2})\s+([A-Z][a-z]{2})/);
+  return m ? `${m[1]} ${m[2]}` : d.slice(0, 12);
 }
 function pad(s: string, n: number): string {
   return truncate(s, n).padEnd(n);
@@ -167,6 +173,9 @@ export default defineApplet<EmailState>({
     canBack: (s) => !!s.open,
   },
 
+  // Gmail search syntax works here: from:, subject:, is:unread, has:attachment…
+  search: { verb: "search", placeholder: "gmail query (e.g. from:doordash, is:unread)" },
+
   paginate: {
     more: "more",
     hasMore: (s) => !!s.nextPage,
@@ -220,18 +229,24 @@ export default defineApplet<EmailState>({
       ? text("syncing…", { color: AMBER })
       : text(`${state.query}   ${loaded}`, { dim: true });
 
-    // Columns sized to the real width: sender fixed, subject fills the rest.
-    const fromW = Math.min(28, Math.max(14, Math.floor(W * 0.28)));
-    const subjW = Math.max(10, W - fromW - 6);
-    const rows: ViewNode[] = state.threads.map((t, i) => {
-      const sel = i === state.cursor;
-      const dot = t.unread ? "●" : " ";
-      // Pad to exactly W so the highlight bar and rows span the full width
-      // (slice guards against overflow → no wrap, keeps 1 line per row).
-      const line = ` ${dot} ${pad(t.from, fromW)}  ${truncate(t.subject, subjW)}`.slice(0, W).padEnd(W);
-      if (sel) return text(line, { color: "#0b0b0b", bg: ACCENT, focus: true });
-      return text(line, { color: t.unread ? UNREAD : FG, dim: !t.unread });
-    });
+    // Each thread is a record row: unread dot · sender · subject (grows) · date.
+    const fromW = Math.min(26, Math.max(14, Math.floor(W * 0.24)));
+    const rows: ViewNode[] = state.threads.map((t, i) =>
+      recordRow(
+        [
+          { text: t.unread ? "●" : " ", width: 1 },
+          { text: t.from, width: fromW },
+          { text: t.subject, grow: true },
+          { text: shortDate(t.date), width: 12, align: "right" },
+        ],
+        {
+          width: W,
+          selected: i === state.cursor,
+          accent: ACCENT,
+          color: t.unread ? UNREAD : FG,
+        },
+      ),
+    );
 
     if (rows.length === 0 && !state.loading) {
       rows.push(text("(empty — press r to refresh)", { dim: true }));

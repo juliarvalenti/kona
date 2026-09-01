@@ -140,27 +140,64 @@ export async function runHost(startAppletId: string | null) {
   const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
   const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
 
-  renderer.keyInput.on("keypress", async (k: { name: string; ctrl: boolean }) => {
-    const n = k.name;
-    // ctrl+c is handled by exitOnCtrlC.
+  // Search input mode (first-class): `/` opens a footer line editor.
+  let searching = false;
+  let query = "";
 
-    if (current === null) {
-      // launcher navigation
-      if (isUp(n)) cursor = (cursor - 1 + applets.length) % applets.length;
-      else if (isDown(n)) cursor = (cursor + 1) % applets.length;
-      else if (isSelect(n)) current = applets[cursor]?.id ?? null;
-      render();
-      return;
-    }
+  renderer.keyInput.on(
+    "keypress",
+    async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
+      const n = k.name;
+      // ctrl+c is handled by exitOnCtrlC.
 
-    const def = byId.get(current);
-    if (!def) {
-      current = null;
-      render();
-      return;
-    }
-    const state = (states[def.id] ?? def.initialState) as AppletState;
-    const nav = def.nav;
+      if (current === null) {
+        // launcher navigation
+        if (isUp(n)) cursor = (cursor - 1 + applets.length) % applets.length;
+        else if (isDown(n)) cursor = (cursor + 1) % applets.length;
+        else if (isSelect(n)) current = applets[cursor]?.id ?? null;
+        render();
+        return;
+      }
+
+      const def = byId.get(current);
+      if (!def) {
+        current = null;
+        render();
+        return;
+      }
+      const state = (states[def.id] ?? def.initialState) as AppletState;
+      const nav = def.nav;
+
+      // --- Search input mode: capture typed text until enter/esc.
+      if (searching && def.search) {
+        if (n === "return") {
+          searching = false;
+          stage.resetScroll();
+          await callVerb(def.id, def.search.verb, { q: query }).catch(() => {});
+          render();
+        } else if (n === "escape") {
+          searching = false;
+          render();
+        } else if (n === "backspace") {
+          query = query.slice(0, -1);
+          stage.searchBar(query, def.search.placeholder);
+        } else {
+          const ch = k.sequence;
+          if (ch && ch.length === 1 && ch >= " " && !k.ctrl && !k.meta) {
+            query += ch;
+            stage.searchBar(query, def.search.placeholder);
+          }
+        }
+        return;
+      }
+
+      // `/` opens search on a searchable applet.
+      if (def.search && k.sequence === "/") {
+        searching = true;
+        query = "";
+        stage.searchBar(query, def.search.placeholder);
+        return;
+      }
 
     // Back is browser-like: pop an internal view if the applet has one,
     // otherwise return to the launcher. Either way, reset scroll.

@@ -62,6 +62,44 @@ export function spinner(frame: number, color?: Color): ViewNode {
   return text(SPINNER_FRAMES[i]!, { color });
 }
 
+export interface RecordCol {
+  text: string;
+  /** Fixed column width in chars. Omit + grow:true to fill remaining space. */
+  width?: number;
+  grow?: boolean;
+  align?: "left" | "right";
+}
+
+/**
+ * A "record row" — a database/mail-client style row of aligned columns that
+ * spans the full width, with a first-class selected state (full-width accent
+ * bar + scroll focus). Fixed columns take their width; grow columns split the
+ * rest. This is the reusable list-row aesthetic.
+ */
+export function recordRow(
+  cols: RecordCol[],
+  opts: { width: number; selected?: boolean; accent?: Color; color?: Color },
+): ViewNode {
+  const GAP = 2;
+  const gaps = Math.max(0, cols.length - 1) * GAP;
+  const fixed = cols.reduce((s, c) => s + (c.grow ? 0 : (c.width ?? c.text.length)), 0);
+  const growCols = cols.filter((c) => c.grow).length;
+  const rest = Math.max(0, opts.width - 2 - fixed - gaps); // -2 for the gutter
+  const growW = growCols ? Math.floor(rest / growCols) : 0;
+
+  const cell = (c: RecordCol) => {
+    const w = c.grow ? growW : (c.width ?? c.text.length);
+    const t = c.text.length > w ? c.text.slice(0, Math.max(0, w - 1)) + "…" : c.text;
+    return c.align === "right" ? t.padStart(w) : t.padEnd(w);
+  };
+
+  const line = ("  " + cols.map(cell).join(" ".repeat(GAP))).slice(0, opts.width).padEnd(opts.width);
+  if (opts.selected) {
+    return text(line, { color: "#0b0b0b", bg: opts.accent ?? "#7aa2f7", focus: true });
+  }
+  return text(line, { color: opts.color });
+}
+
 /** A column-aligned table: dim header row + body rows. */
 export function table(headers: string[], rows: string[][], opts: { color?: Color } = {}): ViewNode[] {
   const widths = headers.map((h, c) =>
