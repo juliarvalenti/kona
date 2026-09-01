@@ -12,12 +12,12 @@ export function progress(
 ): ViewNode {
   const b = bar(value, { width: opts.width, color: opts.color });
   if (!opts.label) return b;
-  return row(b, text(`  ${opts.label}`, { dim: true }));
+  return row([b, text(`  ${opts.label}`, { dim: true })]);
 }
 
 /** A dim key and a value on one line: "label   value". */
 export function keyValue(key: string, value: string, opts: { color?: Color } = {}): ViewNode {
-  return row(text(`${key} `, { dim: true }), text(value, { color: opts.color }));
+  return row([text(`${key} `, { dim: true }), text(value, { color: opts.color })]);
 }
 
 /** A vertical list with a cursor marker on the selected row. */

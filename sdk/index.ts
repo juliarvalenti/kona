@@ -50,26 +50,43 @@ export type BigFont = "block" | "tiny" | "slick" | "shade" | "huge" | "grid" | "
  * the host maps them to terminal widgets. Plain strings are lines; richer nodes
  * opt into a hero display or color. Grow this set only when an applet needs it.
  */
+/** Cross-axis alignment (align-items). */
+export type Align = "start" | "center" | "end" | "stretch";
+/** Main-axis distribution (justify-content). */
+export type Justify = "start" | "center" | "end" | "between" | "around";
+/** Flexbox knobs for row/col containers. */
+export interface LayoutOpts {
+  align?: Align;
+  justify?: Justify;
+  gap?: number;
+  padding?: number;
+  width?: number | `${number}%`;
+  grow?: boolean;
+}
+
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
   | { kind: "text"; text: string; color?: Color; dim?: boolean }
   | { kind: "spacer" }
-  | { kind: "row"; children: ViewNode[] }
+  | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
+  | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "bar"; value: number; width?: number; color?: Color };
 
 export type View = string | string[] | ViewNode[];
 
 /**
- * Primitive node constructors. Everything richer (progress, key/value, lists)
- * is a plain function that composes these — see sdk/components.ts. The host only
- * ever needs to understand these primitives.
+ * Primitive node constructors. `row`/`col` are the layout containers (flexbox);
+ * everything richer (progress, key/value, lists) is a plain function that
+ * composes these — see sdk/components.ts. The host only understands primitives.
  */
 export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
 export const text = (t: string, opts: { color?: Color; dim?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
 export const spacer = (): ViewNode => ({ kind: "spacer" });
 /** Lay children out horizontally. */
-export const row = (...children: ViewNode[]): ViewNode => ({ kind: "row", children });
+export const row = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "row", children, opts });
+/** Stack children vertically. */
+export const col = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "col", children, opts });
 /** A fill bar; value is 0..1. */
 export const bar = (value: number, opts: { width?: number; color?: Color } = {}): ViewNode => ({
   kind: "bar",

@@ -87,14 +87,25 @@ test("toggle flips running; add extends; stop resets", () => {
   expect(h.state).toMatchObject({ remaining: 0, running: false, label: "" });
 });
 
+// walk the view tree (rows/cols nest children) and collect every node
+function flatten(nodes: ReturnType<typeof timer.view>): Array<Exclude<import("../sdk/index.ts").ViewNode, string>> {
+  const out: Array<Exclude<import("../sdk/index.ts").ViewNode, string>> = [];
+  const visit = (n: import("../sdk/index.ts").ViewNode) => {
+    if (typeof n === "string") return;
+    out.push(n);
+    if (n.kind === "row" || n.kind === "col") n.children.forEach(visit);
+  };
+  (Array.isArray(nodes) ? nodes : [nodes]).forEach(visit);
+  return out;
+}
+
 test("view emits a big mm:ss hero and a status line", () => {
   const h = harness();
   h.call("start", { seconds: 65 });
-  const nodes = timer.view(h.state);
-  const arr = Array.isArray(nodes) ? nodes : [nodes];
-  const big = arr.find((n) => typeof n === "object" && n.kind === "big");
+  const all = flatten(timer.view(h.state));
+  const big = all.find((n) => n.kind === "big");
   expect(big).toMatchObject({ kind: "big", text: "01:05" });
-  const hasStatus = arr.some((n) => typeof n === "object" && n.kind === "text" && n.text.includes("running"));
+  const hasStatus = all.some((n) => n.kind === "text" && n.text.includes("running"));
   expect(hasStatus).toBe(true);
 });
 

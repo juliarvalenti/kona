@@ -1,4 +1,4 @@
-import { defineApplet, text, spacer, row } from "../../sdk/index.ts";
+import { defineApplet, text, row, col, type ViewNode } from "../../sdk/index.ts";
 import {
   progress,
   gauge,
@@ -44,29 +44,42 @@ export default defineApplet<StoryState>({
   view(state) {
     const sweep = (state.frame % 100) / 100; // 0..1 looping
 
+    // one labeled demo row: fixed-width dim label + the component, vertically centered
+    const demo = (label: string, node: ViewNode): ViewNode =>
+      row([text(label.padEnd(9), { dim: true }), node], { align: "center", gap: 1 });
+
+    const section = (title: string, ...children: ViewNode[]): ViewNode =>
+      col([heading(title), ...children], { gap: 0 });
+
     return [
-      heading("kona components", PURPLE),
-      divider(36),
-      spacer(),
-      row(text("progress  ", { dim: true }), progress(sweep, { width: 22, color: GREEN })),
-      row(text("gauge     ", { dim: true }), gauge(sweep, { width: 16, color: BLUE })),
-      row(text("spinner   ", { dim: true }), spinner(state.frame, AMBER)),
-      row(text("badge     ", { dim: true }), badge("LIVE", GREEN)),
-      spacer(),
-      heading("keyValue"),
-      keyValue("host", "localhost:4177", { color: BLUE }),
-      spacer(),
-      heading("list"),
-      ...list(["inbox", "calendar", "timer"], { cursor: state.frame % 3, color: PURPLE }),
-      spacer(),
-      heading("table"),
-      ...table(
-        ["key", "does"],
+      col(
         [
-          ["space", "pause/resume"],
-          ["a", "+1m"],
-          ["s", "stop"],
+          heading("kona components", PURPLE),
+          divider(40),
+          col(
+            [
+              demo("progress", progress(sweep, { width: 22, color: GREEN })),
+              demo("gauge", gauge(sweep, { width: 16, color: BLUE })),
+              demo("spinner", spinner(state.frame, AMBER)),
+              demo("badge", badge("LIVE", GREEN)),
+            ],
+            { gap: 0 },
+          ),
+          section("keyValue", keyValue("host", "localhost:4177", { color: BLUE })),
+          section("list", ...list(["inbox", "calendar", "timer"], { cursor: state.frame % 3, color: PURPLE })),
+          section(
+            "table",
+            ...table(
+              ["key", "does"],
+              [
+                ["space", "pause/resume"],
+                ["a", "+1m"],
+                ["s", "stop"],
+              ],
+            ),
+          ),
         ],
+        { gap: 1 },
       ),
     ];
   },

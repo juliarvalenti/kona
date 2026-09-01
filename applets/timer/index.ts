@@ -1,4 +1,4 @@
-import { defineApplet, big, text, spacer } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer, col } from "../../sdk/index.ts";
 import { progress } from "../../sdk/components.ts";
 
 // state -> color: green running, amber paused, red done, dim idle
@@ -123,12 +123,16 @@ export default defineApplet<TimerState>({
     const color = tint(state);
     const frac = state.total > 0 ? state.remaining / state.total : 0;
     return [
-      spacer(),
-      big(fmt(state.remaining), color, "block"),
-      spacer(),
-      progress(frac, { color, width: 28 }),
-      spacer(),
-      text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
+      col(
+        [
+          big(fmt(state.remaining), color, "block"),
+          spacer(),
+          progress(frac, { color, width: 28 }),
+          spacer(),
+          text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
+        ],
+        { align: "center", width: "100%", gap: 0 },
+      ),
     ];
   },
 });

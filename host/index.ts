@@ -10,15 +10,36 @@ import {
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding, ViewNode } from "../sdk/index.ts";
+import type { AppletDef, AppletState, KeyBinding, ViewNode, LayoutOpts } from "../sdk/index.ts";
 
 /** A key + what it does, for the hint bar. */
 interface Hint {
   key: string;
   label: string;
 }
+
+const ALIGN = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" } as const;
+const JUSTIFY = {
+  start: "flex-start",
+  center: "center",
+  end: "flex-end",
+  between: "space-between",
+  around: "space-around",
+} as const;
+
+/** Translate our LayoutOpts into OpenTUI/yoga box props. */
+function layoutProps(o: LayoutOpts) {
+  return {
+    ...(o.align ? { alignItems: ALIGN[o.align] } : {}),
+    ...(o.justify ? { justifyContent: JUSTIFY[o.justify] } : {}),
+    ...(o.gap !== undefined ? { gap: o.gap } : {}),
+    ...(o.padding !== undefined ? { padding: o.padding } : {}),
+    ...(o.width !== undefined ? { width: o.width } : {}),
+    ...(o.grow ? { flexGrow: 1 } : {}),
+  };
+}
 import { loadApplets } from "../core/load.ts";
-import { base, callVerb } from "../core/client.ts";
+import { base, callVerb, ensureDaemon } from "../core/client.ts";
 
 /**
  * The host is a THIN client. It never owns state — it loads applet modules only
@@ -44,7 +65,10 @@ function bindingLabel(b: KeyBinding): string {
 }
 
 /** Stream the daemon's SSE, invoking onState for every state change. */
-async function subscribe(onSnapshot: (s: States) => void, onState: (id: string, s: AppletState) => void) {
+async function readStream(
+  onSnapshot: (s: States) => void,
+  onState: (id: string, s: AppletState) => void,
+) {
   const res = await fetch(`${base()}/events`);
   if (!res.body) throw new Error("no event stream");
   const reader = res.body.getReader();
@@ -69,6 +93,32 @@ async function subscribe(onSnapshot: (s: States) => void, onState: (id: string, 
       if (event === "snapshot") onSnapshot(parsed as States);
       else if (event === "state") onState(parsed.applet, parsed.state);
     }
+  }
+}
+
+/**
+ * Subscribe with auto-reconnect. A dropped stream (idle timeout, daemon blip,
+ * transient socket error) reconnects with backoff instead of killing the UI —
+ * so a paused applet or a hiccup no longer shows "lost daemon". onDrop reports
+ * transient state; a fresh snapshot re-syncs on reconnect.
+ */
+async function subscribe(
+  onSnapshot: (s: States) => void,
+  onState: (id: string, s: AppletState) => void,
+  onDrop: (attempt: number) => void,
+) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      await readStream(onSnapshot, onState);
+      attempt = 0; // clean end (rare) — reconnect immediately
+    } catch {
+      attempt++;
+      onDrop(attempt);
+      // If the daemon itself died (not just a socket blip), bring it back.
+      if (attempt >= 2) await ensureDaemon().catch(() => {});
+    }
+    await Bun.sleep(Math.min(2000, 150 * 2 ** Math.min(attempt, 4)));
   }
 }
 
@@ -101,8 +151,8 @@ export async function runHost(startAppletId: string | null) {
     borderColor: ACCENT,
     padding: 1,
     flexDirection: "column",
-    alignItems: "center",
-    minWidth: 40,
+    alignItems: "stretch", // children fill width; applets align themselves
+    minWidth: 44,
   });
   stage.add(frame);
   const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1 });
@@ -153,8 +203,13 @@ export async function runHost(startAppletId: string | null) {
         return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG) });
       case "spacer":
         return new TextRenderable(renderer, { id, content: " " });
-      case "row": {
-        const box = new BoxRenderable(renderer, { id, flexDirection: "row" });
+      case "row":
+      case "col": {
+        const box = new BoxRenderable(renderer, {
+          id,
+          flexDirection: node.kind === "row" ? "row" : "column",
+          ...layoutProps(node.opts),
+        });
         node.children.forEach((child, i) => box.add(nodeToRenderable(child, `${id}.${i}`)));
         return box;
       }
@@ -210,6 +265,7 @@ export async function runHost(startAppletId: string | null) {
   }
 
   // Subscribe in the background; re-render whenever our applet's state moves.
+  // Auto-reconnects, so a dropped stream just shows a brief footer note.
   subscribe(
     (snap) => {
       Object.assign(states, snap);
@@ -219,9 +275,11 @@ export async function runHost(startAppletId: string | null) {
       states[id] = s;
       if (id === current) renderApplet();
     },
-  ).catch((e) => {
-    setFrame("kona", DONE_RED, [{ kind: "text", text: `lost daemon: ${String(e)}`, color: DONE_RED }]);
-  });
+    (attempt) => {
+      footer.content = new StyledText([fg(DONE_RED)(`reconnecting… (${attempt})`)]);
+      renderer.requestRender();
+    },
+  );
 
   renderer.keyInput.on("keypress", async (k: { name: string; ctrl: boolean }) => {
     // ctrl+c is handled by exitOnCtrlC.
