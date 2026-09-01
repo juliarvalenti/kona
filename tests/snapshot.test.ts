@@ -81,3 +81,26 @@ test("email shows a sign-in prompt when unauthenticated", async () => {
   expect(frame).toContain("Not signed in");
   expect(frame).toContain("kona login");
 });
+
+test("spotify shows now-playing with track, times, and state", async () => {
+  const frame = await snapshot(
+    "spotify",
+    {
+      authed: true,
+      playing: true,
+      track: "Rave Green",
+      artist: "Sounders FC",
+      album: "Anthems",
+      positionMs: 78000,
+      durationMs: 214000,
+      device: "MacBook",
+    },
+    76,
+    18,
+  );
+  expect(frame).toContain("Rave Green");
+  expect(frame).toContain("Sounders FC");
+  expect(frame).toContain("1:18"); // position
+  expect(frame).toContain("3:34"); // duration
+  expect(frame).toContain("playing");
+});

@@ -4,6 +4,12 @@ import { startDaemon } from "../server/daemon.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
+// Auth providers: name -> module exposing login()/logout(). Add a provider here.
+const AUTH_PROVIDERS: Record<string, string> = {
+  gmail: "../server/google.ts",
+  spotify: "../server/spotify.ts",
+};
+
 function usage() {
   console.log(`kona — bimodal terminal applets
 
@@ -13,7 +19,7 @@ function usage() {
   kona tools               list agent-callable verbs (the manifest)
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
-  kona login                connect Gmail (Google OAuth, read-only)
+  kona login [gmail|spotify]  connect an account (default gmail)
   kona daemon              run konad in the foreground
 `);
 }
@@ -35,8 +41,14 @@ switch (cmd) {
   }
 
   case "login": {
-    const { login } = await import("../server/google.ts");
+    const svc = rest[0] ?? "gmail";
+    const mod = AUTH_PROVIDERS[svc];
+    if (!mod) {
+      console.error(`unknown provider: ${svc} (have: ${Object.keys(AUTH_PROVIDERS).join(", ")})`);
+      process.exit(1);
+    }
     try {
+      const { login } = await import(mod);
       const who = await login();
       console.log(`signed in as ${who}`);
     } catch (e) {
@@ -47,9 +59,15 @@ switch (cmd) {
   }
 
   case "logout": {
-    const { logout } = await import("../server/google.ts");
+    const svc = rest[0] ?? "gmail";
+    const mod = AUTH_PROVIDERS[svc];
+    if (!mod) {
+      console.error(`unknown provider: ${svc} (have: ${Object.keys(AUTH_PROVIDERS).join(", ")})`);
+      process.exit(1);
+    }
+    const { logout } = await import(mod);
     logout();
-    console.log("removed Gmail token from the keychain");
+    console.log(`removed ${svc} token from the keychain`);
     break;
   }
 
