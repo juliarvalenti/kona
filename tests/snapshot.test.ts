@@ -29,11 +29,20 @@ test("timer shows status, label, and a partly-filled bar", async () => {
 });
 
 test("storybook renders every component; bars fill mid-sweep", async () => {
-  const frame = await snapshot("storybook", { frame: 45 }, 62, 34);
+  // Tall viewport: the gallery is longer than a default terminal, and every
+  // component has to be on screen for this to be a real regression test.
+  const frame = await snapshot("storybook", { frame: 45 }, 62, 60);
   for (const expected of ["kona components", "[LIVE]", "host", "inbox", "pause/resume"]) {
     expect(frame).toContain(expected);
   }
   expect(frame).toContain("█"); // progress/gauge have fill at frame 45
+  // sparkline / tabs / toast / card / modal
+  expect(frame).toContain("▁"); // sparkline's low samples
+  expect(frame).toContain("drafts"); // tab strip
+  expect(frame).toContain("rate limited"); // warn toast
+  expect(frame).toContain("─ cpu ─"); // card's titled border
+  expect(frame).toContain("delete draft?"); // modal title, in a double border
+  expect(frame).toContain("╔");
 });
 
 test("an empty text field shows its placeholder; a filled one shows the value", async () => {

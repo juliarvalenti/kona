@@ -10,6 +10,11 @@ import {
   divider,
   field,
   heading,
+  sparkline,
+  tabs,
+  toast,
+  card,
+  modal,
 } from "../../sdk/components.ts";
 
 /**
@@ -33,6 +38,11 @@ interface StoryState {
   name: string;
   /** ...and state owns the focus, so an agent can open the editor too. */
   editing: boolean;
+}
+
+/** A rolling series for the sparkline demo — a sine wave sampled per frame. */
+function series(frame: number, n = 24): number[] {
+  return Array.from({ length: n }, (_, i) => Math.sin((frame + i) / 3) + Math.sin((frame + i) / 7));
 }
 
 const PURPLE = "#bb9af7";
@@ -114,6 +124,9 @@ export default defineApplet<StoryState>({
               labelWidth: 7,
             }),
           ),
+          section("sparkline", sparkline(series(state.frame), { color: GREEN })),
+          section("tabs", tabs(["inbox", "sent", "drafts"], Math.floor(state.frame / 20) % 3, { accent: PURPLE })),
+          section("toast", toast("saved", "info"), toast("rate limited", "warn"), toast("auth failed", "error")),
           section("keyValue", keyValue("host", "localhost:4177", { color: BLUE })),
           section("list", ...list(["inbox", "calendar", "timer"], { cursor: state.frame % 3, color: PURPLE })),
           section(
@@ -126,6 +139,20 @@ export default defineApplet<StoryState>({
                 ["s", "stop"],
               ],
             ),
+          ),
+          section(
+            "card",
+            card("cpu", [gauge(sweep, { width: 14, color: GREEN }), sparkline(series(state.frame, 14), { color: GREEN })], {
+              color: GREEN,
+              width: 24,
+            }),
+          ),
+          section(
+            "modal",
+            modal("delete draft?", [text("This can't be undone.")], {
+              width: 34,
+              footer: "enter ok · esc cancel",
+            }),
           ),
         ],
         { gap: 1 },

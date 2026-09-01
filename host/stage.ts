@@ -100,6 +100,13 @@ function focusLineOf(nodes: ViewNode[]): number | null {
       case "col":
         for (const c of n.children) visit(c);
         break;
+      case "box": {
+        const chrome = n.opts.border === false ? 0 : 1; // top border line
+        line += chrome;
+        for (const c of n.children) visit(c);
+        line += chrome; // bottom border line
+        break;
+      }
     }
   };
   nodes.forEach(visit);
@@ -314,6 +321,27 @@ export function createStage(renderer: CliRenderer): Stage {
           wrapMode: "none",
           flexShrink: 0,
         });
+      case "box": {
+        const o = node.opts;
+        // A titled box borders itself unless told otherwise — a floating title
+        // with no frame reads as stray text.
+        const bordered = o.border ?? o.title !== undefined;
+        const panel = new BoxRenderable(renderer, {
+          id,
+          flexDirection: "column",
+          flexShrink: 0,
+          ...(bordered
+            ? { border: true, borderStyle: o.borderStyle ?? "rounded", borderColor: o.borderColor ?? DIM }
+            : {}),
+          ...(o.title !== undefined
+            ? { title: ` ${o.title} `, titleAlignment: o.titleAlign ?? "left", titleColor: o.borderColor ?? ACCENT }
+            : {}),
+          ...(o.bg ? { backgroundColor: o.bg } : {}),
+          ...layoutProps(o),
+        });
+        node.children.forEach((child, i) => panel.add(nodeToRenderable(child, `${id}.${i}`)));
+        return panel;
+      }
       case "bar": {
         const width = node.width ?? 24;
         // Sub-cell resolution: full blocks + one fractional block = 8x smoother,

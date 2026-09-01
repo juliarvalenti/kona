@@ -100,6 +100,19 @@ export interface InputNode {
   color?: Color;
 }
 
+/** Border look for a `box` node. */
+export type BorderStyle = "single" | "double" | "rounded" | "heavy";
+/** A `box` is a `col` that can draw a border, a title and a background. */
+export interface BoxOpts extends LayoutOpts {
+  title?: string;
+  titleAlign?: "left" | "center" | "right";
+  /** Draw a border (default true when a title is set). */
+  border?: boolean;
+  borderStyle?: BorderStyle;
+  borderColor?: Color;
+  bg?: Color;
+}
+
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
@@ -108,7 +121,8 @@ export type ViewNode =
   | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "bar"; value: number; width?: number; color?: Color }
-  | InputNode;
+  | InputNode
+  | { kind: "box"; children: ViewNode[]; opts: BoxOpts };
 
 export type View = string | string[] | ViewNode[];
 
@@ -142,6 +156,12 @@ export const bar = (value: number, opts: { width?: number; color?: Color } = {})
   value: Math.max(0, Math.min(1, value)),
   ...opts,
 });
+/**
+ * A bordered container — a `col` that can also draw a frame, a title and a
+ * background. The one node the host draws chrome for; `card`/`modal` in
+ * sdk/components.ts are thin wrappers over it.
+ */
+export const box = (children: ViewNode[], opts: BoxOpts = {}): ViewNode => ({ kind: "box", children, opts });
 
 /**
  * Navigation model. The host binds canonical intents to BOTH arrow keys and
