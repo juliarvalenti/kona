@@ -258,10 +258,16 @@ export async function runHost(startAppletId: string | null) {
       return;
     }
 
-    // Select drills in (e.g. open an email); start it at the top.
+    // Select drills in (e.g. open an email); start it at the top. A verb may
+    // return {navigate:"<appletId>"} to hyperlink into another applet.
     if (isSelect(n) && nav?.select) {
       stage.resetScroll();
-      await callVerb(def.id, nav.select).catch(() => {});
+      const res = (await callVerb(def.id, nav.select).catch(() => null)) as { result?: { navigate?: string } } | null;
+      const target = res?.result?.navigate;
+      if (typeof target === "string" && byId.has(target)) {
+        current = target;
+        render();
+      }
       return;
     }
 

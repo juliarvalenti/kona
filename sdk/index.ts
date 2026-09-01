@@ -21,6 +21,11 @@ export interface AppletCtx<S = AppletState> {
   state: S;
   /** Notify every subscriber (the TUI, any agent watching) that state changed. */
   emit: () => void;
+  /**
+   * Read another applet's live state (read-only). Every applet's tick runs in
+   * the daemon regardless of what's on screen, so a dashboard can compose them.
+   */
+  peek?: (appletId: string) => AppletState | undefined;
 }
 
 export type AppletState = Record<string, unknown>;

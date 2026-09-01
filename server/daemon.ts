@@ -82,11 +82,12 @@ export async function startDaemon(port = DEFAULT_PORT) {
   }
   function ctxFor(id: string): AppletCtx {
     return {
-      state: states[id],
+      state: states[id]!,
       emit: () => {
         broadcast("state", { applet: id, state: states[id] });
         persist();
       },
+      peek: (other) => states[other], // read another applet's live state
     };
   }
 
