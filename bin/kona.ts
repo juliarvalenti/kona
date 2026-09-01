@@ -7,8 +7,11 @@ import type { ToolSpec } from "../sdk/index.ts";
 const [cmd, ...rest] = process.argv.slice(2);
 
 // Auth providers: name -> module exposing login()/logout(). Add a provider here.
+// The mail ones (gmail, outlook) can be run more than once — each login
+// connects another mailbox and `kona accounts` lists what is connected.
 const AUTH_PROVIDERS: Record<string, string> = {
   gmail: "../server/google.ts",
+  outlook: "../server/microsoft.ts",
   spotify: "../server/spotify.ts",
   webex: "../server/webex.ts",
 };
@@ -64,7 +67,9 @@ function usage() {
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
   kona config [init]       show the resolved config (init writes a starter file)
-  kona login [gmail|spotify|webex]  connect an account (default gmail)
+  kona login [gmail|outlook|spotify|webex]  connect an account (default gmail)
+  kona logout <provider> [address]     disconnect one account, or all of them
+  kona accounts            list connected mailboxes
   kona notify              desktop notifications: list / on / off / test
   kona daemon              run konad in the foreground
 `);
@@ -111,9 +116,25 @@ switch (cmd) {
       console.error(`unknown provider: ${svc} (have: ${Object.keys(AUTH_PROVIDERS).join(", ")})`);
       process.exit(1);
     }
+    // `kona logout gmail ada@x.com` drops one mailbox; without an address it
+    // drops every account of that provider.
+    const who = rest[1];
     const { logout } = await import(mod);
-    logout();
-    console.log(`removed ${svc} token from the keychain`);
+    await logout(who);
+    console.log(`removed ${who ?? svc} from the keychain`);
+    break;
+  }
+
+  // What mailboxes are connected, and how to add or drop one.
+  case "accounts": {
+    const { listAccounts } = await import("../server/mail.ts");
+    const accounts = listAccounts();
+    if (!accounts.length) {
+      console.log("no mail accounts connected — `kona login gmail` or `kona login outlook`");
+      break;
+    }
+    for (const a of accounts) console.log(`${a.provider.padEnd(8)} ${a.id}`);
+    console.log(`\nkona login <gmail|outlook>   add another      kona logout <provider> [address]   remove`);
     break;
   }
 
