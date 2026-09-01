@@ -25,7 +25,7 @@ export default defineSnapshots([
       "MARKETS", "AAPL", "Bitcoin USD",
       "77,859.73", // grouped price
       "-0.89%", // signed percent change
-      "█▆▅▇▂▁▄", // AAPL's intraday shape, as a sparkline
+      "█▆▅▆▂▁▄", // AAPL's intraday shape, as a sparkline
       "ETH-USD", // a symbol without a quote yet still gets a row
     ],
   },

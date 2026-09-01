@@ -50,8 +50,18 @@ test("bindingFor resolves a key only when the applet claims it", () => {
 
   // Unbound keys are never claimed, so navigation keeps them.
   expect(bindingFor(applet, "q", { mode: "now" })).toBeNull();
-  expect(bindingFor(applet, "space", { mode: "browse" })).toBe("playPause");
+  // Every claimed key comes back in ONE shape, sugar expanded: the shorthand
+  // gets empty args and labels itself with its verb name.
+  expect(bindingFor(applet, "space", { mode: "browse" })).toEqual({
+    verb: "playPause",
+    args: {},
+    label: "playPause",
+  });
   // `when` decides per state: ← seeks on now-playing, navigates in a list.
-  expect(bindingFor(applet, "left", { mode: "now" })).toMatchObject({ verb: "seek" });
+  expect(bindingFor(applet, "left", { mode: "now" })).toEqual({
+    verb: "seek",
+    args: { deltaMs: -10_000 },
+    label: "seek",
+  });
   expect(bindingFor(applet, "left", { mode: "browse" })).toBeNull();
 });

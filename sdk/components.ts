@@ -2,6 +2,21 @@
  * Reusable components. Each is a pure function returning ViewNode(s) built from
  * the primitives in ./index.ts — the host needs no knowledge of them. Applets
  * import what they want; anyone can add more here without touching the host.
+ *
+ * Three families overlap enough to be worth naming, so a new applet reaches for
+ * the right one instead of adding a fourth:
+ *
+ *   chrome    `box` is the ONLY primitive that draws a frame. `card` is a box
+ *             with a title and padding (the dashboard unit); `modal` is a card
+ *             centered on the line with a heavier border (it reads as floating,
+ *             and `overlay` in the applet def is what actually floats it).
+ *   rows      `list` is a compact cursor list (a marker and a label);
+ *             `recordRow` is the full-width, column-aligned mail/database row
+ *             with a selected state. Both mark rows clickable with `index`.
+ *   levels    `bar` is the primitive; `progress` adds a trailing label, `gauge`
+ *             makes that label a percentage, and `meter` is the whole labeled
+ *             instrument row. `sparkText`/`sparkline` are the series version —
+ *             one implementation, string or node.
  */
 import { type ViewNode, type Color, text, row, box, bar, spacer } from "./index.ts";
 import { theme } from "../core/config.ts";
@@ -76,36 +91,89 @@ export function spinner(frame: number, color?: Color): ViewNode {
   return text(SPINNER_FRAMES[i]!, { color });
 }
 
-const SPARK_TICKS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+/** The eight bar heights every sparkline in kona draws with. */
+const SPARK_RAMP = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+/** The level a half-scale sample rounds to — where a flat series sits. */
+const SPARK_MID = SPARK_RAMP[Math.round((SPARK_RAMP.length - 1) / 2)]!;
+
+/** How a series is drawn as one line of block glyphs. */
+export interface SparkOpts {
+  /**
+   * Target width in samples. Omit to draw every sample. A longer series is
+   * fitted by `fit`; a shorter one is left alone.
+   */
+  width?: number;
+  /**
+   * bucket — average the series down to `width` (the whole shape, compressed).
+   * tail   — keep the LAST `width` samples (the recent trend). The default.
+   */
+  fit?: "bucket" | "tail";
+  /**
+   * Pin the scale. Do that when several sparklines must be comparable;
+   * otherwise each series is scaled to its own min/max.
+   */
+  min?: number;
+  max?: number;
+  /** Glyphs per sample — widen so labels can sit underneath at the same offsets. */
+  cell?: number;
+}
 
 /**
- * A series as one line of block characters: "▁▃▂▅▇█". Longer series are bucketed
- * (mean per bucket) down to `width`; a flat series draws a flat mid-line rather
- * than a misleading full or empty bar. Returns the raw string so it can also sit
- * inside a recordRow cell — see sparkline() for the ViewNode.
+ * A series as one line of block characters: "▁▃▂▅▇█". THE sparkline — the
+ * ViewNode version below and every applet that draws a trend come through
+ * here, so a trend line looks the same wherever it appears.
+ *
+ * Non-finite samples keep their column as a gap and are left out of the scale,
+ * so a series with holes still lines up with its own axis. A flat series draws
+ * a flat mid-line rather than a misleading full or empty bar.
  */
-export function sparkText(values: number[], width = 12): string {
-  const nums = values.filter((n) => Number.isFinite(n));
-  if (!nums.length || width < 1) return "";
+export function sparkText(values: number[], opts: SparkOpts = {}): string {
+  const cell = Math.max(1, opts.cell ?? 1);
+  const points = fitSeries(values, opts);
+  const finite = points.filter((n) => Number.isFinite(n));
+  if (!finite.length) return "";
 
-  // Bucket down to width (mean of each bucket); shorter series stay as-is.
-  const points: number[] =
-    nums.length <= width
-      ? nums
-      : Array.from({ length: width }, (_, i) => {
-          const start = Math.floor((i * nums.length) / width);
-          const end = Math.max(start + 1, Math.floor(((i + 1) * nums.length) / width));
-          const slice = nums.slice(start, end);
-          return slice.reduce((a, b) => a + b, 0) / slice.length;
-        });
-
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const min = opts.min ?? Math.min(...finite);
+  const max = opts.max ?? Math.max(...finite);
   const span = max - min;
-  const mid = Math.floor(SPARK_TICKS.length / 2) - 1;
   return points
-    .map((n) => (span === 0 ? SPARK_TICKS[mid]! : SPARK_TICKS[Math.min(SPARK_TICKS.length - 1, Math.floor(((n - min) / span) * SPARK_TICKS.length))]!))
+    .map((n) => {
+      if (!Number.isFinite(n)) return " ".repeat(cell);
+      // A flat series has no shape to show — draw it mid-height rather than
+      // slamming every sample to the floor.
+      if (span === 0) return SPARK_MID.repeat(cell);
+      const i = Math.round(((n - min) / span) * (SPARK_RAMP.length - 1));
+      return SPARK_RAMP[Math.min(SPARK_RAMP.length - 1, Math.max(0, i))]!.repeat(cell);
+    })
     .join("");
+}
+
+/** Fit a series to `width`: the mean of each bucket, or the recent tail. */
+function fitSeries(values: number[], { width, fit = "tail" }: SparkOpts): number[] {
+  if (width === undefined) return values;
+  if (width < 1) return [];
+  if (values.length <= width) return values;
+  if (fit === "tail") return values.slice(-width);
+  return Array.from({ length: width }, (_, i) => {
+    const start = Math.floor((i * values.length) / width);
+    const end = Math.max(start + 1, Math.floor(((i + 1) * values.length) / width));
+    const slice = values.slice(start, end).filter((n) => Number.isFinite(n));
+    // A bucket with nothing finite in it is a hole, not a zero.
+    return slice.length ? slice.reduce((a, b) => a + b, 0) / slice.length : NaN;
+  });
+}
+
+/**
+ * The sparkline as a colorable ViewNode — an inline unicode bar chart for
+ * trends that have to fit on a single line (a temperature curve, a price tape,
+ * CPU load). Same drawing as sparkText(), which is also what you want inside a
+ * recordRow cell where a node can't go.
+ */
+export function sparkline(
+  values: number[],
+  opts: SparkOpts & { color?: Color; dim?: boolean } = {},
+): ViewNode {
+  return text(sparkText(values, opts), { color: opts.color, dim: opts.dim });
 }
 
 export interface RecordCol {
@@ -160,46 +228,6 @@ export function table(headers: string[], rows: string[][], opts: { color?: Color
     text(fmtRow(headers), { dim: true }),
     ...rows.map((r) => text(fmtRow(r), { color: opts.color })),
   ];
-}
-
-/** The eight bar heights a sparkline draws with. */
-const SPARK_LEVELS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-
-/**
- * An inline unicode bar chart — one glyph per sample, for trends that have to
- * fit on a single line (a temperature curve, a price tape, CPU load).
- *
- * The series is auto-scaled to its own min/max unless you pin `min`/`max` (do
- * that when several sparklines must be comparable). `width` keeps the LAST n
- * samples, because a trend is about the recent tail. Non-finite samples render
- * as a gap and are left out of the scale, so a series with holes still lines up
- * with its own axis.
- */
-export function sparkline(
-  values: number[],
-  opts: { color?: Color; dim?: boolean; width?: number; min?: number; max?: number } = {},
-): ViewNode {
-  const window = opts.width !== undefined ? values.slice(-Math.max(0, opts.width)) : values;
-  const finite = window.filter((v) => Number.isFinite(v));
-  if (!finite.length) return text("", { color: opts.color, dim: opts.dim });
-
-  const min = opts.min ?? Math.min(...finite);
-  const max = opts.max ?? Math.max(...finite);
-  const span = max - min;
-  // The level a half-scale sample rounds to, so a flat series and a pinned
-  // mid-range sample draw the same height.
-  const mid = SPARK_LEVELS[Math.round((SPARK_LEVELS.length - 1) / 2)]!;
-
-  const glyphs = window.map((v) => {
-    if (!Number.isFinite(v)) return " ";
-    // A flat series has no shape to show — draw it mid-height rather than
-    // slamming every sample to the floor.
-    if (span === 0) return mid;
-    const t = (v - min) / span;
-    const i = Math.min(SPARK_LEVELS.length - 1, Math.max(0, Math.round(t * (SPARK_LEVELS.length - 1))));
-    return SPARK_LEVELS[i]!;
-  });
-  return text(glyphs.join(""), { color: opts.color, dim: opts.dim });
 }
 
 /**

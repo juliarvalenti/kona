@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
 import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount } from "./mail.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
+import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
 
 /**
  * Microsoft identity platform OAuth for kona — auth code + PKCE against a
@@ -57,14 +57,6 @@ let cachedTenant: string | null = null;
 const authUrlFor = (t: string) => `https://login.microsoftonline.com/${t}/oauth2/v2.0/authorize`;
 const tokenUrlFor = (t: string) => `https://login.microsoftonline.com/${t}/oauth2/v2.0/token`;
 
-async function readJson<T>(path: string): Promise<T | null> {
-  try {
-    return JSON.parse(await Bun.file(path).text()) as T;
-  } catch {
-    return null;
-  }
-}
-
 /** App registration (Application/client id) from env or microsoft.json. */
 export async function clientId(): Promise<string | null> {
   if (process.env.KONA_MICROSOFT_CLIENT_ID) return process.env.KONA_MICROSOFT_CLIENT_ID;
@@ -86,12 +78,6 @@ export async function logout(account?: string): Promise<void> {
     kcDelete(SERVICE, kcAccountName(id));
     await removeAccount("outlook", id);
   }
-}
-
-function pkce() {
-  const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
 }
 
 interface TokenResponse {
@@ -215,20 +201,20 @@ export async function login(): Promise<string> {
   const address = await whoami(tok.access_token);
   if (!address) throw new Error("signed in, but Graph would not say which mailbox — is User.Read granted?");
   kcSet(SERVICE, kcAccountName(address), tok.refresh_token, "kona outlook refresh token");
-  cached.set(address, { token: tok.access_token, exp: Date.now() + (tok.expires_in ?? 3600) * 1000 });
+  cached.set(address, expiringToken(tok.access_token, tok.expires_in));
   await addAccount("outlook", address);
   return address;
 }
 
 // in-memory access-token cache, per account (per daemon lifetime)
-const cached = new Map<string, { token: string; exp: number }>();
+const cached = new Map<string, AccessToken>();
 
 async function accessToken(account: string): Promise<string> {
   // A token straight from the environment (tests, scripts against a fixture).
   if (process.env.KONA_MICROSOFT_TOKEN) return process.env.KONA_MICROSOFT_TOKEN;
   if (faked()) return FAKE_TOKEN; // a fake transport authenticates nothing
-  const hit = cached.get(account);
-  if (hit && hit.exp > Date.now() + 30_000) return hit.token;
+  const hit = freshToken(cached.get(account));
+  if (hit) return hit;
   const id = await clientId();
   if (!id) throw new Error("Outlook not configured — no client id");
   const refreshToken = kcGet(SERVICE, kcAccountName(account));
@@ -255,7 +241,7 @@ async function accessToken(account: string): Promise<string> {
       /* keep going on this access token; we just re-auth sooner */
     }
   }
-  cached.set(account, { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 });
+  cached.set(account, expiringToken(j.access_token, j.expires_in));
   return j.access_token;
 }
 

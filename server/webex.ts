@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { configDir } from "../core/config.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
+import { readJson } from "./provider.ts";
 
 /**
  * Webex — spaces, their messages, and posting one back.
@@ -78,14 +79,6 @@ export const SETUP_HINT = [
 export interface ClientCreds {
   client_id: string;
   client_secret: string;
-}
-
-async function readJson<T>(path: string): Promise<T | null> {
-  try {
-    return JSON.parse(await Bun.file(path).text()) as T;
-  } catch {
-    return null;
-  }
 }
 
 // --- Keychain (macOS `security`) --------------------------------------------

@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
 import { providerFetch, assertAllowed, faked, FAKE_TOKEN } from "./transport.ts";
+import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
 
 /**
  * Spotify OAuth (Authorization Code + PKCE — no client secret) and a thin Web
@@ -38,14 +38,6 @@ const TOKEN_URL = "https://accounts.spotify.com/api/token";
 // and webex tests.
 const apiBase = () => process.env.KONA_SPOTIFY_API ?? "https://api.spotify.com";
 
-async function readJson<T>(path: string): Promise<T | null> {
-  try {
-    return JSON.parse(await Bun.file(path).text()) as T;
-  } catch {
-    return null;
-  }
-}
-
 export async function clientId(): Promise<string | null> {
   if (process.env.KONA_SPOTIFY_CLIENT_ID) return process.env.KONA_SPOTIFY_CLIENT_ID;
   const f = await readJson<{ client_id?: string }>(CONFIG_FILE);
@@ -66,12 +58,6 @@ export function logout(): void {
 export async function isAuthed(): Promise<boolean> {
   if (process.env.KONA_SPOTIFY_TOKEN || faked()) return true; // a fake is "signed in"
   return kcGet() !== null;
-}
-
-function pkce() {
-  const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
 }
 
 export async function login(): Promise<string> {
@@ -157,14 +143,15 @@ export async function login(): Promise<string> {
   }
 }
 
-let cached: { token: string; exp: number } | null = null;
+let cached: AccessToken | null = null;
 async function accessToken(): Promise<string> {
   // A fake transport authenticates nothing, so never read the keychain or spend
   // a refresh round-trip under one (KONA_SPOTIFY_TOKEN is the same escape hatch
   // google/microsoft/webex already have).
   if (process.env.KONA_SPOTIFY_TOKEN) return process.env.KONA_SPOTIFY_TOKEN;
   if (faked()) return FAKE_TOKEN;
-  if (cached && cached.exp > Date.now() + 30_000) return cached.token;
+  const hit = freshToken(cached);
+  if (hit) return hit;
   const id = await clientId();
   if (!id) throw new Error("Spotify not configured — no client id");
   const refresh = kcGet();
@@ -177,7 +164,7 @@ async function accessToken(): Promise<string> {
   const j = (await res.json()) as { access_token?: string; expires_in?: number; refresh_token?: string };
   if (!j.access_token) throw new Error(`token refresh failed: ${JSON.stringify(j)}`);
   if (j.refresh_token) kcSet(j.refresh_token); // Spotify may rotate it
-  cached = { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  cached = expiringToken(j.access_token, j.expires_in);
   return cached.token;
 }
 

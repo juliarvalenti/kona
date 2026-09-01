@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { providerFetch } from "./transport.ts";
+import { readJson } from "./provider.ts";
 
 /**
  * Market quotes via Yahoo Finance's public chart endpoint — keyless, no account,
@@ -74,14 +75,6 @@ export async function watchlist(): Promise<string[]> {
 export function dedupe(symbols: string[]): string[] {
   const seen = new Set<string>();
   return symbols.filter((s) => (seen.has(s) ? false : (seen.add(s), true)));
-}
-
-async function readJson<T>(path: string): Promise<T | null> {
-  try {
-    return JSON.parse(await Bun.file(path).text()) as T;
-  } catch {
-    return null;
-  }
 }
 
 function kindOf(instrumentType: string | undefined): QuoteKind {

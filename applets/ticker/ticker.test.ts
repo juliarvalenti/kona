@@ -1,6 +1,6 @@
 import { test, expect, afterAll } from "bun:test";
 import { quote, quotes, watchlist, normalizeSymbol, webUrl, DEFAULT_WATCHLIST } from "../../server/ticker.ts";
-import { sparkText, sparkline } from "../../sdk/components.ts";
+import { sparkText } from "../../sdk/components.ts";
 
 /**
  * The quote layer, driven against a local fixture server (KONA_TICKER_API) that
@@ -121,18 +121,9 @@ test("the default watchlist mixes stocks and crypto", () => {
   expect(DEFAULT_WATCHLIST.some((s) => s.endsWith("-USD"))).toBe(true);
 });
 
-test("sparkText draws a rising series and buckets to the requested width", () => {
+test("the board's tape buckets a day of prices down to the column width", () => {
   expect(sparkText([1, 2, 3, 4])).toBe("▁▃▆█");
-  expect(sparkText([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5)).toHaveLength(5);
-  expect(sparkText([5, 5, 5])).toBe("▄▄▄"); // flat draws a mid-line, not a full bar
+  // A tape shows the whole session compressed, not just its tail.
+  expect(sparkText([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], { width: 5, fit: "bucket" })).toBe("▁▃▅▆█");
   expect(sparkText([])).toBe("");
-  expect(sparkText([1, NaN, 3])).toHaveLength(2); // non-finite points dropped
-});
-
-test("sparkline scales a series into a colorable text node", () => {
-  expect(sparkline([1, 2, 3], { color: "#0f0", width: 3 })).toMatchObject({
-    kind: "text",
-    text: "▁▅█",
-    color: "#0f0",
-  });
 });

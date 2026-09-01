@@ -59,6 +59,26 @@ export type KeyBinding<S = AppletState> =
   | { verb: string; args?: Record<string, unknown>; label?: string; when?: (state: S) => boolean };
 
 /**
+ * A binding with its optional fields filled in: the ONE shape everything
+ * downstream reads. Applets keep writing the short forms (`"refresh"`, or an
+ * object with just the fields they care about); `normalizeBinding` is the only
+ * place that knows how the sugar unfolds, so dispatch and the hint bar can
+ * never disagree about what a key does or what it is called.
+ */
+export interface ResolvedBinding {
+  verb: string;
+  args: Record<string, unknown>;
+  /** What the hint bar shows — the verb name when the applet didn't name it. */
+  label: string;
+}
+
+/** Expand any authored binding into the canonical `{ verb, args, label }`. */
+export function normalizeBinding<S = AppletState>(b: KeyBinding<S>): ResolvedBinding {
+  if (typeof b === "string") return { verb: b, args: {}, label: b };
+  return { verb: b.verb, args: b.args ?? {}, label: b.label ?? b.verb };
+}
+
+/**
  * The binding a key fires in this state, or null if the applet doesn't claim
  * it (unbound, or its `when` guard is false). One place decides, so the host's
  * dispatch and the hint bar can never disagree.
@@ -67,11 +87,11 @@ export function bindingFor<S extends object>(
   def: Pick<AppletDef<S>, "keymap">,
   key: string,
   state: S,
-): KeyBinding<S> | null {
+): ResolvedBinding | null {
   const b = def.keymap?.[key];
   if (!b) return null;
   if (typeof b !== "string" && b.when && !b.when(state)) return null;
-  return b;
+  return normalizeBinding(b);
 }
 
 /** Hex color, e.g. "#00d488". */
@@ -514,8 +534,7 @@ export interface ToolSpec {
 function keysByVerb(def: AnyApplet): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, binding] of Object.entries(def.keymap ?? {})) {
-    const verb = typeof binding === "string" ? binding : binding.verb;
-    out[verb] ??= key;
+    out[normalizeBinding(binding).verb] ??= key;
   }
   return out;
 }

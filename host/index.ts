@@ -1,10 +1,11 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
-import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay } from "../sdk/index.ts";
+import { bindingFor, type AppletDef, type AppletState } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { filterApplets } from "../core/catalog.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
 import { createStage, COPY_PROMPT_KEY, type Draft } from "./stage.ts";
 import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
+import { resolveKey, keyName, isUp, isDown, isSelect, isBack, type InputContext } from "./input.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { clipboardHelpers, copyToClipboard } from "../core/clipboard.ts";
 import { theme } from "../core/config.ts";
@@ -23,45 +24,11 @@ import { theme } from "../core/config.ts";
 
 type States = Record<string, AppletState>;
 
-function resolveBinding(b: KeyBinding): { verb: string; args: Record<string, unknown> } {
-  return typeof b === "string" ? { verb: b, args: {} } : { verb: b.verb, args: b.args ?? {} };
-}
-
-// Canonical navigation intents, each matched by an arrow key AND a vim key.
-const isUp = (n: string) => n === "up" || n === "k";
-const isDown = (n: string) => n === "down" || n === "j";
-const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
-
-const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
 /**
- * The name a keypress goes into a keymap under. A ctrl-held key is its own
- * binding (`ctrl+s`), so an applet can bind one without shadowing the plain
- * letter — and the hint bar shows it as the fingers press it.
+ * Keys are resolved by the input state machine in ./input.ts: it names the mode
+ * that owns the keyboard and returns an ACTION. Everything below the handler is
+ * the other half — performing those actions.
  */
-export function keyName(k: { name: string; ctrl?: boolean }): string {
-  return k.ctrl ? `ctrl+${k.name}` : k.name;
-}
-
-
-/** What a keypress does while an overlay owns the keyboard. */
-export type OverlayAction =
-  | { kind: "verb"; verb: string; args: Record<string, unknown> }
-  | { kind: "trap" } // swallowed: the body must not move behind a dialog
-  | { kind: "pass" }; // handled as usual by the applet
-
-/**
- * Resolve a keypress against an open overlay. Confirm/dismiss/keymap fire
- * verbs; everything else is trapped — EXCEPT back on an overlay with no
- * dismiss verb, which passes through so an applet can never strand you in a
- * dialog it forgot to give an exit.
- */
-export function overlayAction(overlay: Overlay, key: string): OverlayAction {
-  if (isSelect(key) && overlay.confirm) return { kind: "verb", verb: overlay.confirm, args: {} };
-  if (isBack(key)) return overlay.dismiss ? { kind: "verb", verb: overlay.dismiss, args: {} } : { kind: "pass" };
-  const b = overlay.keymap?.[key];
-  if (b) return { kind: "verb", ...resolveBinding(b) };
-  return { kind: "trap" };
-}
 
 /**
  * Does this keypress start a launcher filter? `/` always does; so does any
@@ -382,14 +349,22 @@ export async function runHost(startAppletId: string | null) {
     if (def) void select(def, { index: e.index });
   });
 
+  // One keypress: ask the state machine what it means, then do exactly that.
+  // Every mode's precedence lives in ./input.ts, so this half stays a flat list
+  // of effects — no ladder, no early return that quietly claims someone's key.
   renderer.keyInput.on(
     "keypress",
     async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
-      // ctrl+c: exit cleanly on the first press.
+      // ctrl+c: exit on the first press, before anything else — building the
+      // input context calls the applet's own overlay(state), and a view that
+      // throws must never sit between you and the exit. (The state machine also
+      // maps this to `quit`, but the launcher branch below returns before we
+      // reach it, so it has to be handled here too.)
       if (k.ctrl && k.name === "c") return shutdown();
 
-      const n = keyName(k);
-
+      // Launcher: the type-to-filter list has its own mini state machine
+      // (launcherKey), because it edits a footer buffer and indexes the FILTERED
+      // set — neither of which the applet input machine knows about.
       if (current === null) {
         const list = shown();
         const act = launcherKey({ count: list.length, cursor, filter }, k);
@@ -407,151 +382,144 @@ export async function runHost(startAppletId: string | null) {
         return;
       }
 
-      const def = byId.get(current);
-      if (!def) {
+      const def = current ? (byId.get(current) ?? null) : null;
+      if (current && !def) {
+        // The open applet vanished (unloaded plugin) — fall back to the launcher.
         current = null;
         render();
         return;
       }
-      const state = (states[def.id] ?? def.initialState) as AppletState;
-      const nav = def.nav;
-
+      const state = (def ? (states[def.id] ?? def.initialState) : {}) as AppletState;
       // The field with the keyboard, if any. While an overlay is up the stage
       // only looks INSIDE it, so a dialog's own field takes the keys and a
       // field in the body behind it is inert.
-      const field = stage.focusedInput();
+      const ctx: InputContext = {
+        def,
+        state,
+        overlay: def?.overlay?.(state) ?? null,
+        field: stage.focusedInput(),
+        search,
+        draft,
+      };
+      const action = resolveKey(ctx, k);
 
-      // --- Overlay input mode: a floating layer owns the keyboard. Everything
-      // that would move or navigate the body behind it is trapped, so a dialog
-      // can't be scrolled out from under you. The exception is back with no
-      // dismiss verb: it falls through, so an applet can never strand you.
-      const overlay = def.overlay?.(state) ?? null;
-      if (overlay && !field) {
-        const action = overlayAction(overlay, n);
-        if (action.kind === "verb") {
-          await callVerb(def.id, action.verb, action.args).catch(() => {});
+      switch (action.kind) {
+        case "quit":
+          return shutdown();
+
+        case "none":
+          // The state machine had no use for this key. One platform keybind
+          // still applies in normal mode: copy-prompt (#55), matched AFTER the
+          // applet's own keymap so an applet that binds the key keeps it.
+          if (
+            def &&
+            !ctx.overlay &&
+            !ctx.field &&
+            !(search && def.search) &&
+            keyName(k) === COPY_PROMPT_KEY &&
+            !bindingFor(def, COPY_PROMPT_KEY, state)
+          ) {
+            await copyPrompt();
+          }
           return;
-        }
-        if (action.kind === "trap") return;
-      }
 
-      // --- Search input mode: the footer line editor owns the keyboard.
-      if (!overlay && search && def.search) {
-        const { edit: next, action } = applyKey(search, k);
-        if (action === "submit") {
-          const q = search.value;
+        case "launcherMove":
+          cursor = (cursor + action.delta + applets.length) % applets.length;
+          return render();
+
+        case "launcherOpen":
+          current = applets[cursor]?.id ?? null;
+          return render();
+
+        case "verb":
+          await callVerb(def!.id, action.verb, action.args).catch(() => {});
+          return;
+
+        case "searchOpen":
+          search = mkEdit("");
+          stage.searchBar(search, def!.search!.placeholder);
+          return;
+
+        case "searchEdit":
+          search = action.edit;
+          stage.searchBar(search, def!.search!.placeholder);
+          return;
+
+        case "searchSubmit": {
           search = null;
           stage.resetScroll();
-          await callVerb(def.id, def.search.verb, { q }).catch(() => {});
+          await callVerb(def!.id, def!.search!.verb, { q: action.q }).catch(() => {});
           render();
-        } else if (action === "cancel") {
+          return;
+        }
+
+        case "searchCancel":
           search = null;
           render();
-        } else if (action === "edit") {
-          search = next;
-          stage.searchBar(search, def.search.placeholder);
-        }
-        return;
-      }
+          return;
 
-      // --- Text field: an `input` node in the view tree has focus, so every
-      // key is text (even `/` and the arrows) until submit or esc ends the edit
-      // — enter for a one-line field, ctrl+d for a textarea.
-      if (field) {
-        if (draft?.id !== field.id) draft = { id: field.id, edit: mkEdit(field.value) };
-        // A textarea spends enter on a newline, so the editor is told which
-        // shape the field is: same brain, different exit key (ctrl+d).
-        const { edit: next, action } = applyKey(draft.edit, k, { multiline: field.multiline });
-        if (action === "submit") {
-          const value = draft.edit.value;
-          draft = null;
-          stage.setDraft(null);
-          if (field.submit) await callVerb(def.id, field.submit, { id: field.id, value }).catch(() => {});
-          render();
-        } else if (action === "cancel") {
-          draft = null;
-          stage.setDraft(null);
-          // No cancel verb? Then esc means what it always means.
-          if (field.cancel) await callVerb(def.id, field.cancel, { id: field.id }).catch(() => {});
-          else await goBack(def, state);
-          render();
-        } else if (action === "edit") {
-          const changed = next.value !== draft.edit.value;
-          draft = { id: field.id, edit: next };
+        case "fieldEdit": {
+          draft = { id: action.field.id, edit: action.edit };
           stage.setDraft(draft);
           render();
           // Opt-in live editing (filter-as-you-type). Off by default: a verb per
           // keystroke is a round-trip per keystroke.
-          if (changed && field.change) {
-            await callVerb(def.id, field.change, { id: field.id, value: next.value }).catch(() => {});
+          if (action.changed && action.field.change) {
+            await callVerb(def!.id, action.field.change, { id: action.field.id, value: action.edit.value }).catch(() => {});
           }
-        } else if (overlay) {
-          // A key the editor has no use for (tab, say) still belongs to the
-          // dialog around the field — that's how a form moves between fields.
-          const dialogKey = overlayAction(overlay, n);
-          if (dialogKey.kind === "verb") await callVerb(def.id, dialogKey.verb, dialogKey.args).catch(() => {});
+          return;
         }
-        return;
+
+        case "fieldSubmit": {
+          draft = null;
+          stage.setDraft(null);
+          if (action.field.submit) {
+            await callVerb(def!.id, action.field.submit, { id: action.field.id, value: action.value }).catch(() => {});
+          }
+          render();
+          return;
+        }
+
+        case "fieldCancel": {
+          draft = null;
+          stage.setDraft(null);
+          // No cancel verb? Then esc means what it always means.
+          if (action.field.cancel) await callVerb(def!.id, action.field.cancel, { id: action.field.id }).catch(() => {});
+          else await goBack(def!, state);
+          render();
+          return;
+        }
+
+        case "back":
+          // Browser-like: pop an internal view if the applet has one, otherwise
+          // return to the launcher. Either way, reset scroll.
+          await goBack(def!, state);
+          render();
+          return;
+
+        case "move": {
+          // In a cursored list, move the cursor — the stage scrolls to keep the
+          // selection visible (never yanks the whole list). In a plain document
+          // (no selection, e.g. an email body), scroll the viewport directly.
+          const intent = action.delta < 0 ? def!.nav?.up : def!.nav?.down;
+          if (stage.hasFocusTarget() && intent) await callVerb(def!.id, intent).catch(() => {});
+          else stage.scrollBy(action.delta * 2);
+          // Infinite pagination: at the end of the list with more to load, append.
+          const pg = def!.paginate;
+          if (action.delta > 0 && pg && (pg.atEnd?.(state) ?? true) && (pg.hasMore?.(state) ?? false)) {
+            await callVerb(def!.id, pg.more).catch(() => {});
+          }
+          return;
+        }
+
+        case "select":
+          // Drills in (e.g. open an email); starts at the top. A verb may return
+          // {navigate:"<appletId>"} to hyperlink into another applet.
+          await select(def!);
+          return;
       }
-
-      // `/` opens search on a searchable applet.
-      if (def.search && k.sequence === "/") {
-        search = mkEdit("");
-        stage.searchBar(search, def.search.placeholder);
-        return;
-      }
-
-    // The applet's own keymap is matched FIRST, so a `when`-guarded binding can
-    // claim a navigation key on one screen (spotify scrubs with ←/→ while
-    // now-playing) without stealing it everywhere else. Unclaimed keys fall
-    // through to the canonical nav intents below.
-    const claimed = bindingFor(def, n, state);
-    if (claimed) {
-      const { verb, args } = resolveBinding(claimed);
-      await callVerb(def.id, verb, args).catch(() => {});
-      return;
-    }
-
-    // Platform keybind: teach an agent the surface you are looking at. Matched
-    // AFTER the applet's keymap, so an applet that binds the key keeps it.
-    if (n === COPY_PROMPT_KEY) {
-      await copyPrompt();
-      return;
-    }
-
-    // Back is browser-like: pop an internal view if the applet has one,
-    // otherwise return to the launcher. Either way, reset scroll.
-    if (isBack(n)) {
-      await goBack(def, state);
-      render();
-      return;
-    }
-
-    // Up/Down. In a cursored list, move the cursor — the stage scrolls to keep
-    // the selection visible (never yanks the whole list). In a plain document
-    // (no selection, e.g. an email body), scroll the viewport directly.
-    if (isUp(n) || isDown(n)) {
-      const intent = isUp(n) ? nav?.up : nav?.down;
-      if (stage.hasFocusTarget() && intent) {
-        await callVerb(def.id, intent).catch(() => {});
-      } else {
-        stage.scrollBy(isUp(n) ? -2 : 2);
-      }
-      // Infinite pagination: at the end of the list with more to load, append.
-      const pg = def.paginate;
-      if (isDown(n) && pg && (pg.atEnd?.(state) ?? true) && (pg.hasMore?.(state) ?? false)) {
-        await callVerb(def.id, pg.more).catch(() => {});
-      }
-      return;
-    }
-
-    // Select drills in (e.g. open an email); start it at the top. A verb may
-    // return {navigate:"<appletId>"} to hyperlink into another applet.
-    if (isSelect(n) && nav?.select) {
-      await select(def);
-      return;
-    }
-  });
+    },
+  );
 
   render();
 
