@@ -1,6 +1,7 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
+import { filterApplets } from "../core/catalog.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
 import { createStage, COPY_PROMPT_KEY, type Draft } from "./stage.ts";
 import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
@@ -60,6 +61,69 @@ export function overlayAction(overlay: Overlay, key: string): OverlayAction {
   const b = overlay.keymap?.[key];
   if (b) return { kind: "verb", ...resolveBinding(b) };
   return { kind: "trap" };
+}
+
+/**
+ * Does this keypress start a launcher filter? `/` always does; so does any
+ * ordinary printable character — with 15+ apps, typing the name is the fast
+ * path. The vim movement keys are the exception: they keep navigating, so
+ * hjkl never becomes "type h". Press `/` first to filter for one of them.
+ */
+export function startsFilter(k: { name: string; ctrl?: boolean; meta?: boolean; sequence?: string }): boolean {
+  if (k.ctrl || k.meta) return false;
+  if (k.sequence === "/") return true;
+  if (isUp(k.name) || isDown(k.name) || isSelect(k.name) || isBack(k.name)) return false;
+  const s = k.sequence ?? "";
+  // A bare space starts nothing — a query never begins with one, and the key is
+  // too easy to hit by accident to hand the whole screen a mode change.
+  return s.length === 1 && s > " " && s !== "\x7f";
+}
+
+/** What a keypress does on the launcher. */
+export type LauncherAction =
+  | { kind: "move"; cursor: number }
+  | { kind: "open"; index: number }
+  /** The filter changed (`edit: null` closes it); the cursor restarts on it. */
+  | { kind: "filter"; edit: Edit | null; cursor: number }
+  | { kind: "none" };
+
+/**
+ * The launcher's whole keyboard, as one pure step — the same shape as
+ * `overlayAction`, so what a key does on the "pick an app" screen is testable
+ * without a terminal.
+ *
+ * `count` is how many applets are LISTED (post-filter) and `cursor` indexes
+ * those, because that is what is on screen and what enter opens. The filter is
+ * a line editor like any other: while it is open the letters are text, but the
+ * keys it has no use for (↑/↓) still move the selection, so narrowing the list
+ * and picking from it is one gesture rather than two modes.
+ */
+export function launcherKey(
+  view: { count: number; cursor: number; filter: Edit | null },
+  k: { name: string; ctrl?: boolean; meta?: boolean; sequence?: string },
+): LauncherAction {
+  const { count, cursor, filter } = view;
+
+  if (filter) {
+    const { edit: next, action } = applyKey(filter, k);
+    // esc, or backspacing out of an already-empty filter, puts the list back.
+    if (action === "cancel" || (action === "edit" && !next.value && !filter.value)) {
+      return { kind: "filter", edit: null, cursor: 0 };
+    }
+    if (action === "edit") return { kind: "filter", edit: next, cursor: 0 };
+    if (action === "submit") return count ? { kind: "open", index: cursor } : { kind: "none" };
+    // "ignore" — the editor doesn't want it, so it means what it always means.
+  } else if (startsFilter(k)) {
+    // `/` opens an empty filter; any other printable key opens one that already
+    // holds it, so the first letter you type is never eaten.
+    return { kind: "filter", edit: mkEdit(k.sequence === "/" ? "" : (k.sequence ?? "")), cursor: 0 };
+  }
+
+  if (!count) return { kind: "none" };
+  if (isUp(k.name)) return { kind: "move", cursor: (cursor - 1 + count) % count };
+  if (isDown(k.name)) return { kind: "move", cursor: (cursor + 1) % count };
+  if (isSelect(k.name)) return { kind: "open", index: cursor };
+  return { kind: "none" };
 }
 
 /** Stream the daemon's SSE, invoking onState for every state change. */
@@ -150,7 +214,7 @@ export async function runHost(startAppletId: string | null) {
 
   // null = launcher; otherwise the applet id currently open
   let current: string | null = startAppletId;
-  let cursor = 0; // launcher selection
+  let cursor = 0; // launcher selection, indexing the FILTERED list
 
   // Search input mode (first-class): `/` opens a footer line editor.
   // Text fields in the view tree get the same treatment, one level down: while
@@ -159,14 +223,44 @@ export async function runHost(startAppletId: string | null) {
   let search: Edit | null = null;
   let draft: Draft | null = null;
 
+  // The launcher's own line editor — the same one, one screen up. `/` (or just
+  // typing) opens it and the list narrows as you type, which is the fast path
+  // once there are more apps than fit on screen.
+  let filter: Edit | null = null;
+  /** The applets the launcher is showing right now. */
+  const shown = () => filterApplets(applets, filter?.value ?? "");
+
+  /**
+   * Open an applet from the launcher. The filter has done its job, so it goes;
+   * the cursor moves to that app in the FULL list, so coming back lands you
+   * where you left rather than at the top.
+   */
+  function openFromLauncher(id: string) {
+    filter = null;
+    cursor = Math.max(0, applets.findIndex((a) => a.id === id));
+    current = id;
+    stage.resetScroll();
+  }
+
   let filling = false;
   function render() {
     if (!alive) return; // never touch renderables after teardown
     const def = current ? byId.get(current) : null;
     if (!def) {
       current = null;
-      search = null; // no applet, no line editor
-      stage.renderLauncher(applets, cursor);
+      search = null; // no applet, no applet-level line editor
+      const list = shown();
+      // A filter that just narrowed can leave the cursor past the end.
+      cursor = list.length ? Math.min(cursor, list.length - 1) : 0;
+      stage.renderLauncher(list, cursor, { query: filter?.value ?? "", total: applets.length });
+      // Same rule as an applet's search line: while the filter is open it owns
+      // the footer, so a background re-render can't clobber what you typed.
+      if (filter) {
+        stage.searchBar(filter, "type to narrow the list", {
+          label: "filter",
+          hint: "enter open · esc clear",
+        });
+      }
     } else {
       const state = (states[def.id] ?? def.initialState) as AppletState;
       stage.renderApplet(def, state);
@@ -277,9 +371,10 @@ export async function runHost(startAppletId: string | null) {
       render();
     }
     if (current === null) {
-      cursor = e.index;
-      current = applets[cursor]?.id ?? null;
-      stage.resetScroll();
+      // The click carries the row's index into what is ON SCREEN, which with a
+      // filter open is not the full list.
+      const pick = shown()[e.index];
+      if (pick) openFromLauncher(pick.id);
       render();
       return;
     }
@@ -296,13 +391,18 @@ export async function runHost(startAppletId: string | null) {
       const n = keyName(k);
 
       if (current === null) {
-        // The launcher's surface IS the applet list, so copy-prompt here means
-        // the whole set.
-        if (n === COPY_PROMPT_KEY) return void copyPrompt();
-        // launcher navigation
-        if (isUp(n)) cursor = (cursor - 1 + applets.length) % applets.length;
-        else if (isDown(n)) cursor = (cursor + 1) % applets.length;
-        else if (isSelect(n)) current = applets[cursor]?.id ?? null;
+        const list = shown();
+        const act = launcherKey({ count: list.length, cursor, filter }, k);
+        if (act.kind === "filter") {
+          filter = act.edit;
+          cursor = act.cursor;
+          stage.resetScroll(); // a new set of matches starts at the top
+        } else if (act.kind === "move") {
+          cursor = act.cursor;
+        } else if (act.kind === "open") {
+          const pick = list[act.index];
+          if (pick) openFromLauncher(pick.id);
+        }
         render();
         return;
       }

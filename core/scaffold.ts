@@ -83,6 +83,10 @@ export default defineApplet<${titleize(id).replace(/ /g, "")}State>({
   id: "${id}",
   title: "${title}",
   summary: "TODO: one line for the launcher.",
+  // How you look in the launcher: one glyph (single cell — no emoji) and the
+  // color your row wears. Both optional; both overridable in the config.
+  icon: "◆",
+  tint: theme().accent,
   labels: [],
   initialState: { count: 0 },
 

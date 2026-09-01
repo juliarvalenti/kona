@@ -297,6 +297,8 @@ export default defineApplet<MyceliumState>({
   id: "mycelium",
   title: "Mycelium",
   summary: "The coordination layer — rooms, agents, and what you say to them.",
+  icon: "✳",
+  tint: ACCENT,
   labels: ["agents", "chat"],
   requires: ["a backend: MYCELIUM_URL, the `mycelium` CLI, or ~/.mycelium/rooms"],
   // `kona mycelium ship-kona` opens straight into that room.

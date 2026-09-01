@@ -164,6 +164,8 @@ export default defineApplet<DashState>({
   id: "dash",
   title: "Dashboard",
   summary: "Live cockpit — now playing, timer, mail, GitHub. Leave it open.",
+  icon: "▦",
+  tint: "#7dcfff", // cockpit cyan
   labels: ["overview"],
   notifications: {
     "github.new": { summary: "a PR or issue involving you shows up", default: true },

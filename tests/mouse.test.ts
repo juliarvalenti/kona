@@ -132,19 +132,22 @@ test("a select verb given an index selects that row before acting", async () => 
   expect(result).toEqual({ navigate: "spotify" });
 });
 
-test("launcher rows are clickable", async () => {
-  // Tall enough to render the whole launcher list (it clicks the last row).
-  const { applets, stage, mockMouse, seen, lineOf, renderOnce, done } = await mount(60, 40);
-  stage.renderLauncher(applets, 0);
+test("launcher rows are clickable — at the cursor's scrolled position", async () => {
+  // Deliberately SHORTER than the launcher needs: with the cursor on the last
+  // applet the list has scrolled to it, and the click still has to resolve to
+  // that row rather than to whatever used to occupy the line.
+  const { applets, stage, mockMouse, seen, lineOf, renderOnce, done } = await mount(60, 20);
+  const last = applets.length - 1;
+  stage.renderLauncher(applets, last);
   await renderOnce();
 
-  const last = applets[applets.length - 1]!;
-  const y = lineOf(last.title);
+  const y = lineOf(applets[last]!.title);
   expect(y).toBeGreaterThan(0);
+  expect(stage.scrollTop()).toBeGreaterThan(0); // it really did scroll
 
   await mockMouse.click(6, y);
   await renderOnce();
 
-  expect(seen.filter((e) => e.kind === "click").at(-1)!.index).toBe(applets.length - 1);
+  expect(seen.filter((e) => e.kind === "click").at(-1)!.index).toBe(last);
   done();
 });

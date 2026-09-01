@@ -53,3 +53,20 @@ export function catalogLines(packages: AppletPackage[]): string[] {
     return `${p.def.id.padEnd(width)}  ${p.def.summary ?? ""}${tag}`;
   });
 }
+
+/**
+ * The launcher filter: which applets match what you have typed. Matches title,
+ * id and summary so "mail" finds Email and "cron" finds Workflows, and ignores
+ * case and surrounding space. An empty query matches everything — the launcher
+ * is the same code path filtered or not.
+ */
+export function filterApplets<T extends { id: string; title: string; summary?: string }>(
+  applets: T[],
+  query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return applets;
+  return applets.filter((a) =>
+    `${a.title} ${a.id} ${a.summary ?? ""}`.toLowerCase().includes(q),
+  );
+}

@@ -429,6 +429,8 @@ export default defineApplet<TimerState>({
   id: "timer",
   title: "Timer",
   summary: "Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.",
+  icon: "⏱",
+  tint: "#ff5c57", // countdown red
   labels: ["time", "focus"],
   // `kona timer 5m`, `kona timer pomodoro`, and the configured preset — the CLI
   // learns all three from here rather than special-casing this applet.

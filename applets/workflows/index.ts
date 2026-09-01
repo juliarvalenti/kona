@@ -321,6 +321,8 @@ export default defineApplet<WorkflowsState>({
   id: "workflows",
   title: "Workflows",
   summary: "Named sequences of applet verbs — run them by hand, or on a cron.",
+  icon: "⇢",
+  tint: theme().alt,
   cli: {
     usage: "kona workflows <name>",
     // `kona workflows morning` opens straight into that workflow's steps.

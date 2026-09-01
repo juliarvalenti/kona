@@ -171,6 +171,8 @@ export default defineApplet<SpotifyState>({
   id: "spotify",
   title: "Spotify",
   summary: "Now playing + transport control.",
+  icon: "♫",
+  tint: BRAND,
   labels: ["music", "network"],
   requires: ["a Spotify account: `kona login spotify`"],
   auth: { spotify: () => import("../../server/spotify.ts") },

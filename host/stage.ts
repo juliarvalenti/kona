@@ -12,9 +12,9 @@ import {
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay, type ViewNode, type LayoutOpts, type InputNode } from "../sdk/index.ts";
+import { bindingFor, type AppletDef, type AppletState, type BigFont, type KeyBinding, type Overlay, type ViewNode, type LayoutOpts, type InputNode } from "../sdk/index.ts";
 import { type Edit, edit as mkEdit, frameOf, windowOf } from "./editor.ts";
-import { theme, appletAccent, type Theme } from "../core/config.ts";
+import { theme, appletAccent, appletString, type Theme } from "../core/config.ts";
 
 /**
  * The stage: everything that turns applet view-nodes into OpenTUI renderables —
@@ -135,6 +135,21 @@ function keymapHints(def: AppletDef, state: AppletState): Hint[] {
 }
 
 /**
+ * How many lines each ASCII font draws. The focus math below counts lines, so a
+ * hero header has to be counted at its real height — a `tiny` wordmark billed
+ * as six lines would push every row below it off by four.
+ */
+const FONT_LINES: Record<BigFont, number> = {
+  block: 6,
+  tiny: 2,
+  slick: 6,
+  shade: 8,
+  huge: 11,
+  grid: 6,
+  pallet: 6,
+};
+
+/**
  * Line offset of the focused node (the selected list row), so the host can
  * scroll it into view. Approximate heights in lines — good enough because focus
  * only lives on single-line rows in a column.
@@ -162,7 +177,7 @@ function focusLineOf(nodes: ViewNode[]): number | null {
         line += 1;
         break;
       case "big":
-        line += 6;
+        line += FONT_LINES[n.font ?? "block"];
         break;
       case "row":
         for (const c of n.children) if (isFocused(c)) found = line;
@@ -205,11 +220,23 @@ export interface Draft {
   edit: Edit;
 }
 
+/**
+ * What the launcher is showing beyond the list itself. `applets` is already
+ * FILTERED (the host owns the query and the cursor indexes what it passes), so
+ * the stage only needs to know what the filter was to say so on screen.
+ */
+export interface LauncherOpts {
+  /** The live filter, if one is open. */
+  query?: string;
+  /** How many applets exist in total, when `applets` is a filtered subset. */
+  total?: number;
+}
+
 export interface Stage {
   renderApplet(def: AppletDef, state: AppletState): void;
-  renderLauncher(applets: AppletDef[], cursor: number): void;
+  renderLauncher(applets: AppletDef[], cursor: number, opts?: LauncherOpts): void;
   footerNote(text: string, color?: string): void;
-  searchBar(buf: Edit, placeholder?: string): void;
+  searchBar(buf: Edit, placeholder?: string, opts?: { label?: string; hint?: string }): void;
   /** The `input` node currently holding the keyboard, if any. */
   focusedInput(): InputNode | null;
   /** In-flight keystrokes for a focused field; the host owns them. */
@@ -233,6 +260,7 @@ export function createStage(renderer: CliRenderer): Stage {
     fieldFocus: FIELD_FOCUS,
     caret: CARET,
     caretFg: CARET_FG,
+    bg: ON_ACCENT,
     panel: PANEL,
   } = palette();
 
@@ -402,7 +430,19 @@ export function createStage(renderer: CliRenderer): Stage {
   // and a background state push mid-word can't clobber what you typed.
   let focused: InputNode | null = null;
   let draft: Draft | null = null;
-  function setFrame(title: string, titleColor: string, nodes: ViewNode[], overlay?: Overlay | null) {
+  /**
+   * Rebuild the frame. `peek` is how many lines BELOW the focused row must stay
+   * on screen with it — a list whose rows are one line needs none, but the
+   * launcher's rows carry a summary underneath, and following the title alone
+   * would leave that summary hanging off the bottom edge.
+   */
+  function setFrame(
+    title: string,
+    titleColor: string,
+    nodes: ViewNode[],
+    overlay?: Overlay | null,
+    peek = 0,
+  ) {
     frame.title = ` ${title} `;
     frame.titleAlignment = "center";
     frame.borderColor = titleColor;
@@ -421,6 +461,15 @@ export function createStage(renderer: CliRenderer): Stage {
     const gen = seq++;
     nodes.forEach((node, i) => scroll.content.add(nodeToRenderable(node, `n${gen}-${i}`)));
 
+    // Measure the children we just added BEFORE touching scrollTop. Layout is
+    // lazy: until it runs, the ScrollBox still reports the PREVIOUS frame's
+    // content height, and the scrollTop setter clamps against that — so a
+    // freshly built list ignored its own scroll-to-follow and only caught up on
+    // the next render (with an empty list, on nothing at all). Laying out the
+    // root and reading the content's new size back makes the follow immediate.
+    renderer.root.calculateLayout();
+    scroll.content.updateFromLayout();
+
     // Scroll-to-follow-selection: only move the viewport when the focused row
     // would be off-screen — a list that fits never scrolls.
     const focusLine = focusLineOf(nodes);
@@ -429,7 +478,7 @@ export function createStage(renderer: CliRenderer): Stage {
     if (focusLine !== null) {
       const vh = innerHeight();
       if (focusLine < top) top = focusLine;
-      else if (focusLine > top + vh - 1) top = focusLine - vh + 1;
+      else if (focusLine + peek > top + vh - 1) top = focusLine + peek - vh + 1;
     }
     scroll.scrollTop = Math.max(0, top);
     setOverlay(overlay ?? null, gen);
@@ -692,17 +741,55 @@ export function createStage(renderer: CliRenderer): Stage {
       hints.push({ key: "ctrl+c", label: "quit" });
       setFooter(hints);
     },
-    renderLauncher(applets, cursor) {
-      const nodes: ViewNode[] = [{ kind: "text", text: "pick an app", dim: true }, { kind: "spacer" }];
+    renderLauncher(applets, cursor, opts = {}) {
+      const W = innerWidth();
+      const total = opts.total ?? applets.length;
+      const q = opts.query ?? "";
+      const clip = (s: string) => (s.length > W ? s.slice(0, W - 1) + "…" : s).padEnd(W);
+
+      // The wordmark. A tall terminal gets the full block letters; a short one
+      // gets the two-line cut, because a header must never eat the list it
+      // introduces. Either way it scrolls away with the content above the fold.
+      const nodes: ViewNode[] = [
+        { kind: "big", text: "kona", color: ACCENT, font: innerHeight() >= 24 ? "block" : "tiny" },
+        {
+          kind: "text",
+          text: q
+            ? `${applets.length}/${total} matching “${q}”`
+            : `${total} app${total === 1 ? "" : "s"} · bimodal terminal applets`,
+          dim: true,
+        },
+        { kind: "spacer" },
+      ];
+
+      // One entry = an accented title row (glyph + name) with its summary under
+      // it, dim. The selected row takes the full-width accent bar every list in
+      // kona uses, and carries `focus` so setFrame scrolls it into view — which
+      // is what makes the launcher survive an applet count taller than the
+      // terminal.
       applets.forEach((a, i) => {
         const sel = i === cursor;
-        nodes.push({ kind: "text", text: `${sel ? "▸" : " "} ${a.title}`, color: sel ? ACCENT : FG, index: i });
+        const tint = appletAccent(a.id, a.tint ?? ACCENT);
+        const icon = appletString(a.id, "icon", a.icon ?? "•");
+        const title = clip(` ${sel ? "▸" : " "} ${icon}  ${a.title}`);
+        nodes.push(
+          sel
+            ? { kind: "text", text: title, color: ON_ACCENT, bg: tint, focus: true, index: i }
+            : { kind: "text", text: title, color: tint, index: i },
+        );
+        nodes.push({ kind: "text", text: clip(`      ${a.summary ?? ""}`), dim: true, index: i });
       });
-      setFrame("kona", ACCENT, nodes);
+
+      if (!applets.length) {
+        nodes.push({ kind: "text", text: `  nothing matches “${q}” — esc clears the filter`, dim: true });
+      }
+
+      // peek 1: the selected row's summary line rides on screen with it.
+      setFrame("kona", ACCENT, nodes, null, 1);
       setFooter([
-        { key: "↑/↓", label: "move" },
+        { key: "↑↓", label: "move" },
         { key: "enter", label: "open" },
-        { key: COPY_PROMPT_KEY, label: COPY_PROMPT_LABEL },
+        { key: "/", label: "filter" },
         { key: "ctrl+c", label: "quit" },
       ]);
     },
@@ -710,10 +797,10 @@ export function createStage(renderer: CliRenderer): Stage {
       footer.content = new StyledText([fg(color)(text)]);
       renderer.requestRender();
     },
-    searchBar(buf, placeholder) {
+    searchBar(buf, placeholder, opts = {}) {
       // The same caret-in-the-text treatment as an `input` node, so the footer
       // editor and a field in the view tree feel like one widget.
-      const chunks: TextChunk[] = [fg(ACCENT)(bold("search "))];
+      const chunks: TextChunk[] = [fg(ACCENT)(bold(`${opts.label ?? "search"} `))];
       if (buf.value.length === 0) {
         chunks.push(fg(CARET)("█"), fg(DIM)(placeholder ?? ""));
       } else {
@@ -724,7 +811,7 @@ export function createStage(renderer: CliRenderer): Stage {
           fg(FG)(buf.value.slice(buf.cursor + 1)),
         );
       }
-      chunks.push(fg(DIM)("    enter apply · esc cancel"));
+      chunks.push(fg(DIM)(`    ${opts.hint ?? "enter apply · esc cancel"}`));
       footer.content = new StyledText(chunks.filter((c) => c.text.length > 0));
       renderer.requestRender();
     },

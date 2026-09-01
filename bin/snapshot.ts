@@ -8,6 +8,7 @@ import { renderApplet, renderLauncher } from "../sdk/testing.ts";
  *   bun run bin/snapshot.ts storybook
  *   bun run bin/snapshot.ts timer '{"timers":[],"cursor":0}'
  *   bun run bin/snapshot.ts --launcher
+ *   bun run bin/snapshot.ts --launcher '{"cursor":12,"query":"mail"}'
  *
  * The rendering itself lives in `sdk/testing.ts`, which is also what an
  * applet's own snapshot fixtures and tests use — one code path, so what you see
@@ -23,9 +24,14 @@ export async function snapshot(
   width = w,
   height = h,
 ): Promise<string> {
-  return target === "--launcher" || target === "launcher"
-    ? renderLauncher(undefined, 0, width, height)
-    : renderApplet(target, stateOverride, width, height);
+  if (target === "--launcher" || target === "launcher") {
+    // The launcher has no state of its own; the JSON argument drives the two
+    // things you'd want to SEE — where the cursor is (does it scroll?) and what
+    // a filter narrows the list to.
+    const { cursor, query } = (stateOverride ?? {}) as { cursor?: number; query?: string };
+    return renderLauncher(undefined, cursor ?? 0, width, height, query ?? "");
+  }
+  return renderApplet(target, stateOverride, width, height);
 }
 
 if (import.meta.main) {

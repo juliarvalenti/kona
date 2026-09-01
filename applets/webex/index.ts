@@ -212,6 +212,8 @@ export default defineApplet<WebexState>({
   id: "webex",
   title: "Webex",
   summary: "Spaces, their messages, and a verb that posts back.",
+  icon: "◎",
+  tint: BRAND,
   labels: ["chat", "network"],
   requires: ["a Webex token or OAuth client: `kona login webex`"],
   auth: { webex: () => import("../../server/webex.ts") },

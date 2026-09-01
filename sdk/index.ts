@@ -339,6 +339,20 @@ export interface AppletDef<S extends object = AppletState> {
   title: string;
   /** One-line description for the "pick an app" launcher. */
   summary?: string;
+  /**
+   * One glyph that IS this applet in the launcher. Keep it a single cell —
+   * emoji are double-width and corrupt the row. `[applets.<id>].icon` in the
+   * config overrides it; without either you get a neutral bullet.
+   */
+  icon?: string;
+  /**
+   * The applet's brand color, used wherever it is listed rather than open (the
+   * launcher row, its selected bar). Static on purpose: `accent(state)` is the
+   * LIVE frame tint and may say something about right now (the timer goes red
+   * as it runs out), which is not an identity. `[applets.<id>].accent`
+   * overrides it.
+   */
+  tint?: Color;
   /** Free-form tags for the catalog (`kona docs`), e.g. ["network", "mail"]. */
   labels?: string[];
   /** What the applet needs to be useful — an account, a config file, a binary. */

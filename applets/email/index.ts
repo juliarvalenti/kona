@@ -573,6 +573,8 @@ export default defineApplet<EmailState>({
   id: "email",
   title: "Email",
   summary: "Read, write, reply and file mail from Gmail and Outlook in one list.",
+  icon: "✉",
+  tint: "#f7768e", // envelope rose
   labels: ["mail", "network"],
   requires: ["a mailbox: `kona login gmail` or `kona login outlook`"],
   // Both providers are this applet's business, so `kona login gmail` is wired

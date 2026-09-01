@@ -84,6 +84,8 @@ export default defineApplet<RssState>({
   id: "rss",
   title: "RSS",
   summary: "Your feeds as one river. Agents can search and open items too.",
+  icon: "≋",
+  tint: ACCENT,
   labels: ["news", "network"],
   requires: ["a feed list: ~/.config/kona/rss.toml"],
   ephemeral: true, // the river is re-fetched on boot — nothing to persist

@@ -54,6 +54,8 @@ export default defineApplet<StoryState>({
   id: "storybook",
   title: "Storybook",
   summary: "Live gallery of kona components.",
+  icon: "✦",
+  tint: "#ff79c6", // gallery pink
   labels: ["dev"],
   initialState: { frame: 0, name: "", editing: false, confirm: false, note: null, noteUntil: 0 },
 

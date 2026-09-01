@@ -141,6 +141,8 @@ export default defineApplet<SysState>({
   id: "sys",
   title: "System",
   summary: "Live CPU, memory, disk, and battery gauges.",
+  icon: "◍",
+  tint: GREEN,
   labels: ["system"],
   // Every field is a reading of *now* — persisting it would only paint stale
   // bars for the first two seconds after a daemon restart.
