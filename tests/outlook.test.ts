@@ -1,16 +1,25 @@
-import { test, expect } from "bun:test";
+import { test, expect, afterAll, beforeEach } from "bun:test";
 import {
   applyFlags,
   fromName,
+  graphMessage,
   graphQuery,
   groupConversations,
   messageBody,
   odataQuote,
+  recipients,
+  toRecipients,
+  toStoredDraft,
   toThread,
+  OutlookProvider,
   type GraphMessage,
 } from "../server/outlook.ts";
 
-/** Pure Microsoft Graph shaping — no network, no auth. */
+/**
+ * Two layers: the pure Graph shaping (no network, no auth), and the write half
+ * against a fixture Graph on localhost — where the interesting part is that
+ * kona's rows are conversations and Graph's writes are per message.
+ */
 
 function msg(over: Partial<GraphMessage> = {}): GraphMessage {
   return {
@@ -110,4 +119,182 @@ test("graphQuery keeps flags client-side when it must use $search", () => {
 test("odataQuote escapes the quote that would break a $filter", () => {
   expect(odataQuote("AAQkAD")).toBe("'AAQkAD'");
   expect(odataQuote("o'brien")).toBe("'o''brien'");
+});
+
+// --- the write side, against a fixture Graph --------------------------------
+
+interface Call {
+  method: string;
+  path: string;
+  query: string;
+  body: any;
+}
+let calls: Call[] = [];
+
+/** Two messages in one conversation, which is what makes the fan-out visible. */
+const CONVERSATION: GraphMessage[] = [
+  { id: "m1", conversationId: "c1", subject: "standup", categories: ["blue"] },
+  { id: "m2", conversationId: "c1", subject: "standup" },
+];
+
+const server = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const url = new URL(req.url);
+    const body = req.method === "GET" ? null : await req.json().catch(() => null);
+    calls.push({ method: req.method, path: url.pathname, query: url.searchParams.get("$filter") ?? "", body });
+    const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { "content-type": "application/json" } });
+
+    if (url.pathname === "/me/messages" && req.method === "GET") return json({ value: CONVERSATION });
+    if (url.pathname === "/me/mailFolders/drafts/messages") {
+      return json({
+        value: [
+          {
+            id: "d1",
+            subject: "quarterly review",
+            toRecipients: [{ emailAddress: { name: "Grace", address: "grace@y.com" } }],
+            body: { contentType: "Text", content: "half a thought" },
+            lastModifiedDateTime: "2026-09-01T00:00:00Z",
+          },
+        ],
+      });
+    }
+    if (url.pathname.endsWith("/createReply")) return json({ id: "reply-1" });
+    if (url.pathname === "/me/messages" && req.method === "POST") return json({ id: "d-new" });
+    return new Response("", { status: 202 }); // send / move / patch answer empty
+  },
+});
+
+process.env.KONA_GRAPH_API = `http://localhost:${server.port}`;
+process.env.KONA_MICROSOFT_TOKEN = "test-token";
+
+beforeEach(() => {
+  calls = [];
+});
+
+afterAll(() => {
+  server.stop(true);
+  delete process.env.KONA_GRAPH_API;
+  delete process.env.KONA_MICROSOFT_TOKEN;
+});
+
+const outlook = () => new OutlookProvider("grace@work.com");
+
+test("recipients round-trip between Graph's shape and kona's strings", () => {
+  expect(recipients([{ emailAddress: { name: "Ada Lovelace", address: "ada@x.com" } }])).toEqual([
+    "Ada Lovelace <ada@x.com>",
+  ]);
+  expect(recipients([{ emailAddress: { address: "bare@x.com" } }])).toEqual(["bare@x.com"]);
+  expect(recipients(undefined)).toEqual([]);
+  expect(toRecipients(["Ada Lovelace <ada@x.com>", "grace@y.com, bob@z.com", "junk"])).toEqual([
+    { emailAddress: { address: "ada@x.com" } },
+    { emailAddress: { address: "grace@y.com" } },
+    { emailAddress: { address: "bob@z.com" } },
+  ]);
+});
+
+test("graphMessage sends plain text, and omits an empty cc", () => {
+  expect(graphMessage({ to: ["ada@x.com"], subject: "hi", body: "yo" })).toEqual({
+    subject: "hi",
+    body: { contentType: "Text", content: "yo" },
+    toRecipients: [{ emailAddress: { address: "ada@x.com" } }],
+  });
+  expect(graphMessage({ to: [], cc: ["grace@y.com"], subject: "", body: "" }).ccRecipients).toEqual([
+    { emailAddress: { address: "grace@y.com" } },
+  ]);
+});
+
+test("toStoredDraft reopens a Graph draft in the composer's shape", () => {
+  expect(
+    toStoredDraft({
+      id: "d1",
+      subject: "later",
+      toRecipients: [{ emailAddress: { address: "ada@x.com" } }],
+      body: { contentType: "Text", content: "half a thought" },
+      lastModifiedDateTime: "2026-09-01T00:00:00Z",
+    }),
+  ).toEqual({
+    id: "d1",
+    to: ["ada@x.com"],
+    cc: [],
+    subject: "later",
+    body: "half a thought",
+    ts: Date.parse("2026-09-01T00:00:00Z"),
+  });
+});
+
+test("a new message goes through sendMail", async () => {
+  await outlook().send({ to: ["ada@x.com"], subject: "hi", body: "yo" });
+  expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /me/sendMail"]);
+  expect(calls[0]!.body.message.toRecipients).toEqual([{ emailAddress: { address: "ada@x.com" } }]);
+  expect(calls[0]!.body.saveToSentItems).toBe(true);
+});
+
+test("a reply is created on the message, rewritten, then sent — so it stays in the conversation", async () => {
+  await outlook().send({
+    to: ["ada@x.com"],
+    cc: ["grace@y.com"],
+    subject: "Re: standup",
+    body: "on it",
+    inReplyTo: { id: "m2" },
+  });
+  expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+    "POST /me/messages/m2/createReply",
+    "PATCH /me/messages/reply-1",
+    "POST /me/messages/reply-1/send",
+  ]);
+  expect(calls[1]!.body).toMatchObject({
+    subject: "Re: standup",
+    body: { contentType: "Text", content: "on it" },
+  });
+});
+
+test("drafts are created, updated in place, listed and sent", async () => {
+  expect(await outlook().saveDraft({ to: ["ada@x.com"], subject: "later", body: "" })).toEqual({ id: "d-new" });
+  expect(calls[0]).toMatchObject({ method: "POST", path: "/me/messages" });
+  expect(calls[0]!.body.isDraft).toBe(true);
+
+  calls = [];
+  expect(await outlook().saveDraft({ to: [], subject: "later", body: "", draftId: "d1" })).toEqual({ id: "d1" });
+  expect(calls[0]).toMatchObject({ method: "PATCH", path: "/me/messages/d1" });
+
+  calls = [];
+  await outlook().sendDraft("d1");
+  expect(calls[0]).toMatchObject({ method: "POST", path: "/me/messages/d1/send" });
+
+  const drafts = await outlook().listDrafts(20);
+  expect(drafts.map((d) => [d.subject, d.to])).toEqual([["quarterly review", ["Grace <grace@y.com>"]]]);
+});
+
+test("read, archive and trash fan out over every message in the conversation", async () => {
+  await outlook().markRead("c1", true);
+  expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+    "GET /me/messages", // which messages are in c1?
+    "PATCH /me/messages/m1",
+    "PATCH /me/messages/m2",
+  ]);
+  expect(calls[0]!.query).toBe("conversationId eq 'c1'");
+  expect(calls[1]!.body).toEqual({ isRead: true });
+
+  calls = [];
+  await outlook().archive("c1");
+  expect(calls.slice(1).map((c) => c.body)).toEqual([{ destinationId: "archive" }, { destinationId: "archive" }]);
+
+  calls = [];
+  await outlook().trash("c1");
+  expect(calls.slice(1).map((c) => c.body)).toEqual([
+    { destinationId: "deleteditems" },
+    { destinationId: "deleteditems" },
+  ]);
+});
+
+test("a label is a category, appended to what the message already has", async () => {
+  await outlook().label("c1", "todo");
+  expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+    "GET /me/messages",
+    "PATCH /me/messages/m1",
+    "PATCH /me/messages/m2",
+  ]);
+  expect(calls[1]!.body).toEqual({ categories: ["blue", "todo"] });
+  expect(calls[2]!.body).toEqual({ categories: ["todo"] });
 });

@@ -27,7 +27,17 @@ function resolveBinding(b: KeyBinding): { verb: string; args: Record<string, unk
 const isUp = (n: string) => n === "up" || n === "k";
 const isDown = (n: string) => n === "down" || n === "j";
 const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
+
 const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
+/**
+ * The name a keypress goes into a keymap under. A ctrl-held key is its own
+ * binding (`ctrl+s`), so an applet can bind one without shadowing the plain
+ * letter — and the hint bar shows it as the fingers press it.
+ */
+export function keyName(k: { name: string; ctrl?: boolean }): string {
+  return k.ctrl ? `ctrl+${k.name}` : k.name;
+}
+
 
 /** What a keypress does while an overlay owns the keyboard. */
 export type OverlayAction =
@@ -255,10 +265,10 @@ export async function runHost(startAppletId: string | null) {
   renderer.keyInput.on(
     "keypress",
     async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
-      const n = k.name;
-
       // ctrl+c: exit cleanly on the first press.
-      if (k.ctrl && n === "c") return shutdown();
+      if (k.ctrl && k.name === "c") return shutdown();
+
+      const n = keyName(k);
 
       if (current === null) {
         // launcher navigation

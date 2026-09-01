@@ -37,11 +37,16 @@ export function redirectUri(): string {
   return `http://127.0.0.1:${redirectPort()}/callback`;
 }
 
-// Mail.Send joins this when compose (#11) lands; offline_access is what buys
-// the refresh token, User.Read names the mailbox we just connected.
-const SCOPE = ["offline_access", "User.Read", "Mail.Read"].join(" ");
+// Mail.ReadWrite covers reading, the isRead flag, moving to Archive/Deleted
+// Items, categories and drafts; Mail.Send is the separate permission Graph
+// insists on for actually sending. offline_access buys the refresh token,
+// User.Read names the mailbox we just connected.
+const SCOPE = ["offline_access", "User.Read", "Mail.ReadWrite", "Mail.Send"].join(" ");
 
 export const GRAPH = "https://graph.microsoft.com/v1.0";
+
+/** The Graph host; an env override lets tests drive a fixture server. */
+export const graphBase = () => process.env.KONA_GRAPH_API ?? GRAPH;
 
 function tenant(): string {
   return process.env.KONA_MICROSOFT_TENANT || cachedTenant || "common";
@@ -99,7 +104,7 @@ interface TokenResponse {
 /** Ask Graph which mailbox a fresh access token belongs to. */
 async function whoami(accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch(`${GRAPH}/me?$select=mail,userPrincipalName`, {
+    const res = await fetch(`${graphBase()}/me?$select=mail,userPrincipalName`, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -121,7 +126,8 @@ export async function login(): Promise<string> {
     throw new Error(
       `No Microsoft client id. Register an app at https://portal.azure.com (App registrations),\n` +
         `add the redirect URI  ${redirectUri()}  under "Mobile and desktop applications",\n` +
-        `grant the delegated Microsoft Graph permissions Mail.Read + offline_access + User.Read,\n` +
+        `grant the delegated Microsoft Graph permissions Mail.ReadWrite + Mail.Send +\n` +
+        `offline_access + User.Read,\n` +
         `then save {"client_id":"..."} to ${CONFIG_FILE} (or set KONA_MICROSOFT_CLIENT_ID).`,
     );
   }
@@ -217,6 +223,8 @@ export async function login(): Promise<string> {
 const cached = new Map<string, { token: string; exp: number }>();
 
 async function accessToken(account: string): Promise<string> {
+  // A token straight from the environment (tests, scripts against a fixture).
+  if (process.env.KONA_MICROSOFT_TOKEN) return process.env.KONA_MICROSOFT_TOKEN;
   const hit = cached.get(account);
   if (hit && hit.exp > Date.now() + 30_000) return hit.token;
   const id = await clientId();
@@ -260,9 +268,35 @@ export async function graph(
   params?: Record<string, string>,
 ): Promise<Record<string, unknown> & any> {
   const token = await accessToken(account);
-  const base = path.startsWith("http") ? path : `${GRAPH}${path}`;
+  const base = path.startsWith("http") ? path : `${graphBase()}${path}`;
   const url = params ? `${base}${base.includes("?") ? "&" : "?"}${new URLSearchParams(params)}` : base;
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`graph ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+/**
+ * The same, for the calls that change something: send, reply, move, patch. Most
+ * Graph mail actions answer 202/204 with no body, so an empty response comes
+ * back as `{}` rather than blowing up in JSON.parse.
+ */
+export async function graphWrite(
+  account: string,
+  method: "POST" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<Record<string, unknown> & any> {
+  const token = await accessToken(account);
+  const url = path.startsWith("http") ? path : `${graphBase()}${path}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!res.ok) throw new Error(`graph ${res.status}: ${await res.text()}`);
+  const raw = await res.text();
+  return raw ? JSON.parse(raw) : {};
 }

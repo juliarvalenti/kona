@@ -35,9 +35,22 @@ export interface MailThread {
 }
 
 export interface MailMessage {
+  /** Display name, for the reader ("Ada Lovelace"). */
   from: string;
+  /** The bare mailbox behind that name — what a reply is addressed to. */
+  fromAddress?: string;
+  /** Reply-To, when the sender set one; it wins over `fromAddress`. */
+  replyTo?: string;
+  /** The other recipients, so reply-all can keep them. */
+  to?: string[];
+  cc?: string[];
   date: string;
   body: string;
+  /** Provider message id — Graph replies are addressed to a message, not a thread. */
+  id?: string;
+  /** RFC Message-ID, for the In-Reply-To/References headers of a reply. */
+  messageId?: string;
+  references?: string;
 }
 
 export interface OpenThread {
@@ -53,29 +66,66 @@ export interface InboxPage {
 }
 
 /**
- * A draft, for when compose/reply lands (#11). The shape is part of the
- * contract now so compose is written once against the seam rather than twice
- * against two APIs; providers that cannot send simply omit `send`.
+ * One outgoing message. Compose, reply and forward all produce this shape —
+ * written once against the seam rather than twice against two APIs — and
+ * server/compose.ts turns a thread into one.
  */
 export interface MailDraft {
   to: string[];
   cc?: string[];
+  bcc?: string[];
   subject: string;
   body: string;
   /** Thread being replied to, when this is a reply rather than a new message. */
   replyTo?: string;
+  /**
+   * The message being answered. Gmail threads on the RFC headers; Graph replies
+   * to a message id. Carrying both keeps the seam provider-agnostic.
+   */
+  inReplyTo?: { id?: string; messageId?: string; references?: string };
+  /** The provider draft this edits; absent creates a new one. */
+  draftId?: string;
 }
 
-/** What every mailbox backend implements. Read is required; send is #11. */
+/** A saved draft as the provider hands it back, ready to reopen in the composer. */
+export interface StoredDraft {
+  id: string;
+  to: string[];
+  cc?: string[];
+  subject: string;
+  body: string;
+  /** Epoch ms of the last save, so the list can sort newest-first. */
+  ts: number;
+}
+
+/**
+ * What every mailbox backend implements.
+ *
+ * Reading is required. The write half is optional ONLY so a stub (a test fake,
+ * a future read-only backend) can exist — Gmail and Outlook both implement all
+ * of it, and the seam turns a missing method into `MailWriteUnsupported` rather
+ * than a crash.
+ */
 export interface MailProvider {
   readonly id: ProviderId;
   /** The connected mailbox this instance speaks for, e.g. "ada@gmail.com". */
   readonly account: string;
   listInbox(query: string, max: number, pageToken?: string): Promise<InboxPage>;
   getThread(id: string): Promise<OpenThread>;
-  /** Optional today; compose (#11) fills these in for both providers. */
-  send?(draft: MailDraft): Promise<void>;
+  /** Send it now. */
+  send?(draft: MailDraft): Promise<{ id?: string }>;
+  /** Park it in the provider's Drafts folder (or update `draft.draftId`). */
   saveDraft?(draft: MailDraft): Promise<{ id: string }>;
+  /** Send a draft that is already saved. */
+  sendDraft?(id: string): Promise<void>;
+  listDrafts?(max: number): Promise<StoredDraft[]>;
+  /** Clear or set the unread flag on a whole thread. */
+  markRead?(id: string, read: boolean): Promise<void>;
+  /** Out of the inbox, still in the mailbox. */
+  archive?(id: string): Promise<void>;
+  trash?(id: string): Promise<void>;
+  /** Apply a label (Gmail) / category (Outlook), creating it if need be. */
+  label?(id: string, name: string): Promise<void>;
 }
 
 // --- accounts ----------------------------------------------------------------
@@ -267,4 +317,119 @@ export async function listInbox(
 
 export async function getThread(account: string, id: string): Promise<OpenThread> {
   return (await provider(account)).getThread(id);
+}
+
+// --- the write side ----------------------------------------------------------
+
+/**
+ * A provider that cannot do this — a stub backend, or a build where the method
+ * was never wired. Distinct from a network failure, because the answer is
+ * "never", not "try again".
+ */
+export class MailWriteUnsupported extends Error {
+  constructor(readonly action: string, readonly provider: string) {
+    super(`${provider} cannot ${action} from kona`);
+    this.name = "MailWriteUnsupported";
+  }
+}
+
+/**
+ * A write refused for want of an OAuth scope, rather than for want of
+ * permission on the mailbox. Both providers say it in their own dialect; the
+ * applet needs the one bit — "reconnect this account".
+ */
+export function isScopeError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return (
+    /insufficient(authentication)?\s*(scopes?|permissions?)/i.test(msg) ||
+    /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|ErrorAccessDenied/i.test(msg) ||
+    (/\b403\b/.test(msg) && /scope|permission/i.test(msg))
+  );
+}
+
+/** What to tell a human whose token predates the write scopes. */
+export function scopeHint(provider: ProviderId): string {
+  return `reconnect for write access: kona login ${provider}`;
+}
+
+/**
+ * Call one provider method, or explain that this backend hasn't got it. The
+ * `!` in each caller is what the guard above just proved.
+ */
+async function act(
+  account: string,
+  method: keyof MailProvider,
+  action: string,
+  run: (p: MailProvider) => Promise<any>,
+): Promise<any> {
+  const p = await provider(account);
+  if (typeof p[method] !== "function") throw new MailWriteUnsupported(action, p.id);
+  return run(p);
+}
+
+/** Send a message from one mailbox. */
+export async function sendMail(account: string, draft: MailDraft): Promise<{ id?: string }> {
+  return act(account, "send", "send mail", (p) => p.send!(draft));
+}
+
+/** Park a draft with the provider (or update the one `draft.draftId` names). */
+export async function saveDraft(account: string, draft: MailDraft): Promise<{ id: string }> {
+  return act(account, "saveDraft", "save drafts", (p) => p.saveDraft!(draft));
+}
+
+/** Send a draft that is already saved provider-side. */
+export async function sendDraft(account: string, id: string): Promise<void> {
+  return act(account, "sendDraft", "send drafts", (p) => p.sendDraft!(id));
+}
+
+/** A draft, tagged with the mailbox it is saved in. */
+export interface UnifiedDraft extends StoredDraft {
+  account: string;
+  provider: ProviderId;
+}
+
+/**
+ * Drafts from every connected account (or just one), newest first. Same
+ * fan-out shape as `listInbox`: one dead mailbox reports, it doesn't empty the
+ * list, and a provider without drafts is simply skipped.
+ */
+export async function listDrafts(
+  max = 20,
+  opts: { only?: string | null } = {},
+): Promise<{ drafts: UnifiedDraft[]; errors: UnifiedPage["errors"] }> {
+  let live = await providers();
+  if (opts.only) live = live.filter((p) => p.account === opts.only);
+  const errors: UnifiedPage["errors"] = [];
+  const drafts: UnifiedDraft[] = [];
+  await Promise.all(
+    live.map(async (p) => {
+      if (typeof p.listDrafts !== "function") return;
+      try {
+        for (const d of await p.listDrafts(max)) drafts.push({ ...d, account: p.account, provider: p.id });
+      } catch (e) {
+        errors.push({ account: p.account, message: e instanceof Error ? e.message : String(e) });
+      }
+    }),
+  );
+  drafts.sort((a, b) => b.ts - a.ts || a.account.localeCompare(b.account) || a.id.localeCompare(b.id));
+  return { drafts, errors };
+}
+
+/** Clear (or set) the unread flag on a thread. */
+export async function markRead(account: string, id: string, read = true): Promise<void> {
+  return act(account, "markRead", "mark mail read", (p) => p.markRead!(id, read));
+}
+
+/** Out of the inbox, still in the mailbox. */
+export async function archiveThread(account: string, id: string): Promise<void> {
+  return act(account, "archive", "archive mail", (p) => p.archive!(id));
+}
+
+export async function trashThread(account: string, id: string): Promise<void> {
+  return act(account, "trash", "trash mail", (p) => p.trash!(id));
+}
+
+/** Apply a label (Gmail) / category (Outlook), creating it when it is new. */
+export async function labelThread(account: string, id: string, name: string): Promise<void> {
+  return act(account, "label", "label mail", (p) => p.label!(id, name));
 }

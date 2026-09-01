@@ -6,9 +6,9 @@ import { addAccount, kcAccountName, kcService, listAccounts, removeAccount, LEGA
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
- * daemon owns the tokens, so both the TUI and any agent read live Gmail through
- * the same credentials. The user supplies a Desktop OAuth client once (client
- * id + secret); we never ship one.
+ * daemon owns the tokens, so both the TUI and any agent read AND write live
+ * Gmail through the same credentials. The user supplies a Desktop OAuth client
+ * once (client id + secret); we never ship one.
  *
  * Tokens are per mailbox: `kona login gmail` twice connects two accounts, each
  * keyed in the keychain by its own address (see server/mail.ts). A token stored
@@ -27,7 +27,22 @@ const CLIENT_FILE = join(configDir(), "google.json");
 
 const SERVICE = kcService("gmail");
 
-const SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+/**
+ * Read AND write: kona is a mail client, not a mail viewer. `gmail.modify`
+ * covers reading, the unread flag, archiving, trashing and labels;
+ * `gmail.compose`/`gmail.send` cover drafts and sending. A token minted by an
+ * older, read-only kona keeps reading fine — the first write it refuses tells
+ * you to run `kona login gmail` again (see isScopeError in server/mail.ts).
+ */
+const SCOPE = [
+  "https://www.googleapis.com/auth/gmail.modify",
+  "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/gmail.send",
+].join(" ");
+
+/** The Gmail API host; an env override lets tests drive a fixture server. */
+const apiBase = () => process.env.KONA_GMAIL_API ?? "https://gmail.googleapis.com";
+
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -88,7 +103,7 @@ function pkce() {
 /** Ask Gmail who a freshly minted access token belongs to. */
 async function whoami(accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    const res = await fetch(`${apiBase()}/gmail/v1/users/me/profile`, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -200,6 +215,8 @@ export async function login(): Promise<string> {
 const cached = new Map<string, { token: string; exp: number }>();
 
 async function accessToken(account: string): Promise<string> {
+  // A token straight from the environment (tests, scripts against a fixture).
+  if (process.env.KONA_GOOGLE_TOKEN) return process.env.KONA_GOOGLE_TOKEN;
   const hit = cached.get(account);
   if (hit && hit.exp > Date.now() + 30_000) return hit.token;
   const creds = await clientCreds();
@@ -230,8 +247,35 @@ export async function gapi(
   params?: Record<string, string>,
 ): Promise<Record<string, unknown> & any> {
   const token = await accessToken(account);
-  const url = `https://gmail.googleapis.com${path}` + (params ? `?${new URLSearchParams(params)}` : "");
+  const url = `${apiBase()}${path}` + (params ? `?${new URLSearchParams(params)}` : "");
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`gmail ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+/**
+ * The same, for the calls that change something: send, modify labels, drafts.
+ * A body is sent as JSON; an empty 204 answers as `{}` so callers can await it
+ * without checking for a payload.
+ */
+export async function gapiWrite(
+  account: string,
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+  params?: Record<string, string>,
+): Promise<Record<string, unknown> & any> {
+  const token = await accessToken(account);
+  const url = `${apiBase()}${path}` + (params ? `?${new URLSearchParams(params)}` : "");
+  const res = await fetch(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!res.ok) throw new Error(`gmail ${res.status}: ${await res.text()}`);
+  const raw = await res.text();
+  return raw ? JSON.parse(raw) : {};
 }

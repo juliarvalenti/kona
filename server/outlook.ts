@@ -1,12 +1,14 @@
-import { graph } from "./microsoft.ts";
+import { graph, graphWrite } from "./microsoft.ts";
 import { cleanText, displayName, htmlToPlain } from "./mailtext.ts";
-import type { InboxPage, MailMessage, MailProvider, MailThread, OpenThread } from "./mail.ts";
+import { addressOf, parseAddresses } from "./compose.ts";
+import type { InboxPage, MailDraft, MailMessage, MailProvider, MailThread, OpenThread, StoredDraft } from "./mail.ts";
 
 /**
  * Outlook / Microsoft 365 as a `MailProvider` (server/mail.ts), over Microsoft
  * Graph. Graph is message-shaped where Gmail is thread-shaped, so the work here
- * is folding messages into conversations (`conversationId`) and translating the
- * Gmail-ish query the applet's search bar speaks into `$search`/`$filter`.
+ * is folding messages into conversations (`conversationId`), fanning writes back
+ * out over the messages in one, and translating the Gmail-ish query the applet's
+ * search bar speaks into `$search`/`$filter`.
  * Everything below the class is pure and unit-tested without the network.
  */
 
@@ -20,16 +22,29 @@ export interface GraphMessage {
   subject?: string;
   bodyPreview?: string;
   receivedDateTime?: string;
+  lastModifiedDateTime?: string;
   isRead?: boolean;
   hasAttachments?: boolean;
   from?: GraphAddress;
   sender?: GraphAddress;
+  toRecipients?: GraphAddress[];
+  ccRecipients?: GraphAddress[];
+  replyTo?: GraphAddress[];
+  internetMessageId?: string;
+  categories?: string[];
   body?: { contentType?: string; content?: string };
 }
 
 /** Fields the list needs; asking for the body of 20 messages would be rude. */
 const LIST_SELECT = "id,conversationId,subject,from,sender,receivedDateTime,isRead,hasAttachments,bodyPreview";
-const THREAD_SELECT = "id,conversationId,subject,from,sender,receivedDateTime,isRead,body";
+const THREAD_SELECT =
+  "id,conversationId,subject,from,sender,toRecipients,ccRecipients,replyTo,internetMessageId,receivedDateTime,isRead,body";
+/** What a saved draft needs to reopen in the composer. */
+const DRAFT_SELECT = "id,subject,toRecipients,ccRecipients,body,bodyPreview,lastModifiedDateTime";
+
+/** Well-known folder names Graph resolves without a lookup. */
+const ARCHIVE = "archive";
+const DELETED = "deleteditems";
 
 /** "Ada Lovelace" if Graph knows it, else the address. */
 export function fromName(m: GraphMessage): string {
@@ -157,6 +172,52 @@ export function applyFlags(rows: MailThread[], q: GraphQuery): MailThread[] {
   return out;
 }
 
+/** Graph recipients -> the "Name <addr>" strings the rest of kona speaks. */
+export function recipients(list: GraphAddress[] | undefined): string[] {
+  return (list ?? [])
+    .map((r) => {
+      const e = r.emailAddress;
+      if (!e?.address) return "";
+      return e.name && e.name.trim() && e.name !== e.address ? `${e.name} <${e.address}>` : e.address;
+    })
+    .filter(Boolean);
+}
+
+/** …and back: the shape Graph wants on a message it is about to send. */
+export function toRecipients(list: string[] | undefined): GraphAddress[] {
+  return (list ?? [])
+    .flatMap((r) => parseAddresses(r))
+    .map((r) => ({ emailAddress: { address: addressOf(r) } }))
+    .filter((r) => r.emailAddress.address.includes("@"));
+}
+
+/**
+ * A draft as a Graph message resource. Plain text, because that is what the
+ * composer writes and what the reader shows.
+ */
+export function graphMessage(draft: MailDraft): Record<string, unknown> {
+  const message: Record<string, unknown> = {
+    subject: draft.subject ?? "",
+    body: { contentType: "Text", content: draft.body ?? "" },
+    toRecipients: toRecipients(draft.to),
+  };
+  if (draft.cc?.length) message.ccRecipients = toRecipients(draft.cc);
+  if (draft.bcc?.length) message.bccRecipients = toRecipients(draft.bcc);
+  return message;
+}
+
+/** A Graph draft -> the shape the composer reopens. */
+export function toStoredDraft(m: GraphMessage): StoredDraft {
+  return {
+    id: m.id ?? "",
+    to: recipients(m.toRecipients),
+    cc: recipients(m.ccRecipients),
+    subject: m.subject ?? "",
+    body: messageBody(m) || (m.bodyPreview ?? ""),
+    ts: parseDate(m.lastModifiedDateTime ?? m.receivedDateTime),
+  };
+}
+
 export class OutlookProvider implements MailProvider {
   readonly id = "outlook" as const;
   constructor(readonly account: string) {}
@@ -199,10 +260,125 @@ export class OutlookProvider implements MailProvider {
       (a, b) => parseDate(a.receivedDateTime) - parseDate(b.receivedDateTime),
     );
     const messages: MailMessage[] = raw.map((m) => ({
+      id: m.id,
       from: fromName(m),
+      fromAddress: (m.from ?? m.sender)?.emailAddress?.address ?? "",
+      ...(m.replyTo?.length ? { replyTo: recipients(m.replyTo)[0] } : {}),
+      to: recipients(m.toRecipients),
+      cc: recipients(m.ccRecipients),
       date: m.receivedDateTime ?? "",
       body: messageBody(m),
+      ...(m.internetMessageId ? { messageId: m.internetMessageId } : {}),
     }));
     return { id, subject: raw[0]?.subject || "(no subject)", messages };
+  }
+
+  // --- the write side --------------------------------------------------------
+
+  /**
+   * Graph is message-shaped and kona's rows are conversations, so every flag
+   * below fans out over the messages in the conversation. A row whose id is
+   * really a lone message id (no conversationId) falls back to itself.
+   */
+  private async messageIds(id: string): Promise<string[]> {
+    const page = await graph(this.account, "/me/messages", {
+      $filter: `conversationId eq ${odataQuote(id)}`,
+      $select: "id",
+      $top: "50",
+    });
+    const ids = ((page.value ?? []) as GraphMessage[]).map((m) => m.id).filter((x): x is string => !!x);
+    return ids.length ? ids : [id];
+  }
+
+  /** Do the same thing to every message in the conversation. */
+  private async eachMessage(id: string, run: (messageId: string) => Promise<unknown>): Promise<void> {
+    const ids = await this.messageIds(id);
+    await Promise.all(ids.map(run));
+  }
+
+  /**
+   * Send. A reply goes through `createReply` so Outlook keeps it in the same
+   * conversation, then we overwrite the recipients and body the composer
+   * actually collected (a bare reply would only ever answer the sender).
+   */
+  async send(draft: MailDraft): Promise<{ id?: string }> {
+    const answering = draft.inReplyTo?.id;
+    if (answering) {
+      const reply = await graphWrite(this.account, "POST", `/me/messages/${answering}/createReply`, {});
+      const id = String(reply.id ?? "");
+      if (!id) throw new Error("graph would not open a reply draft");
+      await graphWrite(this.account, "PATCH", `/me/messages/${id}`, graphMessage(draft));
+      await graphWrite(this.account, "POST", `/me/messages/${id}/send`);
+      return { id };
+    }
+    await graphWrite(this.account, "POST", "/me/sendMail", {
+      message: graphMessage(draft),
+      saveToSentItems: true,
+    });
+    return {};
+  }
+
+  /** Create a draft in the Drafts folder, or update the one we already saved. */
+  async saveDraft(draft: MailDraft): Promise<{ id: string }> {
+    if (draft.draftId) {
+      await graphWrite(this.account, "PATCH", `/me/messages/${draft.draftId}`, graphMessage(draft));
+      return { id: draft.draftId };
+    }
+    const saved = await graphWrite(this.account, "POST", "/me/messages", {
+      ...graphMessage(draft),
+      isDraft: true,
+    });
+    return { id: String(saved.id ?? "") };
+  }
+
+  async sendDraft(id: string): Promise<void> {
+    await graphWrite(this.account, "POST", `/me/messages/${id}/send`);
+  }
+
+  async listDrafts(max = 20): Promise<StoredDraft[]> {
+    const page = await graph(this.account, "/me/mailFolders/drafts/messages", {
+      $select: DRAFT_SELECT,
+      $orderby: "lastModifiedDateTime desc",
+      $top: String(max),
+    });
+    return ((page.value ?? []) as GraphMessage[]).map(toStoredDraft);
+  }
+
+  async markRead(id: string, read = true): Promise<void> {
+    await this.eachMessage(id, (m) => graphWrite(this.account, "PATCH", `/me/messages/${m}`, { isRead: read }));
+  }
+
+  async archive(id: string): Promise<void> {
+    await this.eachMessage(id, (m) =>
+      graphWrite(this.account, "POST", `/me/messages/${m}/move`, { destinationId: ARCHIVE }),
+    );
+  }
+
+  async trash(id: string): Promise<void> {
+    await this.eachMessage(id, (m) =>
+      graphWrite(this.account, "POST", `/me/messages/${m}/move`, { destinationId: DELETED }),
+    );
+  }
+
+  /**
+   * Outlook's answer to a Gmail label is a category. Categories are free text
+   * on the message, so applying one is a PATCH — no label to create first.
+   */
+  async label(id: string, name: string): Promise<void> {
+    const tag = name.trim();
+    if (!tag) throw new Error("a label needs a name");
+    const page = await graph(this.account, "/me/messages", {
+      $filter: `conversationId eq ${odataQuote(id)}`,
+      $select: "id,categories",
+      $top: "50",
+    });
+    const rows = (page.value ?? []) as GraphMessage[];
+    const targets = rows.length ? rows : [{ id, categories: [] as string[] }];
+    await Promise.all(
+      targets.map((m) => {
+        const categories = [...new Set([...(m.categories ?? []), tag])];
+        return graphWrite(this.account, "PATCH", `/me/messages/${m.id}`, { categories });
+      }),
+    );
   }
 }

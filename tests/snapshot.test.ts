@@ -202,6 +202,73 @@ test("email badges each row with its account once two are connected", async () =
   expect(frame).toContain("standup notes");
 });
 
+test("the composer is a real form over the inbox: fields, quoted body, footer", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      accounts: [{ provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" }],
+      compose: {
+        mode: "reply",
+        field: "body",
+        values: {
+          to: "Ada Lovelace <ada@x.com>",
+          cc: "",
+          subject: "Re: dinner friday?",
+          body: "yes — 7pm?",
+        },
+        account: "ada@gmail.com",
+        line: 1,
+        sending: false,
+      },
+    },
+    80,
+    26,
+  );
+  expect(frame).toContain("reply"); // the modal's title, and the breadcrumb
+  expect(frame).toContain("Ada Lovelace <ada@x.com>");
+  expect(frame).toContain("Re: dinner friday?");
+  expect(frame).toContain("yes — 7pm?"); // the line already committed
+  expect(frame).toContain("empty line sends");
+});
+
+test("email asks for a label name in a one-field prompt", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      accounts: [{ provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" }],
+      threads: [
+        { id: "1", account: "ada@gmail.com", provider: "gmail", from: "GitHub", subject: "PR merged", snippet: "", date: "", ts: 0, unread: true },
+      ],
+      prompt: { kind: "label", value: "todo", account: "ada@gmail.com", id: "1" },
+    },
+    72,
+    16,
+  );
+  expect(frame).toContain("label");
+  expect(frame).toContain("todo");
+});
+
+test("email lists saved drafts in place of the inbox", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      accounts: [{ provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" }],
+      showDrafts: true,
+      drafts: [
+        { id: "d1", account: "ada@gmail.com", provider: "gmail", to: ["grace@x.com"], cc: [], subject: "quarterly review", body: "", ts: Date.UTC(2026, 8, 1) },
+      ],
+    },
+    76,
+    14,
+  );
+  expect(frame).toContain("1 saved");
+  expect(frame).toContain("grace@x.com");
+  expect(frame).toContain("quarterly review");
+});
+
 test("spotify shows now-playing with track, times, and state", async () => {
   const frame = await snapshot(
     "spotify",
