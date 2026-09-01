@@ -77,12 +77,15 @@ Cursor verbs (the keyboard's business — address a row by id or index instead):
 
 ### email — Email
 
-Browse Gmail. Agents can search and open threads too.
+Browse Gmail and Outlook in one list. Agents can search and open threads too.
 
 - `email.refresh` — Reload the inbox. Call this before you read state.  ·  `kona call email refresh`, key `r`
 - `email.search` — Run a Gmail query and replace the list with its results.  ·  `kona call email search '{"q":"is:unread newer_than:1d"}'`
 - `email.more` — Fetch the next page of threads.  ·  `kona call email more`
+- `email.accounts`  ·  `kona call email accounts`
+- `email.account`  ·  `kona call email account`
 - `email.open` — Open a thread by list `index` and load its body.  ·  `kona call email open '{"index":0}'`
+- `email.cycleAccount`  ·  `kona call email cycleAccount`, key `a`
 
 Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `down`, `up`.
 

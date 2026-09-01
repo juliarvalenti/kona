@@ -1,32 +1,16 @@
 import { gapi } from "./google.ts";
-import { convert as htmlToText } from "html-to-text";
+import { cleanText, displayName, htmlToPlain } from "./mailtext.ts";
+import type { InboxPage, MailProvider, MailThread, OpenThread } from "./mail.ts";
 
 /**
- * A thin Gmail layer: fetch inbox threads and full threads, normalized into
- * small shapes the email applet stores as state. Parsing helpers are pure and
+ * Gmail as a `MailProvider` (server/mail.ts): fetch inbox threads and full
+ * threads, normalized into the small shapes the email applet stores as state.
+ * One instance speaks for one connected mailbox. Parsing helpers are pure and
  * exported so they can be unit-tested without the network.
  */
 
-export interface MailThread {
-  id: string;
-  from: string;
-  subject: string;
-  snippet: string;
-  date: string;
-  unread: boolean;
-}
-
-export interface MailMessage {
-  from: string;
-  date: string;
-  body: string;
-}
-
-export interface OpenThread {
-  id: string;
-  subject: string;
-  messages: MailMessage[];
-}
+export { displayName };
+export type { MailThread, OpenThread };
 
 interface GHeader {
   name: string;
@@ -48,14 +32,6 @@ export function header(headers: GHeader[] | undefined, name: string): string {
   return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
 }
 
-/** "Ada Lovelace <ada@x.com>" -> "Ada Lovelace"; bare address -> the address. */
-export function displayName(from: string): string {
-  const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
-  if (m && m[1]?.trim()) return m[1].trim();
-  if (m && m[2]) return m[2].trim();
-  return from.trim();
-}
-
 function findPart(payload: GPayload | undefined, mime: string): string | null {
   if (!payload) return null;
   if (payload.mimeType === mime && payload.body?.data) {
@@ -73,58 +49,12 @@ function findPart(payload: GPayload | undefined, mime: string): string | null {
  * to text (most real mail — receipts, newsletters — is HTML-only). Links and
  * images are flattened so the reader stays clean.
  */
-/**
- * Strip the invisible junk marketers stuff into preheaders (zero-width chars,
- * figure spaces, combining grapheme joiner) plus any literal HTML entities that
- * survived, then collapse whitespace. Turns spacer soup into blank space.
- */
-function cleanText(s: string): string {
-  return s
-    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, " ") // literal numeric entities (double-encoded spacers)
-    .replace(/&(zwnj|zwj|nbsp|shy|ensp|emsp|thinsp);/gi, " ") // literal named spacers
-    .replace(/[͏​-‍ ⁠﻿­ ]/g, " ") // invisible/spacer chars
-    .replace(/[ \t]{2,}/g, " ") // collapse runs of spaces
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n") // at most one blank line
-    .trim();
-}
-
-/**
- * Prefer a real HTML renderer if the user has one (same tools aerc/nmail use);
- * fall back to the html-to-text library. Order matches nmail's html2nmail.
- */
-function renderHtml(html: string): string {
-  const tools: Array<[string, string[]]> = [
-    ["pandoc", ["-f", "html", "-t", "plain"]],
-    ["w3m", ["-dump", "-T", "text/html", "-cols", "100", "-o", "display_image=false"]],
-    ["lynx", ["-stdin", "-dump", "-nolist", "-width=100"]],
-    ["elinks", ["-dump"]],
-  ];
-  for (const [cmd, args] of tools) {
-    try {
-      const r = Bun.spawnSync([cmd, ...args], { stdin: Buffer.from(html) });
-      if (r.exitCode === 0) return r.stdout.toString();
-    } catch {
-      /* not installed — try the next */
-    }
-  }
-  return htmlToText(html, {
-    wordwrap: false, // let the TUI wrap
-    selectors: [
-      { selector: "img", format: "skip" },
-      { selector: "a", options: { ignoreHref: true } },
-    ],
-  });
-}
-
 export function extractBody(payload: GPayload | undefined): string {
   const plain = findPart(payload, "text/plain");
   if (plain) return cleanText(plain);
 
   const html = findPart(payload, "text/html");
-  if (html) return cleanText(renderHtml(html));
+  if (html) return htmlToPlain(html);
 
   return "";
 }
@@ -133,48 +63,56 @@ function threadUnread(messages: GMessage[]): boolean {
   return messages.some((m) => (m.labelIds ?? []).includes("UNREAD"));
 }
 
-export interface InboxPage {
-  threads: MailThread[];
-  nextPageToken?: string;
+/** RFC-2822 `Date` header -> epoch ms (0 when it is missing or unparseable). */
+export function parseDate(date: string): number {
+  const t = Date.parse(date);
+  return Number.isNaN(t) ? 0 : t;
 }
 
-export async function listInbox(query = "in:inbox", max = 20, pageToken?: string): Promise<InboxPage> {
-  const params: Record<string, string> = { q: query, maxResults: String(max) };
-  if (pageToken) params.pageToken = pageToken;
-  const list = await gapi("/gmail/v1/users/me/threads", params);
-  const stubs = (list.threads ?? []) as Array<{ id: string; snippet?: string }>;
-  // Fetch thread metadata in parallel (Promise.all preserves inbox order).
-  // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
-  // a comma string silently returns zero headers, so we fetch all metadata.
-  const threads = await Promise.all(
-    stubs.map(async (t) => {
-      const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
-      const messages = (full.messages ?? []) as GMessage[];
-      const last = messages[messages.length - 1];
-      const h = last?.payload?.headers;
-      return {
-        id: t.id,
-        from: displayName(header(h, "From")),
-        subject: header(h, "Subject") || "(no subject)",
-        snippet: last?.snippet ?? t.snippet ?? "",
-        date: header(h, "Date"),
-        unread: threadUnread(messages),
-      };
-    }),
-  );
-  return { threads, nextPageToken: list.nextPageToken as string | undefined };
-}
+export class GmailProvider implements MailProvider {
+  readonly id = "gmail" as const;
+  constructor(readonly account: string) {}
 
-export async function getThread(id: string): Promise<OpenThread> {
-  const full = await gapi(`/gmail/v1/users/me/threads/${id}`, { format: "full" });
-  const messages = ((full.messages ?? []) as GMessage[]).map((m) => ({
-    from: displayName(header(m.payload?.headers, "From")),
-    date: header(m.payload?.headers, "Date"),
-    body: extractBody(m.payload),
-  }));
-  return {
-    id,
-    subject: header((full.messages?.[0] as GMessage)?.payload?.headers, "Subject") || "(no subject)",
-    messages,
-  };
+  async listInbox(query = "in:inbox", max = 20, pageToken?: string): Promise<InboxPage> {
+    const params: Record<string, string> = { q: query, maxResults: String(max) };
+    if (pageToken) params.pageToken = pageToken;
+    const list = await gapi(this.account, "/gmail/v1/users/me/threads", params);
+    const stubs = (list.threads ?? []) as Array<{ id: string; snippet?: string }>;
+    // Fetch thread metadata in parallel (Promise.all preserves inbox order).
+    // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
+    // a comma string silently returns zero headers, so we fetch all metadata.
+    const threads = await Promise.all(
+      stubs.map(async (t) => {
+        const full = await gapi(this.account, `/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
+        const messages = (full.messages ?? []) as GMessage[];
+        const last = messages[messages.length - 1];
+        const h = last?.payload?.headers;
+        const date = header(h, "Date");
+        return {
+          id: t.id,
+          from: displayName(header(h, "From")),
+          subject: header(h, "Subject") || "(no subject)",
+          snippet: last?.snippet ?? t.snippet ?? "",
+          date,
+          ts: parseDate(date),
+          unread: threadUnread(messages),
+        };
+      }),
+    );
+    return { threads, nextPageToken: list.nextPageToken as string | undefined };
+  }
+
+  async getThread(id: string): Promise<OpenThread> {
+    const full = await gapi(this.account, `/gmail/v1/users/me/threads/${id}`, { format: "full" });
+    const messages = ((full.messages ?? []) as GMessage[]).map((m) => ({
+      from: displayName(header(m.payload?.headers, "From")),
+      date: header(m.payload?.headers, "Date"),
+      body: extractBody(m.payload),
+    }));
+    return {
+      id,
+      subject: header((full.messages?.[0] as GMessage)?.payload?.headers, "Subject") || "(no subject)",
+      messages,
+    };
+  }
 }

@@ -136,9 +136,10 @@ test("email inbox list shows senders, subjects, and a cursor", async () => {
     {
       authed: true,
       cursor: 1,
+      accounts: [{ provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" }],
       threads: [
-        { id: "1", from: "GitHub", subject: "PR merged", snippet: "", date: "", unread: true },
-        { id: "2", from: "Ada Lovelace", subject: "dinner friday?", snippet: "", date: "", unread: false },
+        { id: "1", account: "ada@gmail.com", provider: "gmail", from: "GitHub", subject: "PR merged", snippet: "", date: "", ts: 0, unread: true },
+        { id: "2", account: "ada@gmail.com", provider: "gmail", from: "Ada Lovelace", subject: "dinner friday?", snippet: "", date: "", ts: 0, unread: false },
       ],
     },
     80,
@@ -156,6 +157,7 @@ test("email reader shows subject, sender, and body", async () => {
     "email",
     {
       authed: true,
+      openAccount: "ada@gmail.com",
       open: {
         id: "2",
         subject: "dinner friday?",
@@ -172,8 +174,32 @@ test("email reader shows subject, sender, and body", async () => {
 
 test("email shows a sign-in prompt when unauthenticated", async () => {
   const frame = await snapshot("email", {}, 72, 14);
-  expect(frame).toContain("Not signed in");
+  expect(frame).toContain("No mail account connected");
   expect(frame).toContain("kona login");
+});
+
+test("email badges each row with its account once two are connected", async () => {
+  const frame = await snapshot(
+    "email",
+    {
+      authed: true,
+      accounts: [
+        { provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" },
+        { provider: "outlook", id: "grace@work.com", label: "grace@work.com" },
+      ],
+      threads: [
+        { id: "1", account: "ada@gmail.com", provider: "gmail", from: "GitHub", subject: "PR merged", snippet: "", date: "", ts: Date.UTC(2026, 7, 31, 12), unread: true },
+        { id: "c1", account: "grace@work.com", provider: "outlook", from: "Grace Hopper", subject: "standup notes", snippet: "", date: "", ts: Date.UTC(2026, 7, 30, 12), unread: false },
+      ],
+    },
+    92,
+    16,
+  );
+  expect(frame).toContain("2 accounts"); // the unified header
+  expect(frame).toContain("ada"); // per-row account badges
+  expect(frame).toContain("grace");
+  expect(frame).toContain("PR merged");
+  expect(frame).toContain("standup notes");
 });
 
 test("spotify shows now-playing with track, times, and state", async () => {

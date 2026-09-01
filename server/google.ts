@@ -1,12 +1,19 @@
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
+import { kcGet, kcSet, kcDelete } from "./keychain.ts";
+import { addAccount, kcAccountName, kcService, listAccounts, removeAccount, LEGACY_ACCOUNT } from "./mail.ts";
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
  * daemon owns the tokens, so both the TUI and any agent read live Gmail through
  * the same credentials. The user supplies a Desktop OAuth client once (client
  * id + secret); we never ship one.
+ *
+ * Tokens are per mailbox: `kona login gmail` twice connects two accounts, each
+ * keyed in the keychain by its own address (see server/mail.ts). A token stored
+ * by an older kona under the fixed name "refresh-token" keeps working as the
+ * account `default`.
  *
  * Storage:
  *   ~/.config/kona/google.json   client creds (yours). Accepts either
@@ -18,8 +25,7 @@ import { configDir } from "../core/config.ts";
 
 const CLIENT_FILE = join(configDir(), "google.json");
 
-const KC_SERVICE = "kona-gmail";
-const KC_ACCOUNT = "refresh-token";
+const SERVICE = kcService("gmail");
 
 const SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -38,26 +44,19 @@ async function readJson<T>(path: string): Promise<T | null> {
   }
 }
 
-// --- Keychain (macOS `security`) --------------------------------------------
-function kcGet(): string | null {
-  const r = Bun.spawnSync(["security", "find-generic-password", "-s", KC_SERVICE, "-a", KC_ACCOUNT, "-w"]);
-  if (r.exitCode !== 0) return null;
-  const v = r.stdout.toString().trim();
-  return v || null;
+function refreshTokenFor(account: string): string | null {
+  return kcGet(SERVICE, kcAccountName(account));
 }
-function kcSet(token: string): void {
-  const r = Bun.spawnSync([
-    "security", "add-generic-password",
-    "-U", // update if it already exists
-    "-s", KC_SERVICE,
-    "-a", KC_ACCOUNT,
-    "-D", "kona gmail refresh token",
-    "-w", token,
-  ]);
-  if (r.exitCode !== 0) throw new Error(`keychain write failed: ${r.stderr.toString()}`);
-}
-export function logout(): void {
-  Bun.spawnSync(["security", "delete-generic-password", "-s", KC_SERVICE, "-a", KC_ACCOUNT]);
+
+/** Forget one mailbox, or every Gmail account when called without one. */
+export async function logout(account?: string): Promise<void> {
+  const targets = account
+    ? [account]
+    : [LEGACY_ACCOUNT, ...listAccounts().filter((a) => a.provider === "gmail").map((a) => a.id)];
+  for (const id of targets) {
+    kcDelete(SERVICE, kcAccountName(id));
+    await removeAccount("gmail", id);
+  }
 }
 
 /** Client creds from env or ~/.config/kona/google.json (raw Google JSON ok). */
@@ -74,8 +73,8 @@ export async function clientCreds(): Promise<ClientCreds | null> {
   return null;
 }
 
-export async function isAuthed(): Promise<boolean> {
-  return kcGet() !== null;
+export async function isAuthed(account = LEGACY_ACCOUNT): Promise<boolean> {
+  return refreshTokenFor(account) !== null;
 }
 
 export const CLIENT_CONFIG_PATH = CLIENT_FILE;
@@ -86,10 +85,24 @@ function pkce() {
   return { verifier, challenge };
 }
 
+/** Ask Gmail who a freshly minted access token belongs to. */
+async function whoami(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const profile = (await res.json()) as { emailAddress?: string };
+    return profile.emailAddress ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run the interactive login: spin a loopback server, open the consent page,
- * capture the code, exchange for a refresh token, and store it. Returns the
- * signed-in email address.
+ * capture the code, exchange for a refresh token, and store it under the
+ * address it belongs to. Returns the signed-in email address.
  */
 export async function login(): Promise<string> {
   const creds = await clientCreds();
@@ -139,7 +152,9 @@ export async function login(): Promise<string> {
       response_type: "code",
       scope: SCOPE,
       access_type: "offline",
-      prompt: "consent",
+      // `select_account` lets you pick WHICH mailbox to add — the point of
+      // multi-account; `consent` still forces a fresh refresh token.
+      prompt: "select_account consent",
       code_challenge: challenge,
       code_challenge_method: "S256",
     }).toString();
@@ -169,30 +184,27 @@ export async function login(): Promise<string> {
       code_verifier: verifier,
     }).toString(),
   });
-  const tok = (await res.json()) as { refresh_token?: string; scope?: string; error?: string };
+  const tok = (await res.json()) as { refresh_token?: string; access_token?: string; error?: string };
   if (!tok.refresh_token) {
     throw new Error(`token exchange failed: ${JSON.stringify(tok)}`);
   }
 
-  kcSet(tok.refresh_token);
-
-  // whoami
-  try {
-    const profile = await gapi("/gmail/v1/users/me/profile");
-    return (profile.emailAddress as string) ?? "signed in";
-  } catch {
-    return "signed in";
-  }
+  // Name the account before storing it: the address is the keychain key.
+  const address = (tok.access_token ? await whoami(tok.access_token) : null) ?? LEGACY_ACCOUNT;
+  kcSet(SERVICE, kcAccountName(address), tok.refresh_token, "kona gmail refresh token");
+  if (address !== LEGACY_ACCOUNT) await addAccount("gmail", address);
+  return address === LEGACY_ACCOUNT ? "signed in" : address;
 }
 
-// in-memory access-token cache (per daemon lifetime)
-let cached: { token: string; exp: number } | null = null;
+// in-memory access-token cache, per account (per daemon lifetime)
+const cached = new Map<string, { token: string; exp: number }>();
 
-async function accessToken(): Promise<string> {
-  if (cached && cached.exp > Date.now() + 30_000) return cached.token;
+async function accessToken(account: string): Promise<string> {
+  const hit = cached.get(account);
+  if (hit && hit.exp > Date.now() + 30_000) return hit.token;
   const creds = await clientCreds();
   if (!creds) throw new Error("Gmail not configured — no client credentials");
-  const refreshToken = kcGet();
+  const refreshToken = refreshTokenFor(account);
   if (!refreshToken) throw new Error("Not signed in — run `kona login`");
 
   const res = await fetch(TOKEN_URL, {
@@ -207,13 +219,17 @@ async function accessToken(): Promise<string> {
   });
   const j = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!j.access_token) throw new Error(`token refresh failed: ${JSON.stringify(j)}`);
-  cached = { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 };
-  return cached.token;
+  cached.set(account, { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 });
+  return j.access_token;
 }
 
-/** Authenticated GET against the Google API host. */
-export async function gapi(path: string, params?: Record<string, string>): Promise<Record<string, unknown> & any> {
-  const token = await accessToken();
+/** Authenticated GET against the Google API host, as one connected mailbox. */
+export async function gapi(
+  account: string,
+  path: string,
+  params?: Record<string, string>,
+): Promise<Record<string, unknown> & any> {
+  const token = await accessToken(account);
   const url = `https://gmail.googleapis.com${path}` + (params ? `?${new URLSearchParams(params)}` : "");
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`gmail ${res.status}: ${await res.text()}`);
