@@ -346,7 +346,13 @@ export default defineApplet<SpotifyState>({
           },
         ),
       );
-      if (!rows.length && !state.loading) rows.push(text("no matches", { dim: true }));
+      if (!rows.length && !state.loading) {
+        rows.push(
+          state.error
+            ? text(/scope/i.test(state.error) ? "missing access — run: kona login spotify" : truncate(state.error, W - 4), { color: AMBER })
+            : text("no matches", { dim: true }),
+        );
+      }
       return [col([head, divider(W - 1), ...rows])];
     }
 

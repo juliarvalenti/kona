@@ -112,6 +112,7 @@ export async function login(): Promise<string> {
       scope: SCOPE,
       code_challenge_method: "S256",
       code_challenge: challenge,
+      show_dialog: "true", // force consent so newly-added scopes are granted
     }).toString();
 
   console.error("Opening your browser to authorize Spotify…");
@@ -342,8 +343,10 @@ export async function artistDetail(id: string): Promise<Detail> {
 /** Your personal home: playlists (incl. Discover Weekly etc.), top artists,
  * and recently played — the closest thing to Spotify's home the API still gives. */
 export async function home(): Promise<Row[]> {
-  const [pls, tops, recent] = await Promise.all([
-    api("/v1/me/playlists?limit=20").catch(() => null),
+  // Playlists is the primary section — let its error propagate (e.g. a scope
+  // 403) so the applet can show a clear message; the others are best-effort.
+  const pls = await api("/v1/me/playlists?limit=20");
+  const [tops, recent] = await Promise.all([
     api("/v1/me/top/artists?limit=10").catch(() => null),
     api("/v1/me/player/recently-played?limit=15").catch(() => null),
   ]);
