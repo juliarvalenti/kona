@@ -550,7 +550,7 @@ function timerHero(t: Timer): ViewNode {
   const color = tintOf(t);
   return col(
     [
-      big(fmt(t.remaining), color, "block"),
+      big(fmt(t.remaining), color),
       spacer(),
       progress(t.total > 0 ? t.remaining / t.total : 0, { color, width: 28 }),
       spacer(),
@@ -571,7 +571,7 @@ function pomodoroHero(p: Pomodoro): ViewNode {
   return col(
     [
       text(`pomodoro  ·  ${PHASE_LABEL[p.phase]}`, { color }),
-      big(fmt(p.remaining), color, "block"),
+      big(fmt(p.remaining), color),
       spacer(),
       progress(p.total > 0 ? p.remaining / p.total : 0, { color, width: 28 }),
       spacer(),

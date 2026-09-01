@@ -551,6 +551,7 @@ default = "dash"      # applet a bare `kona` opens; omit for the launcher
 
 [theme]               # the palette — applets name ROLES, never hexes
 preset = "nord"       # start from a named palette (`kona theme` lists them)
+font   = "block"      # the figlet hero displays are lettered in
 accent = "#7aa2f7"    # ...and any role you spell out wins over it
 alt    = "#bb9af7"    # secondary tint
 fg     = "#d0d0d0"    # body text
@@ -588,6 +589,18 @@ import { text, theme } from "../../sdk/index.ts";
 view: (s) => [text(s.done ? "done" : "working", { color: theme().ok })]
 ```
 
+A sixteenth role isn't a color at all: `font` is the **figlet** hero displays
+are lettered in — the typeface of the timer countdown, the clock hero and the
+`kona` wordmark (`block`, `tiny`, `slick`, `shade`, `huge`, `grid`, `pallet`).
+It works exactly like the colors do: `big("12:00")` with no font gets the
+theme's, and an applet whose layout depends on one particular face can still
+pin it as `big("12:00", color, "block")`.
+
+Figlets differ wildly in size — "00:00" is 17 cells wide in `tiny` and 60 in
+`huge` — so the host has the last word: a hero too wide for the pane is redrawn
+in the biggest figlet that fits, whether the font came from the theme or the
+applet. Nothing overflows, and nothing has to guess at a terminal width.
+
 `appletConfig("<id>")` hands an applet its own `[applets.<id>]` block, and
 `appletAccent`/`appletString`/`appletNumber` read one key with a fallback.
 
@@ -597,6 +610,12 @@ view: (s) => [text(s.done ? "done" : "working", { color: theme().ok })]
 Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, Everforest, Kanagawa,
 One Dark, Ayu — each mapped onto **every** role, so nothing renders muddy. kona's
 own `kona-aloha` is the default.
+
+Each preset also picks a figlet, because a display face sets the vibe as much as
+a palette does: Dracula letters in `huge`, Gruvbox in the dithered `shade`, Rosé
+Pine in `pallet`, Rosé Pine Dawn in a minimal `tiny`. Switching preset therefore
+reskins **and** re-letters — and `[theme] font` in your config still wins over
+whichever face the preset came with.
 
 ```sh
 kona theme                    # the picker: ↑↓ previews LIVE, enter saves, esc reverts
@@ -608,9 +627,11 @@ The picker is an ordinary applet (`applets/theme`), previewing through one
 addition to the applet ABI: `theme(state)` returns a palette that stands in for
 the configured one while that applet is open, so the frame, the hint bar and
 every row recolor as the cursor moves — and leaving drops the preview with
-nothing to undo. `enter` writes `[theme] preset` into your config, and the
-running TUI (a separate process from the daemon that wrote it) picks the file up
-on its next frame.
+nothing to undo. The `kona` wordmark at the top of the picker is drawn in the
+previewed preset's figlet — and says so, plus the narrower face it would fall
+back to, when that figlet is wider than your terminal. `enter` writes `[theme]
+preset` into your config, and the running TUI (a separate process from the
+daemon that wrote it) picks the file up on its next frame.
 
 ## Writing an applet
 

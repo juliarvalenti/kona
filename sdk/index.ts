@@ -123,8 +123,24 @@ export {
   type Theme,
 } from "../core/config.ts";
 
-/** ASCII-art fonts the host can render for a `big` node. */
-export type BigFont = "block" | "tiny" | "slick" | "shade" | "huge" | "grid" | "pallet";
+import type { BigFont } from "../core/fonts.ts";
+
+/**
+ * The figlets, and the sizing math that keeps one inside its pane. The font a
+ * `big` node draws in is a theme role like any color (`theme().font`), so an
+ * applet names one only when its layout genuinely depends on that figlet.
+ */
+export {
+  BIG_FONTS,
+  DEFAULT_FONT,
+  bigFits,
+  bigSize,
+  fitBigFont,
+  fontLines,
+  isBigFont,
+  type BigFont,
+  type FontLimits,
+} from "../core/fonts.ts";
 
 /**
  * The view vocabulary — deliberately tiny. An applet's `view` returns these and
@@ -229,6 +245,13 @@ export interface ViewCtx {
  * Primitive node constructors. `row`/`col` are the layout containers (flexbox);
  * everything richer (progress, key/value, lists) is a plain function that
  * composes these — see sdk/components.ts. The host only understands primitives.
+ */
+/**
+ * A hero display, drawn in a figlet. The font is OPTIONAL and normally left
+ * out: without one the host draws the theme's (`theme().font`), so switching
+ * theme re-letters every hero in kona the way it recolors them. Name one only
+ * when the layout around it depends on that figlet's metrics — and even then
+ * the host may fall back to a narrower one rather than overflow the pane.
  */
 export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
 export const text = (t: string, opts: { color?: Color; dim?: boolean; bg?: Color; focus?: boolean; index?: number } = {}): ViewNode => ({ kind: "text", text: t, ...opts });

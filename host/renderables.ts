@@ -7,7 +7,8 @@ import {
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import type { Color, InputNode, ViewNode } from "../sdk/index.ts";
+import type { BigFont, Color, InputNode, ViewNode } from "../sdk/index.ts";
+import { fitBigFont } from "../core/fonts.ts";
 import { layoutProps } from "./nodes.ts";
 
 /**
@@ -16,16 +17,20 @@ import { layoutProps } from "./nodes.ts";
  * else is — chrome (frame, footer, overlay layer) lives with the stage.
  */
 
-/** The theme roles the mapping paints with. */
+/** The theme roles the mapping paints with — and letters with. */
 export interface NodeColors {
   fg: Color;
   dim: Color;
   accent: Color;
+  /** The figlet a `big` node with no font of its own is drawn in. */
+  font: BigFont;
 }
 
 export interface NodeRendererOpts {
   /** Read per node, not captured: the palette can change between frames. */
   colors: () => NodeColors;
+  /** Cells the pane is wide — the budget a hero has to fit inside. */
+  width: () => number;
   /** A field as styled cells; the stage owns the in-flight draft. */
   inputChunks: (node: InputNode) => TextChunk[];
   /** A textarea as a stack of one-line cell rows (the editor owns the wrap). */
@@ -44,16 +49,24 @@ const PARTIALS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
  */
 export function createNodeRenderer(
   renderer: CliRenderer,
-  { colors, inputChunks, inputLines, claim }: NodeRendererOpts,
+  { colors, width, inputChunks, inputLines, claim }: NodeRendererOpts,
 ): (node: ViewNode, id: string) => Renderable {
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
-    const { fg: FG, dim: DIM, accent: ACCENT } = colors();
+    const { fg: FG, dim: DIM, accent: ACCENT, font: FONT } = colors();
     // flexShrink:0 everywhere — leaves must keep their height so they never
     // collapse on top of each other when content exceeds the viewport.
     if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG, wrapMode: "word", flexShrink: 0 });
     switch (node.kind) {
-      case "big":
-        return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG, flexShrink: 0 });
+      case "big": {
+        // The figlet is a theme role: a node names one only when its layout
+        // depends on that face, and otherwise gets the theme's. Either way the
+        // PANE has the last word — figlets differ enough in width (60 cells for
+        // "00:00" in `huge`, 17 in `tiny`) that a hero drawn at face value
+        // would run off the side of most terminals — so the widest figlet that
+        // fits is what actually gets drawn.
+        const font = fitBigFont(node.text, node.font ?? FONT, { width: width() });
+        return new ASCIIFontRenderable(renderer, { id, text: node.text, font, color: node.color ?? FG, flexShrink: 0 });
+      }
       case "text": {
         const label = new TextRenderable(renderer, {
           id: node.bg ? `${id}-t` : id,

@@ -2,9 +2,9 @@
 
 The palette picker. Arrow through the presets — Catppuccin, Nord, Dracula,
 Gruvbox, Tokyo Night, Rosé Pine, Solarized, Everforest, Kanagawa, One Dark, Ayu
-and kona's own aloha — and the **whole UI recolors under the cursor**. `enter`
-writes the one you land on to `~/.config/kona/config.toml`; `esc` puts back what
-you had.
+and kona's own aloha — and the **whole UI recolors and re-letters under the
+cursor**. `enter` writes the one you land on to `~/.config/kona/config.toml`;
+`esc` puts back what you had.
 
 ```sh
 kona theme                                    # the picker
@@ -17,6 +17,18 @@ kona call theme reset                         # back to the saved preset
 
 Names are fuzzy: `mocha`, `Tokyo Night` and `tokyo-night` all land on the same
 preset, and an ambiguous one (`light`) is refused rather than guessed at.
+
+## A theme is a face too
+
+Every preset ships a **figlet** — the display typeface hero displays are
+lettered in (`theme().font`), which is why the `kona` wordmark at the top of the
+picker changes shape as you arrow, not just color. Dracula letters in `huge`,
+Gruvbox in the dithered `shade`, Rosé Pine Dawn in a minimal `tiny`.
+
+Figlets differ enough in size that one can be wider than your terminal. When
+that happens the line under the wordmark says so and names the narrower face
+that gets drawn instead — the same fallback every hero in kona gets, so nothing
+is saved that you'd never actually see.
 
 ## How the live preview works
 
@@ -36,6 +48,7 @@ that same block still wins over it:
 [theme]
 preset = "nord"
 ok     = "#00d488"   # ...but keep kona's green
+font   = "block"     # ...and kona's letters
 ```
 
 The picker previews that merge (Nord, with your green) rather than the raw

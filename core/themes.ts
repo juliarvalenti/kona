@@ -1,5 +1,6 @@
 import type { Color } from "../sdk/index.ts";
 import type { Theme } from "./config.ts";
+import { DEFAULT_FONT, type BigFont } from "./fonts.ts";
 
 /**
  * Named theme presets — the palettes people already know (Catppuccin, Nord,
@@ -9,6 +10,12 @@ import type { Theme } from "./config.ts";
  * `~/.config/kona/config.toml` picks one and any explicit role in that same
  * block still wins on top (see core/config.ts). The `theme` applet writes that
  * one key, so the picker and a hand-edited config are the same setting.
+ *
+ * A preset also picks a FIGLET — the typeface hero displays are lettered in
+ * (`theme().font`, core/fonts.ts) — because a palette sets a vibe and a display
+ * face sets the same one: a chunky theme leans `huge`, a minimal one `tiny`.
+ * Switching preset therefore reskins and re-letters in one keystroke, and
+ * `[theme] font` in the config still wins over the preset's choice.
  *
  * Every preset goes through `roles()` below, which is the point of the
  * intermediate `Scheme` shape: a scheme names the handful of colors a palette
@@ -50,6 +57,8 @@ interface Scheme {
   ok: Color;
   warn: Color;
   error: Color;
+  /** The figlet its heroes are lettered in. Defaults to kona's own, `block`. */
+  font?: BigFont;
 }
 
 /** Spread a scheme over every kona role. The only place that mapping lives. */
@@ -72,6 +81,7 @@ function roles(s: Scheme): Theme {
     caret: s.accent,
     caretFg: s.bg,
     panel: s.panel ?? s.bg,
+    font: s.font ?? DEFAULT_FONT,
   };
 }
 
@@ -106,6 +116,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#00d488",
     warn: "#f0b000",
     error: "#ff5c57",
+    font: "block", // kona's own
   },
 
   // --- Catppuccin (base/mantle/surface + the four accents kona needs)
@@ -125,6 +136,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#40a02b",
     warn: "#df8e1d",
     error: "#d20f39",
+    font: "slick", // pastel, rounded
   },
   "catppuccin-frappe": {
     label: "Catppuccin Frappé",
@@ -142,6 +154,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#a6d189",
     warn: "#e5c890",
     error: "#e78284",
+    font: "slick",
   },
   "catppuccin-macchiato": {
     label: "Catppuccin Macchiato",
@@ -159,6 +172,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#a6da95",
     warn: "#eed49f",
     error: "#ed8796",
+    font: "slick",
   },
   "catppuccin-mocha": {
     label: "Catppuccin Mocha",
@@ -176,6 +190,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#a6e3a1",
     warn: "#f9e2af",
     error: "#f38ba8",
+    font: "slick",
   },
 
   // --- the classics
@@ -195,6 +210,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#a3be8c",
     warn: "#ebcb8b",
     error: "#bf616a",
+    font: "grid", // cool and technical
   },
   dracula: {
     label: "Dracula",
@@ -212,6 +228,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#50fa7b",
     warn: "#ffb86c",
     error: "#ff5555",
+    font: "huge", // theatrical
   },
   "gruvbox-dark": {
     label: "Gruvbox Dark",
@@ -229,6 +246,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#b8bb26",
     warn: "#fabd2f",
     error: "#fb4934",
+    font: "shade", // retro dither
   },
   "gruvbox-light": {
     label: "Gruvbox Light",
@@ -246,6 +264,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#79740e",
     warn: "#b57614",
     error: "#9d0006",
+    font: "shade",
   },
   "tokyo-night": {
     label: "Tokyo Night",
@@ -263,6 +282,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#9ece6a",
     warn: "#e0af68",
     error: "#f7768e",
+    font: "block",
   },
   "rose-pine": {
     label: "Rosé Pine",
@@ -280,6 +300,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#31748f",
     warn: "#f6c177",
     error: "#eb6f92",
+    font: "pallet", // elegant line work
   },
   "rose-pine-moon": {
     label: "Rosé Pine Moon",
@@ -297,6 +318,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#3e8fb0",
     warn: "#f6c177",
     error: "#eb6f92",
+    font: "pallet",
   },
   "rose-pine-dawn": {
     label: "Rosé Pine Dawn",
@@ -314,6 +336,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#56949f",
     warn: "#ea9d34",
     error: "#b4637a",
+    font: "tiny", // airy
   },
   "solarized-dark": {
     label: "Solarized Dark",
@@ -331,6 +354,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#859900",
     warn: "#b58900",
     error: "#dc322f",
+    font: "pallet",
   },
   "solarized-light": {
     label: "Solarized Light",
@@ -348,6 +372,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#859900",
     warn: "#b58900",
     error: "#dc322f",
+    font: "tiny",
   },
   everforest: {
     label: "Everforest Dark",
@@ -365,6 +390,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#83c092",
     warn: "#dbbc7f",
     error: "#e67e80",
+    font: "shade",
   },
   kanagawa: {
     label: "Kanagawa Wave",
@@ -382,6 +408,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#98bb6c",
     warn: "#e6c384",
     error: "#e82424",
+    font: "grid",
   },
   "one-dark": {
     label: "One Dark",
@@ -399,6 +426,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#98c379",
     warn: "#e5c07b",
     error: "#e06c75",
+    font: "block",
   },
   "ayu-dark": {
     label: "Ayu Dark",
@@ -416,6 +444,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#aad94c",
     warn: "#ffb454",
     error: "#f07178",
+    font: "grid",
   },
   "ayu-mirage": {
     label: "Ayu Mirage",
@@ -433,6 +462,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#d5ff80",
     warn: "#ffad66",
     error: "#f28779",
+    font: "grid",
   },
   "ayu-light": {
     label: "Ayu Light",
@@ -450,6 +480,7 @@ const SCHEMES: Record<string, Scheme> = {
     ok: "#86b300",
     warn: "#f2ae49",
     error: "#e65050",
+    font: "tiny",
   },
 };
 
