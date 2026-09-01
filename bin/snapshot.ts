@@ -30,7 +30,11 @@ export async function snapshot(target: string, stateOverride?: Record<string, un
     stage.renderApplet(def, state);
   }
   await renderOnce();
-  return captureCharFrame();
+  const frame = captureCharFrame();
+  // Each call spins up a renderer; tear it down so a test file full of
+  // snapshots doesn't pile up listeners on the shared console cache.
+  renderer.destroy();
+  return frame;
 }
 
 if (import.meta.main) {
