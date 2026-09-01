@@ -245,24 +245,91 @@ export const pause = () => api("/v1/me/player/pause", { method: "PUT" });
 export const next = () => api("/v1/me/player/next", { method: "POST" });
 export const previous = () => api("/v1/me/player/previous", { method: "POST" });
 
-export interface SearchResult {
+/** A browsable item: a track, artist, or album. */
+export interface Row {
+  kind: "track" | "artist" | "album";
+  id: string;
   uri: string;
-  track: string;
-  artist: string;
-  album: string;
+  name: string;
+  subtitle: string;
 }
 
-export async function searchTracks(query: string, limit = 10): Promise<SearchResult[]> {
+const artistsOf = (x: any): string => (x?.artists ?? []).map((a: any) => a.name).join(", ");
+const trackRow = (t: any): Row => ({ kind: "track", id: t.id, uri: t.uri, name: t.name ?? "", subtitle: artistsOf(t) });
+
+let _market: string | null = null;
+async function market(): Promise<string> {
+  if (_market) return _market;
+  try {
+    const me = await api("/v1/me");
+    _market = (me?.country as string) ?? "US";
+  } catch {
+    _market = "US";
+  }
+  return _market;
+}
+
+/** Typed catalog search: artists, then albums, then tracks. */
+export async function search(query: string): Promise<Row[]> {
   if (!query.trim()) return [];
-  // Development-mode apps cap search `limit` at 10 (higher -> 400 "Invalid limit").
-  const lim = Math.min(Math.max(1, limit), 10);
-  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "track", limit: String(lim) })}`);
-  return ((r?.tracks?.items ?? []) as any[]).map((t) => ({
-    uri: t.uri,
-    track: t.name ?? "",
-    artist: (t.artists ?? []).map((a: any) => a.name).join(", "),
-    album: t.album?.name ?? "",
+  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "artist,album,track", limit: "6" })}`);
+  const artists: Row[] = ((r?.artists?.items ?? []) as any[]).slice(0, 4).map((a) => ({
+    kind: "artist",
+    id: a.id,
+    uri: a.uri,
+    name: a.name ?? "",
+    subtitle: (a.genres ?? []).slice(0, 2).join(", "),
   }));
+  const albums: Row[] = ((r?.albums?.items ?? []) as any[]).slice(0, 4).map((a) => ({
+    kind: "album",
+    id: a.id,
+    uri: a.uri,
+    name: a.name ?? "",
+    subtitle: artistsOf(a),
+  }));
+  const tracks: Row[] = ((r?.tracks?.items ?? []) as any[]).slice(0, 6).map(trackRow);
+  return [...artists, ...albums, ...tracks];
+}
+
+export interface Detail {
+  name: string;
+  uri: string; // context to play the whole thing
+  rows: Row[];
+}
+
+export async function artistDetail(id: string): Promise<Detail> {
+  const [a, albs] = await Promise.all([
+    api(`/v1/artists/${id}`),
+    api(`/v1/artists/${id}/albums?${new URLSearchParams({ include_groups: "album,single", limit: "10" })}`),
+  ]);
+  // top-tracks is 403 for development-mode apps; best-effort, else just albums.
+  let topTracks: Row[] = [];
+  try {
+    const top = await api(`/v1/artists/${id}/top-tracks?market=${await market()}`);
+    topTracks = ((top?.tracks ?? []) as any[]).slice(0, 10).map(trackRow);
+  } catch {
+    /* restricted — fall back to albums only */
+  }
+  const albums: Row[] = ((albs?.items ?? []) as any[]).map((al) => ({
+    kind: "album" as const,
+    id: al.id,
+    uri: al.uri,
+    name: al.name ?? "",
+    subtitle: al.release_date?.slice(0, 4) ?? "",
+  }));
+  return { name: a?.name ?? "Artist", uri: a?.uri ?? "", rows: [...topTracks, ...albums] };
+}
+
+export async function albumDetail(id: string): Promise<Detail> {
+  const al = await api(`/v1/albums/${id}`);
+  const rows: Row[] = ((al?.tracks?.items ?? []) as any[]).map((t) => ({
+    kind: "track" as const,
+    id: t.id,
+    uri: t.uri,
+    name: t.name ?? "",
+    subtitle: artistsOf(t),
+  }));
+  return { name: al?.name ?? "Album", uri: al?.uri ?? "", rows };
 }
 
 /** Start playback of specific track URIs on the active device. */
@@ -271,4 +338,12 @@ export const playUris = (uris: string[]) =>
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ uris }),
+  });
+
+/** Play a whole context (artist / album / playlist uri). */
+export const playContext = (context_uri: string) =>
+  api("/v1/me/player/play", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ context_uri }),
   });

@@ -147,7 +147,7 @@ export function createStage(renderer: CliRenderer): Stage {
   });
   frame.add(scroll);
   stage.add(frame);
-  const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1 });
+  const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1, wrapMode: "none" });
   renderer.root.add(stage);
   renderer.root.add(footer);
 

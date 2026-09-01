@@ -6,10 +6,13 @@ import {
   pause,
   next,
   previous,
-  searchTracks,
+  search,
+  artistDetail,
+  albumDetail,
   playUris,
+  playContext,
   type QueueItem,
-  type SearchResult,
+  type Row,
 } from "../../server/spotify.ts";
 
 /**
@@ -32,10 +35,17 @@ interface SpotifyState {
   authed: boolean;
   loading: boolean;
   error: string | null;
-  // search
-  mode: "now" | "results";
+  // search / browse: a stack of screens; the top is the current one.
+  mode: "now" | "browse";
   query: string;
-  results: SearchResult[];
+  stack: Screen[];
+}
+
+/** A selectable row: catalog Row plus a synthetic "play this whole thing" action. */
+type BrowseRow = Row | { kind: "play"; uri: string; name: string; subtitle: string };
+interface Screen {
+  title: string;
+  rows: BrowseRow[];
   cursor: number;
 }
 
@@ -93,8 +103,7 @@ export default defineApplet<SpotifyState>({
     error: null,
     mode: "now",
     query: "",
-    results: [],
-    cursor: 0,
+    stack: [],
   },
 
   verbs: {
@@ -133,43 +142,70 @@ export default defineApplet<SpotifyState>({
     },
     async search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "");
-      state.mode = "results";
-      state.cursor = 0;
+      state.mode = "browse";
+      state.stack = [{ title: `search: ${state.query}`, rows: [], cursor: 0 }];
       state.loading = true;
       emit();
       try {
-        state.results = await searchTracks(state.query);
+        state.stack[0]!.rows = await search(state.query);
       } catch (e) {
         state.error = e instanceof Error ? e.message : String(e);
       } finally {
         state.loading = false;
         emit();
       }
-      return { query: state.query, count: state.results.length };
+      return { query: state.query, count: state.stack[0]?.rows.length ?? 0 };
     },
-    async playSelected(_a, { state, emit }) {
-      const r = state.results[state.cursor];
+    // enter: play a track / play-a-context, or drill into an artist/album.
+    async enter(_a, { state, emit }) {
+      const scr = state.stack[state.stack.length - 1];
+      const r = scr?.rows[scr.cursor];
       if (!r) return {};
       try {
-        await playUris([r.uri]);
+        if (r.kind === "track") {
+          await playUris([r.uri]);
+          state.mode = "now";
+          await Bun.sleep(400);
+          await loadNow(state, emit);
+          return { playing: r.name };
+        }
+        if (r.kind === "play") {
+          await playContext(r.uri);
+          state.mode = "now";
+          await Bun.sleep(400);
+          await loadNow(state, emit);
+          return { playing: r.name };
+        }
+        // artist / album -> push a detail screen with a Play action on top.
+        state.loading = true;
+        emit();
+        const d = r.kind === "artist" ? await artistDetail(r.id) : await albumDetail(r.id);
+        state.stack.push({
+          title: d.name,
+          rows: [{ kind: "play", uri: d.uri, name: `Play ${d.name}`, subtitle: "" }, ...d.rows],
+          cursor: 0,
+        });
       } catch (e) {
         state.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        state.loading = false;
+        emit();
       }
-      state.mode = "now";
-      await Bun.sleep(400);
-      await loadNow(state, emit);
-      return { playing: r.track };
+      return { screen: state.stack[state.stack.length - 1]?.title };
     },
     back(_a, { state, emit }) {
-      state.mode = "now";
+      state.stack.pop();
+      if (state.stack.length === 0) state.mode = "now";
       emit();
     },
     up(_a, { state, emit }) {
-      state.cursor = Math.max(0, state.cursor - 1);
+      const scr = state.stack[state.stack.length - 1];
+      if (scr) scr.cursor = Math.max(0, scr.cursor - 1);
       emit();
     },
     down(_a, { state, emit }) {
-      state.cursor = Math.min(state.results.length - 1, state.cursor + 1);
+      const scr = state.stack[state.stack.length - 1];
+      if (scr) scr.cursor = Math.min(scr.rows.length - 1, scr.cursor + 1);
       emit();
     },
   },
@@ -199,16 +235,16 @@ export default defineApplet<SpotifyState>({
   nav: {
     up: "up",
     down: "down",
-    select: "playSelected",
-    selectLabel: "play",
+    select: "enter",
+    selectLabel: "open/play",
     back: "back",
-    backLabel: "now playing",
-    canBack: (s) => s.mode === "results",
+    backLabel: "back",
+    canBack: (s) => s.mode === "browse",
   },
 
-  search: { verb: "search", placeholder: "search spotify tracks…" },
+  search: { verb: "search", placeholder: "search spotify (artists, albums, tracks)…" },
 
-  crumb: (s) => (s.mode === "results" ? `search: ${s.query}` : null),
+  crumb: (s) => (s.mode === "browse" ? (s.stack[s.stack.length - 1]?.title ?? null) : null),
 
   accent(state) {
     if (state.error && !state.authed) return AMBER;
@@ -228,19 +264,24 @@ export default defineApplet<SpotifyState>({
       ];
     }
 
-    // Search results
-    if (state.mode === "results") {
-      const head = state.loading
-        ? text("searching…", { color: AMBER })
-        : text(`results for "${state.query}"   ${state.results.length}`, { dim: true });
-      const rows: ViewNode[] = state.results.map((r, i) =>
+    // Browse (search results / artist / album), a stack of screens.
+    if (state.mode === "browse") {
+      const scr = state.stack[state.stack.length - 1];
+      const head = state.loading ? text("loading…", { color: AMBER }) : text(scr?.title ?? "", { dim: true });
+      const tag = (k: BrowseRow["kind"]) => (k === "play" ? "▶" : k === "artist" ? "artist" : k === "album" ? "album" : "");
+      const rows: ViewNode[] = (scr?.rows ?? []).map((r, i) =>
         recordRow(
           [
-            { text: r.track, grow: true },
-            { text: r.artist, width: Math.min(24, Math.floor(W * 0.24)) },
-            { text: r.album, width: Math.min(24, Math.floor(W * 0.24)) },
+            { text: r.kind === "play" ? r.name : r.name, grow: true },
+            { text: r.subtitle, width: Math.min(28, Math.floor(W * 0.3)) },
+            { text: tag(r.kind), width: 6, align: "right" },
           ],
-          { width: W, selected: i === state.cursor, accent: GREEN, color: FG },
+          {
+            width: W,
+            selected: i === (scr?.cursor ?? -1),
+            accent: GREEN,
+            color: r.kind === "play" ? GREEN : FG,
+          },
         ),
       );
       if (!rows.length && !state.loading) rows.push(text("no matches", { dim: true }));
