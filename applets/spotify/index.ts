@@ -118,6 +118,28 @@ async function loadNow(state: SpotifyState, emit: () => void) {
 
 let ticks = 0;
 
+/** Push an artist/album detail screen (Play action + its rows) and switch to browse. */
+async function pushDetail(state: SpotifyState, emit: () => void, kind: "artist" | "album", id: string) {
+  state.mode = "browse";
+  state.loading = true;
+  emit();
+  try {
+    const d = kind === "artist" ? await artistDetail(id) : await albumDetail(id);
+    state.stack.push({
+      title: d.name,
+      rows: [{ kind: "play", uri: d.uri, name: `Play ${d.name}`, subtitle: "" }, ...d.rows],
+      cursor: 0,
+    });
+  } catch (e) {
+    state.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    state.loading = false;
+    emit();
+  }
+}
+
+const idOf = (uri: string) => uri.split(":").pop() ?? "";
+
 export default defineApplet<SpotifyState>({
   id: "spotify",
   title: "Spotify",
@@ -266,13 +288,34 @@ export default defineApplet<SpotifyState>({
         emit();
       }
     },
-    // enter: play a track/playlist/context, or drill into an artist/album.
-    // (Playlist tracklists are 403 for dev apps, so a playlist just plays.)
+    // enter: acts on the selection. On the now-playing screen the cursor moves
+    // over artist / context / up-next; in browse it's the current screen's rows.
     async enter(_a, { state, emit }) {
-      const scr = state.stack[state.stack.length - 1];
-      const r = scr?.rows[scr.cursor];
-      if (!r || r.kind === "header") return {};
       try {
+        if (state.mode === "now") {
+          const t = nowTargets(state)[state.nowCursor];
+          if (!t) return {};
+          if (t.kind === "artist") await pushDetail(state, emit, "artist", t.id);
+          else if (t.kind === "track") {
+            await playUris([t.uri]);
+            await Bun.sleep(400);
+            await loadNow(state, emit);
+          } else if (t.kind === "context") {
+            if (t.ctype === "album") await pushDetail(state, emit, "album", idOf(t.uri));
+            else if (t.ctype === "artist") await pushDetail(state, emit, "artist", idOf(t.uri));
+            else {
+              await playContext(t.uri); // playlist: can't browse (403), so play it
+              await Bun.sleep(400);
+              await loadNow(state, emit);
+            }
+          }
+          return {};
+        }
+
+        // browse mode
+        const scr = state.stack[state.stack.length - 1];
+        const r = scr?.rows[scr.cursor];
+        if (!r || r.kind === "header") return {};
         if (r.kind === "track") {
           await playUris([r.uri]);
           state.mode = "now";
@@ -287,22 +330,12 @@ export default defineApplet<SpotifyState>({
           await loadNow(state, emit);
           return { playing: r.name };
         }
-        // artist / album -> push a detail screen with a Play action on top.
-        state.loading = true;
-        emit();
-        const d = r.kind === "artist" ? await artistDetail(r.id) : await albumDetail(r.id);
-        state.stack.push({
-          title: d.name,
-          rows: [{ kind: "play", uri: d.uri, name: `Play ${d.name}`, subtitle: "" }, ...d.rows],
-          cursor: 0,
-        });
+        await pushDetail(state, emit, r.kind === "artist" ? "artist" : "album", r.id);
       } catch (e) {
         state.error = e instanceof Error ? e.message : String(e);
-      } finally {
-        state.loading = false;
         emit();
       }
-      return { screen: state.stack[state.stack.length - 1]?.title };
+      return {};
     },
     back(_a, { state, emit }) {
       state.stack.pop();
@@ -310,6 +343,10 @@ export default defineApplet<SpotifyState>({
       emit();
     },
     up(_a, { state, emit }) {
+      if (state.mode === "now") {
+        state.nowCursor = Math.max(0, state.nowCursor - 1);
+        return emit();
+      }
       const scr = state.stack[state.stack.length - 1];
       if (!scr) return emit();
       let i = scr.cursor - 1;
@@ -318,6 +355,10 @@ export default defineApplet<SpotifyState>({
       emit();
     },
     down(_a, { state, emit }) {
+      if (state.mode === "now") {
+        state.nowCursor = Math.min(Math.max(0, nowTargets(state).length - 1), state.nowCursor + 1);
+        return emit();
+      }
       const scr = state.stack[state.stack.length - 1];
       if (!scr) return emit();
       let i = scr.cursor + 1;
@@ -444,11 +485,27 @@ export default defineApplet<SpotifyState>({
     const barW = Math.min(48, W - 16);
     const frac = state.durationMs > 0 ? state.positionMs / state.durationMs : 0;
     const color = state.playing ? GREEN : FG;
+    const subW = Math.min(28, Math.floor(W * 0.3));
 
-    const nodes: ViewNode[] = [
-      text(state.track, { color }),
-      text(state.artist, { dim: true }),
-      text(`${state.playing ? "▶" : "⏸"} ${state.album}${state.context ? `  ·  from ${state.context}` : ""}`, { dim: true }),
+    // The now-playing screen is navigable: artist / context / up-next are
+    // selectable. `ti` tracks the target index as we lay them out so highlights
+    // line up with nowCursor (see nowTargets()).
+    const cur = Math.min(state.nowCursor, Math.max(0, nowTargets(state).length - 1));
+    let ti = 0;
+    const nodes: ViewNode[] = [text(`${state.playing ? "▶" : "⏸"} ${state.track}`, { color })];
+
+    if (state.artistId) {
+      nodes.push(recordRow([{ text: `by ${state.artistName}`, grow: true }, { text: "artist", width: 8, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }));
+    } else {
+      nodes.push(text(`by ${state.artist}`, { dim: true }));
+    }
+
+    nodes.push(text(state.album, { dim: true }));
+    if (state.contextUri && ["playlist", "album", "artist"].includes(state.contextType)) {
+      nodes.push(recordRow([{ text: `from ${state.context}`, grow: true }, { text: state.contextType, width: 8, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }));
+    }
+
+    nodes.push(
       spacer(),
       row([text(fmt(state.positionMs), { dim: true }), progress(frac, { width: barW, color: GREEN }), text(fmt(state.durationMs), { dim: true })], { align: "center", gap: 1 }),
       spacer(),
@@ -460,13 +517,13 @@ export default defineApplet<SpotifyState>({
         ],
         { align: "center" },
       ),
-    ];
+    );
 
     if (state.upNext.length) {
       nodes.push(spacer(), divider(W - 1), text("up next", { dim: true }));
       for (const q of state.upNext) {
         nodes.push(
-          recordRow([{ text: q.track, grow: true }, { text: q.artist, width: Math.min(28, Math.floor(W * 0.3)), align: "right" }], { width: W, color: FG }),
+          recordRow([{ text: q.track, grow: true }, { text: q.artist, width: subW, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }),
         );
       }
     }
