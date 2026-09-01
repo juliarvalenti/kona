@@ -14,6 +14,11 @@ human at the keyboard. You never open the TUI; you talk to the daemon.
 3. Read state anytime: `GET /applets/<id>/state` (or `kona state <id>`).
 4. Watch changes: `GET /events` (SSE) streams `snapshot` then `state` events.
 
+An applet will also show you itself. `bun run bin/snapshot.ts <applet> --hero`
+renders its portrait — the frame the README gallery uses — as plain text, with
+no TTY, no account and no live data, so "what does this look like?" is a
+question you can answer before you touch anyone's state.
+
 The human may be looking at the same applet while you act — your verb call
 repaints their view. Prefer small, named verbs over sweeping mutations, and
 leave state coherent (an applet's `view` must always make sense).

@@ -1,7 +1,50 @@
 import { defineSnapshots } from "../../sdk/testing.ts";
 
 /** The unified inbox, the reader, and the two states that need no account. */
+/** A morning's mail across two mailboxes — the applet's portrait. */
+const DAY = 86_400_000;
+const THREADS = [
+  ["GitHub", "kona#54 — applet screenshots in the README", "ada@gmail.com", "gmail", 0, true],
+  ["Grace Hopper", "standup notes, and the compiler talk", "grace@work.com", "outlook", 0, true],
+  ["Ada Lovelace", "dinner friday?", "ada@gmail.com", "gmail", 1, false],
+  ["arXiv", "cs.PL digest — 9 new submissions", "ada@gmail.com", "gmail", 1, true],
+  ["Recruiting", "re: the terminal thing you shipped", "grace@work.com", "outlook", 2, false],
+  ["Alan Turing", "on the imitation game (was: re: demos)", "ada@gmail.com", "gmail", 3, false],
+  ["Katherine J.", "trajectory review moved to 14:00", "grace@work.com", "outlook", 4, false],
+] as const;
+
 export default defineSnapshots([
+  {
+    name: "the unified inbox: both mailboxes, newest first, unread led",
+    hero: true,
+    state: () => ({
+      authed: true,
+      cursor: 0,
+      accounts: [
+        { provider: "gmail", id: "ada@gmail.com", label: "ada@gmail.com" },
+        { provider: "outlook", id: "grace@work.com", label: "grace@work.com" },
+      ],
+      threads: THREADS.map(([from, subject, account, provider, days, unread], i) => ({
+        id: `t${i}`,
+        account,
+        provider,
+        from,
+        subject,
+        snippet: "",
+        date: "",
+        ts: Date.now() - days * DAY,
+        unread,
+      })),
+    }),
+    width: 92,
+    height: 20,
+    contains: [
+      "2 accounts", "7 loaded",
+      "●", // unread dot
+      "ada", "grace", // per-row account badges
+      "dinner friday?", "standup notes, and the compiler talk",
+    ],
+  },
   {
     name: "inbox list shows senders, subjects, and a cursor",
     state: {

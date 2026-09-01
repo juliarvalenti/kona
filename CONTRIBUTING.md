@@ -25,7 +25,8 @@ You get a working applet, its snapshot fixtures, a unit test and a README:
 ```
 applets/pomodoro/
   index.ts         defineApplet(...) as the default export — the applet
-  snapshots.ts     rendering fixtures, discovered by tests/snapshot.test.ts
+  snapshots.ts     rendering fixtures; the first (or `hero: true`) is the
+                   applet's portrait in the README gallery
   pomodoro.test.ts unit tests, discovered by `bun test`
   README.md        the prose, printed by `kona docs pomodoro`
 ```
@@ -109,6 +110,31 @@ test("start opens a round", () => { /* drive the verbs like the daemon does */ }
 packages and runs whatever `snapshots.ts` it finds, in the repo and in plugins
 alike. A plugin outside the repo also gets a two-line `snapshots.test.ts` from
 the scaffolder, since nothing in this checkout scans its directory.
+
+### One fixture is the hero
+
+The first fixture in the list — or whichever one says `hero: true` — is the
+applet's **portrait**. It is an ordinary fixture, asserted on like the rest;
+being the hero only means two more things happen to it:
+
+```sh
+bun run bin/snapshot.ts pomodoro --hero   # "show me what you look like"
+bun run shots                             # docs/shots/*.svg + the README gallery
+```
+
+`bun run shots` renders every applet's hero in one fixed 80x24 window, at a
+pinned clock and the default theme, writes it to `docs/shots/<id>.svg`, and
+regenerates the README's gallery from the packages the loader found — so a new
+applet's portrait slots in without anyone editing the README. `tests/shots.test.ts`
+then holds the committed images to a fresh render: change what an applet looks
+like and the suite fails until you re-run it. Two rules follow from that:
+
+- **Every applet ships at least one fixture** (the suite enforces it), and the
+  hero should be the frame you would show someone — the applet doing its job,
+  not its empty state.
+- **A hero must render the same twice.** Build state from `Date.now()` in a
+  state *function* (`at: Date.now() - 5 * 60_000` reads "5m ago" forever)
+  rather than pinning a literal epoch that drifts into "3 years ago".
 
 `tests/` itself is for the PLATFORM — `sdk/`, `core/`, `host/`, and the
 `server/` seams shared by more than one applet. If a test only makes sense for
@@ -201,7 +227,9 @@ bun test          # the whole suite
 ```
 
 Both must be green. If your change touches rendering, look at it:
-`bun run bin/snapshot.ts <applet>` prints a real frame with no TTY.
+`bun run bin/snapshot.ts <applet>` prints a real frame with no TTY, and
+`bun run shots` refreshes the README gallery (commit the images it writes —
+`bun run shots --check` is the same question without the writes).
 
 Conventions: comments explain WHY (the constraint, the trade-off), not what the
 next line does; prose in docs is plain and specific. Follow the file you are

@@ -1,4 +1,6 @@
 import { createTestRenderer } from "@opentui/core/testing";
+import { TextAttributes } from "@opentui/core";
+import type { CapturedFrame } from "@opentui/core";
 import { createStage } from "../host/stage.ts";
 import { filterApplets } from "../core/catalog.ts";
 import { loadApplets } from "../core/load.ts";
@@ -53,11 +55,29 @@ export interface AppletSnapshot {
   excludes?: string[];
   /** Like `contains`, but matched with runs of whitespace collapsed to one. */
   collapsed?: string[];
+  /**
+   * Mark this fixture as the applet's HERO — the one frame that is the
+   * applet's portrait, rendered into the README gallery by `bun run shots`.
+   * Exactly one per applet; the first fixture is the hero when none says so,
+   * which is why most files never mention it. Being a fixture too, the hero
+   * is asserted on like any other: the gallery can only show a frame the
+   * suite already holds to its contents.
+   */
+  hero?: boolean;
 }
 
 /** Identity helper — gives a fixture file types without importing them. */
 export function defineSnapshots(snaps: AppletSnapshot[]): AppletSnapshot[] {
   return snaps;
+}
+
+/**
+ * The applet's portrait: the fixture flagged `hero: true`, else the first one.
+ * "Show me what you look like" without live data, auth, or a TTY — the gallery
+ * shoots it, and a human or an agent can render it on demand.
+ */
+export function heroSnapshot(snaps: AppletSnapshot[]): AppletSnapshot | undefined {
+  return snaps.find((s) => s.hero) ?? snaps[0];
 }
 
 /**
@@ -161,13 +181,95 @@ async function frame(
   height: number,
   draw: (stage: ReturnType<typeof createStage>) => void,
 ): Promise<string> {
-  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width, height });
-  const stage = createStage(renderer);
+  return shoot(width, height, draw, (cap) => cap.captureCharFrame());
+}
+
+/**
+ * The same frame, with the colors kept. `captureCharFrame` flattens the cell
+ * buffer to text (all a fixture needs); this hands back the styled runs the
+ * stage actually painted, which is what `bun run shots` draws into an SVG.
+ * The OpenTUI types stop here: callers get plain hexes and booleans.
+ */
+export async function renderAppletStyled(
+  target: AnyApplet | AppletDef<never> | string,
+  state?: Record<string, unknown>,
+  width = DEFAULT_SIZE.width,
+  height = DEFAULT_SIZE.height,
+): Promise<StyledFrame> {
+  const def =
+    typeof target === "string" ? await byId(target) : (target as unknown as AnyApplet);
+  return shoot(
+    width,
+    height,
+    (stage) => stage.renderApplet(def, { ...def.initialState, ...(state ?? {}) } as AppletState),
+    (cap) => styled(cap.captureSpans(), width, height),
+  );
+}
+
+/** A run of cells the stage painted with one style. */
+export interface StyledSpan {
+  text: string;
+  /** `#rrggbb`. */
+  fg: string;
+  /** `#rrggbb`, or null when the cell keeps the terminal's background. */
+  bg: string | null;
+  bold: boolean;
+  dim: boolean;
+  italic: boolean;
+  underline: boolean;
+  /** Columns the run occupies — wide glyphs count double. */
+  width: number;
+}
+
+/** A whole frame of them: `rows` lines of `cols` columns. */
+export interface StyledFrame {
+  cols: number;
+  rows: number;
+  lines: StyledSpan[][];
+}
+
+/** OpenTUI's capture -> our own plain shape. */
+function styled(cap: CapturedFrame, cols: number, rows: number): StyledFrame {
+  const attr = (a: number, bit: number) => (a & bit) !== 0;
+  return {
+    cols: cap.cols || cols,
+    rows: cap.rows || rows,
+    lines: cap.lines.map((line) =>
+      line.spans.map((s) => ({
+        text: s.text,
+        fg: hex(s.fg),
+        // A zero-alpha background is "whatever the terminal has" — the shot
+        // paints those cells with the theme's own backdrop instead.
+        bg: s.bg && s.bg.toInts()[3] > 0 ? hex(s.bg) : null,
+        bold: attr(s.attributes, TextAttributes.BOLD),
+        dim: attr(s.attributes, TextAttributes.DIM),
+        italic: attr(s.attributes, TextAttributes.ITALIC),
+        underline: attr(s.attributes, TextAttributes.UNDERLINE),
+        width: s.width,
+      })),
+    ),
+  };
+}
+
+function hex(c: { toInts(): [number, number, number, number] }): string {
+  const [r, g, b] = c.toInts();
+  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Drive the stage once through a headless renderer and capture the result. */
+async function shoot<T>(
+  width: number,
+  height: number,
+  draw: (stage: ReturnType<typeof createStage>) => void,
+  capture: (cap: Awaited<ReturnType<typeof createTestRenderer>>) => T,
+): Promise<T> {
+  const cap = await createTestRenderer({ width, height });
+  const stage = createStage(cap.renderer);
   draw(stage);
-  await renderOnce();
-  const out = captureCharFrame();
+  await cap.renderOnce();
+  const out = capture(cap);
   // Each call spins up a renderer; tear it down so a test file full of
   // snapshots doesn't pile up listeners on the shared console cache.
-  renderer.destroy();
+  cap.renderer.destroy();
   return out;
 }
