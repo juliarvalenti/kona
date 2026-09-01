@@ -4,6 +4,7 @@ import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount, LEGACY_ACCOUNT } from "./mail.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
+import { callbackPage, type CallbackProvider } from "./callback.ts";
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
@@ -101,6 +102,9 @@ async function whoami(accessToken: string): Promise<string | null> {
   }
 }
 
+/** What the browser-facing callback page calls this provider, and how to retry. */
+const GOOGLE: CallbackProvider = { name: "Google", login: "gmail" };
+
 /**
  * Run the interactive login: spin a loopback server, open the consent page,
  * capture the code, exchange for a refresh token, and store it under the
@@ -135,13 +139,13 @@ export async function login(): Promise<string> {
       const code = u.searchParams.get("code");
       if (err) {
         rejectCode(new Error(err));
-        return new Response("kona: authorization failed. You can close this tab.");
+        return callbackPage(GOOGLE, "failed", err);
       }
       if (code) {
         resolveCode(code);
-        return new Response("kona: authorized ✓  — you can close this tab and return to the terminal.");
+        return callbackPage(GOOGLE, "ok");
       }
-      return new Response("kona: waiting for authorization…");
+      return callbackPage(GOOGLE, "waiting");
     },
   });
 

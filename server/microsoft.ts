@@ -4,6 +4,7 @@ import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount } from "./mail.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
+import { callbackPage, type CallbackProvider } from "./callback.ts";
 
 /**
  * Microsoft identity platform OAuth for kona — auth code + PKCE against a
@@ -102,6 +103,9 @@ async function whoami(accessToken: string): Promise<string | null> {
   }
 }
 
+/** What the browser-facing callback page calls this provider, and how to retry. */
+const MICROSOFT: CallbackProvider = { name: "Microsoft", login: "outlook" };
+
 /**
  * Interactive login: spin the loopback server, open the consent page, capture
  * the code, exchange it, then store the refresh token under the address it
@@ -138,13 +142,13 @@ export async function login(): Promise<string> {
         const code = u.searchParams.get("code");
         if (err) {
           rejectCode(new Error(`${err}: ${u.searchParams.get("error_description") ?? ""}`));
-          return new Response("kona: authorization failed. You can close this tab.");
+          return callbackPage(MICROSOFT, "failed", u.searchParams.get("error_description") || err);
         }
         if (code) {
           resolveCode(code);
-          return new Response("kona: authorized ✓  — you can close this tab and return to the terminal.");
+          return callbackPage(MICROSOFT, "ok");
         }
-        return new Response("kona: waiting for authorization…");
+        return callbackPage(MICROSOFT, "waiting");
       },
     });
   } catch (e) {
