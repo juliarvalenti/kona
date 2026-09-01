@@ -1,4 +1,4 @@
-import { defineApplet, text, spacer, col, row, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, row, theme, appletAccent, type ViewNode } from "../../sdk/index.ts";
 import { divider, recordRow } from "../../sdk/components.ts";
 import { openItems, type GhItem } from "../../server/github.ts";
 
@@ -25,11 +25,16 @@ function targets(s: DashState): Target[] {
   return [...(s.np ? [{ kind: "spotify" as const }] : []), ...s.gh.map((g) => ({ kind: "gh" as const, url: g.url }))];
 }
 
-const GREEN = "#1db954";
-const BLUE = "#7aa2f7";
-const AMBER = "#f0b000";
-const FG = "#d0d0d0";
-const DIM = "#6a6a6a";
+/**
+ * The dash's own tint. It defaults to the Spotify green it has always worn (the
+ * now-playing row is the headline), and `[applets.dash] accent = "#..."` in
+ * ~/.config/kona/config.toml overrides it. Everything else names a theme role.
+ */
+const BRAND = "#1db954";
+const palette = () => {
+  const t = theme();
+  return { GREEN: appletAccent("dash", BRAND), BLUE: t.accent, AMBER: t.warn, FG: t.fg, DIM: t.dim };
+};
 
 function fmt(sec: number): string {
   const s = Math.max(0, sec);
@@ -138,6 +143,7 @@ export default defineApplet<DashState>({
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
+    const { GREEN, BLUE, AMBER, FG, DIM } = palette();
     const nodes: ViewNode[] = [];
 
     // Now playing (selectable — jumps into the Spotify applet). Target 0.

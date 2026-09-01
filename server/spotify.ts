@@ -1,6 +1,6 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
+import { configDir } from "../core/config.ts";
 
 /**
  * Spotify OAuth (Authorization Code + PKCE — no client secret) and a thin Web
@@ -13,7 +13,7 @@ import { createHash, randomBytes } from "node:crypto";
  * Playback CONTROL requires Spotify Premium; reading now-playing does not.
  */
 
-const CONFIG_FILE = join(homedir(), ".config", "kona", "spotify.json");
+const CONFIG_FILE = join(configDir(), "spotify.json");
 const KC_SERVICE = "kona-spotify";
 const KC_ACCOUNT = "refresh-token";
 
