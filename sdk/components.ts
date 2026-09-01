@@ -20,7 +20,7 @@ export function keyValue(key: string, value: string, opts: { color?: Color } = {
   return row([text(`${key} `, { dim: true }), text(value, { color: opts.color })]);
 }
 
-/** A vertical list with a cursor marker on the selected row. */
+/** A vertical list with a cursor marker on the selected row. Rows are clickable. */
 export function list(
   items: string[],
   opts: { cursor?: number; color?: Color; marker?: string } = {},
@@ -30,6 +30,7 @@ export function list(
     text(`${i === opts.cursor ? marker : " "} ${item}`, {
       color: i === opts.cursor ? opts.color : undefined,
       dim: i !== opts.cursor,
+      index: i,
     }),
   );
 }
@@ -119,10 +120,13 @@ export interface RecordCol {
  * spans the full width, with a first-class selected state (full-width accent
  * bar + scroll focus). Fixed columns take their width; grow columns split the
  * rest. This is the reusable list-row aesthetic.
+ *
+ * Pass `index` (the row's position in whatever list the applet's cursor indexes)
+ * to make the row clickable: the host fires `nav.select` with that `{ index }`.
  */
 export function recordRow(
   cols: RecordCol[],
-  opts: { width: number; selected?: boolean; accent?: Color; color?: Color },
+  opts: { width: number; selected?: boolean; accent?: Color; color?: Color; index?: number },
 ): ViewNode {
   const GAP = 2;
   const gaps = Math.max(0, cols.length - 1) * GAP;
@@ -139,9 +143,9 @@ export function recordRow(
 
   const line = ("  " + cols.map(cell).join(" ".repeat(GAP))).slice(0, opts.width).padEnd(opts.width);
   if (opts.selected) {
-    return text(line, { color: "#0b0b0b", bg: opts.accent ?? "#7aa2f7", focus: true });
+    return text(line, { color: "#0b0b0b", bg: opts.accent ?? "#7aa2f7", focus: true, index: opts.index });
   }
-  return text(line, { color: opts.color });
+  return text(line, { color: opts.color, index: opts.index });
 }
 
 /** A column-aligned table: dim header row + body rows. */

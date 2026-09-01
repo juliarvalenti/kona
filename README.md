@@ -49,6 +49,10 @@ kona state timer           # read current state
 The daemon (`konad`) autostarts on first use; state lives in
 `~/.local/state/kona/state.json`.
 
+In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes back,
+and `/` searches. The mouse works the same way: click a row to select and open
+it, scroll the wheel to scroll.
+
 ### Gmail
 
 `kona login` runs a Google OAuth loopback flow (read-only) and stores the

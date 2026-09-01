@@ -8,6 +8,7 @@ import {
   bg,
   bold,
   type CliRenderer,
+  type MouseEvent,
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
@@ -38,6 +39,18 @@ export const COLORS = {
 export interface Hint {
   key: string;
   label: string;
+}
+
+/**
+ * A mouse gesture, already resolved against what is on screen — the host never
+ * sees raw coordinates. `index` is the selectable row under the pointer (the
+ * `index` its view node carried), null when the click missed every row.
+ */
+export interface StageMouse {
+  kind: "click" | "wheel";
+  index: number | null;
+  /** Wheel movement in lines: negative up, positive down. Zero for a click. */
+  lines: number;
 }
 
 const ALIGN = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" } as const;
@@ -168,6 +181,8 @@ export interface Stage {
   setDraft(draft: Draft | null): void;
   scrollBy(lines: number): void;
   scrollTop(): number;
+  /** Receive mouse gestures (one handler; the host owns what they mean). */
+  onMouse(handler: (e: StageMouse) => void): void;
   viewportHeight(): number;
   hasFocusTarget(): boolean;
   resetScroll(): void;
@@ -274,6 +289,47 @@ export function createStage(renderer: CliRenderer): Stage {
     return shown;
   }
 
+  // --- Mouse. Rows register themselves as click targets while the frame is
+  // built, so a click resolves by hit-testing the actual renderables — no
+  // screen-line arithmetic, and wrapping/scrolling are handled for free.
+  let clickTargets: Array<{ index: number; node: Renderable }> = [];
+  let onMouseGesture: ((e: StageMouse) => void) | null = null;
+  const WHEEL_LINES = 3;
+
+  /** The selectable row under a screen y, or null (chrome, gaps, plain text). */
+  function indexAt(y: number): number | null {
+    const vp = scroll.viewport;
+    // Rows scrolled out of the viewport keep their (off-screen) coordinates.
+    if (y < vp.screenY || y >= vp.screenY + vp.height) return null;
+    for (const t of clickTargets) {
+      if (t.node.isDestroyed) continue;
+      if (y >= t.node.screenY && y < t.node.screenY + t.node.height) return t.index;
+    }
+    return null;
+  }
+
+  function wheel(e: MouseEvent): boolean {
+    const dir = e.scroll?.direction;
+    if (dir !== "up" && dir !== "down") return false;
+    const ticks = Math.max(1, e.scroll?.delta ?? 1);
+    onMouseGesture?.({ kind: "wheel", index: null, lines: (dir === "up" ? -1 : 1) * WHEEL_LINES * ticks });
+    return true;
+  }
+
+  // Take the wheel before it reaches the ScrollBox, so it moves the viewport in
+  // steady whole-line steps rather than ScrollBox's own accelerated scrolling —
+  // and so the host stays the one place that decides what an input means.
+  scroll.content.onMouse = (e: MouseEvent) => {
+    if (e.type === "scroll" && wheel(e)) e.stopPropagation();
+  };
+
+  // Everything else bubbles to the root: clicks anywhere, plus a wheel over the
+  // chrome (border, footer) that never passed through the content box.
+  renderer.root.onMouse = (e: MouseEvent) => {
+    if (e.type === "down" && e.button === 0) onMouseGesture?.({ kind: "click", index: indexAt(e.y), lines: 0 });
+    else if (e.type === "scroll") wheel(e);
+  };
+
   function setFooter(hints: Hint[]) {
     const cap = Math.max(20, term.width - 1); // paddingLeft
     const shown = fitHints(hints, cap);
@@ -305,6 +361,7 @@ export function createStage(renderer: CliRenderer): Stage {
     // refreshes shouldn't jump the view back to the top. Transitions call
     // resetScroll() explicitly.
     const prevScroll = scroll.scrollTop;
+    clickTargets = [];
     for (const child of [...scroll.content.getChildren()]) {
       scroll.content.remove(child);
       (child as { destroy?: () => void }).destroy?.();
@@ -389,7 +446,11 @@ export function createStage(renderer: CliRenderer): Stage {
           wrapMode: "word",
           flexShrink: 0,
         });
-        if (!node.bg) return label;
+        const claim = (n: Renderable) => {
+          if (node.index !== undefined) clickTargets.push({ index: node.index, node: n });
+          return n;
+        };
+        if (!node.bg) return claim(label);
         // Wrap in a bg box so the highlight spans the FULL row width (a text
         // node's bg only paints behind its glyphs; a box fills its stretched box).
         const bar = new BoxRenderable(renderer, {
@@ -399,7 +460,7 @@ export function createStage(renderer: CliRenderer): Stage {
           flexShrink: 0,
         });
         bar.add(label);
-        return bar;
+        return claim(bar);
       }
       case "spacer":
         return new TextRenderable(renderer, { id, content: " ", flexShrink: 0 });
@@ -509,7 +570,7 @@ export function createStage(renderer: CliRenderer): Stage {
       const nodes: ViewNode[] = [{ kind: "text", text: "pick an app", dim: true }, { kind: "spacer" }];
       applets.forEach((a, i) => {
         const sel = i === cursor;
-        nodes.push({ kind: "text", text: `${sel ? "▸" : " "} ${a.title}`, color: sel ? ACCENT : FG });
+        nodes.push({ kind: "text", text: `${sel ? "▸" : " "} ${a.title}`, color: sel ? ACCENT : FG, index: i });
       });
       setFrame("kona", ACCENT, nodes);
       setFooter([
@@ -555,6 +616,9 @@ export function createStage(renderer: CliRenderer): Stage {
     },
     scrollTop() {
       return scroll.scrollTop;
+    },
+    onMouse(handler) {
+      onMouseGesture = handler;
     },
     viewportHeight() {
       return innerHeight();

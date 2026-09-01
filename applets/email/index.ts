@@ -115,6 +115,8 @@ export default defineApplet<EmailState>({
       await loadMore(state, emit);
       return { count: state.threads.length, hasMore: !!state.nextPage };
     },
+    // index selects a specific thread (an agent's call, or a mouse click on a
+    // row); without one, open whatever the cursor is on.
     async open(args, { state, emit }) {
       const idx = typeof args.index === "number" ? args.index : state.cursor;
       const target = state.threads[idx];
@@ -244,6 +246,7 @@ export default defineApplet<EmailState>({
           selected: i === state.cursor,
           accent: ACCENT,
           color: t.unread ? UNREAD : FG,
+          index: i,
         },
       ),
     );
