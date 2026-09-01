@@ -342,7 +342,14 @@ export interface Message {
   from: string;
   personId: string;
   email: string;
+  /** The message as ONE line — what a list row shows. */
   text: string;
+  /**
+   * The message in full, its newlines and its markdown intact — what the reader
+   * renders. Webex sends `markdown` beside a flattened `text` when a message
+   * was written as markdown, so this is the richer of the two.
+   */
+  body: string;
   at: number;
   /** Attachments — Webex only gives us their URLs, so we just count them. */
   files: number;
@@ -417,12 +424,15 @@ export function normalizeMessage(raw: unknown, names?: Map<string, string>): Mes
   const html = typeof r.html === "string" ? r.html : "";
   const markdown = typeof r.markdown === "string" ? r.markdown : "";
   const files = Array.isArray(r.files) ? r.files.length : 0;
+  const attachments = files ? `(${files} attachment${files === 1 ? "" : "s"})` : "";
   return {
     id,
     from: names?.get(personId) ?? nameFromEmail(email),
     personId,
     email,
-    text: oneLine(plain || stripHtml(html) || markdown) || (files ? `(${files} attachment${files === 1 ? "" : "s"})` : ""),
+    // The row wants the flattest thing Webex has; the reader wants the richest.
+    text: oneLine(plain || stripHtml(html) || markdown) || attachments,
+    body: (markdown || plain || stripHtml(html)).trim() || attachments,
     at: toMs(r.created),
     files,
   };

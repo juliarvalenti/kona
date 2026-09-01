@@ -209,6 +209,26 @@ test("normalizeMessage reads text, html, markdown, or attachments alone", () => 
   expect(normalizeMessage({ personEmail: "z@x.com" })).toBeNull();
 });
 
+test("a message keeps a body: one line for the row, the whole thing for the reader", () => {
+  // The row is one line; the reader gets the newlines back.
+  expect(normalizeMessage(MESSAGES["r-ship"]![1])).toMatchObject({
+    text: "morning all",
+    body: "morning\nall",
+  });
+  // Webex sends `markdown` BESIDE a flattened `text`: the row takes the flat
+  // one, the reader takes the source it was rendered from.
+  const md = normalizeMessage({
+    id: "m",
+    personEmail: "z@x.com",
+    text: "the plan cut rc1",
+    markdown: "## the plan\n\n- cut **rc1**",
+  });
+  expect(md?.text).toBe("the plan cut rc1");
+  expect(md?.body).toBe("## the plan\n\n- cut **rc1**");
+  // Attachments alone say the same thing at both lengths.
+  expect(normalizeMessage({ id: "m", personEmail: "z@x.com", files: ["a"] })?.body).toBe("(1 attachment)");
+});
+
 // --- read receipts (kona's stand-in for an unread count) ---------------------
 
 test("a space is unread until its activity is marked seen", () => {
@@ -598,15 +618,172 @@ test("a long conversation is anchored at its newest message", async () => {
   await h.call("refresh");
   await h.call("open");
 
-  // Not composing: the trailing hint carries the scroll focus, so the host
-  // keeps the bottom of the backlog in view instead of the top.
+  // A space opens on its newest message and the SELECTED row carries the scroll
+  // focus, so the host keeps the bottom of the backlog in view, not the top.
   const idle = webex.view(h.state, { width: 80, height: 8 }) as ViewNode[];
-  expect(anchor(idle)).toContain("press c to write");
+  expect(anchor(idle)).toContain(h.state.open!.messages.at(-1)!.text);
 
-  // Composing: the field itself is the anchor (and owns the keyboard).
+  // Composing: the field itself is the anchor (and owns the keyboard), so a
+  // highlighted row above it can't scroll it off screen.
   await h.call("compose");
   const writing = webex.view(h.state, { width: 80, height: 8 }) as ViewNode[];
   expect(anchor(writing)).toContain("message ship-kona…");
+});
+
+// --- the reader -------------------------------------------------------------
+
+test("a space opens on its newest message and the cursor walks the conversation", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona" });
+
+  const messages = h.state.open!.messages;
+  expect(h.state.mcursor).toBe(messages.length - 1); // read from the bottom
+  expect(h.state.reading).toBeNull();
+
+  await h.call("up");
+  expect(h.state.mcursor).toBe(messages.length - 2);
+  await h.call("up");
+  await h.call("up");
+  await h.call("up");
+  expect(h.state.mcursor).toBe(0); // and no further
+  await h.call("down");
+  expect(h.state.mcursor).toBe(1);
+
+  // The selected row is the highlighted one, and it is clickable.
+  const body = flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[]);
+  expect(body).toContain(messages[1]!.text);
+
+  // Out here the same verbs move over SPACES again.
+  await h.call("back");
+  await h.call("down");
+  expect(h.state.cursor).toBe(1);
+});
+
+test("enter reads a message in full — by cursor, by index, by id, or by what it says", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona" });
+
+  // Bare: the message the cursor is on — the newest, which is what "read me the
+  // last message in ship-kona" means.
+  const newest = h.state.open!.messages.at(-1)!;
+  expect(await h.call("open")).toMatchObject({ message: newest.id, space: "ship-kona", text: newest.body });
+  expect(h.state.reading).toBe(newest.id);
+
+  // A click on a row, an id, and a substring of what was said all land the same.
+  expect(await h.call("open", { index: 0 })).toMatchObject({ message: "m1" });
+  expect(await h.call("open", { message: "m2" })).toMatchObject({ message: "m2" });
+  expect(await h.call("open", { message: "morning" })).toMatchObject({ message: "m1", from: "Bob Barker" });
+  expect(await h.call("open", { message: "nothing anyone said" })).toMatchObject({ error: "no such message" });
+
+  // A space with nothing in it says so rather than opening a blank reader.
+  await h.call("open", { space: "quiet-room" });
+  expect(await h.call("open")).toMatchObject({ error: "no messages to read" });
+});
+
+test("the reader is one call away: {space, message} skips both levels", async () => {
+  const h = harness();
+  await h.call("refresh");
+  const res = (await h.call("open", { space: "ship-kona", message: "m1" })) as { message: string; text: string };
+  expect(res).toMatchObject({ message: "m1", space: "ship-kona", from: "Bob Barker" });
+  expect(res.text).toBe("morning\nall"); // the whole body, newline intact
+  expect(h.state.reading).toBe("m1");
+});
+
+test("back is browser-like: the message, then the space, then the launcher", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona", message: "m1" });
+
+  expect(await h.call("back")).toMatchObject({ at: "space", space: "ship-kona" });
+  expect(h.state.reading).toBeNull();
+  expect(h.state.open?.space.title).toBe("ship-kona");
+
+  expect(await h.call("back")).toMatchObject({ at: "spaces" });
+  expect(h.state.open).toBeNull();
+  // canBack is false out here, so the next back returns to the launcher.
+  expect(webex.nav!.canBack!(h.state)).toBe(false);
+});
+
+test("the reader follows the cursor, so up/down page through the conversation", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona", message: "m2" });
+
+  const before = (await h.call("up")) as { message: string; reading: boolean };
+  expect(before).toMatchObject({ message: "m1", reading: true });
+  expect(h.state.reading).toBe("m1"); // still reading, one message earlier
+  await h.call("down");
+  expect(h.state.reading).toBe("m2");
+});
+
+test("the reader renders the message as markdown, wrapped and whole", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona" });
+  // A message long enough to be cut in a row, with markdown in it.
+  h.state.open!.messages.push({
+    id: "m-md",
+    from: "Ada Lovelace",
+    personId: "p-ada",
+    email: "ada@x.com",
+    text: "## the plan 1. cut rc1 2. freeze `main` — https://example.com/rc1",
+    body: "## the plan\n\n1. cut **rc1**\n2. freeze `main`\n\nsee <https://example.com/rc1>",
+    at: Date.now() - 60_000,
+    files: 0,
+  });
+  await h.call("open", { message: "m-md" });
+
+  const read = flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[]);
+  expect(read).toContain("the plan"); // a heading, not `## the plan`
+  expect(read).not.toContain("**rc1**"); // strong is a color, not stars
+  expect(read).toContain("rc1");
+  expect(read).toContain("freeze");
+  expect(read).toContain("https://example.com/rc1");
+  expect(read).toContain("Ada Lovelace");
+  expect(read).toContain("ship-kona");
+  expect(read).toContain("← back to the space");
+  // The reader is the whole view: the space's other messages are behind it.
+  expect(read).not.toContain("shipping now");
+});
+
+test("a reload keeps your place, and drops the reader if the message is gone", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona", message: "m1" });
+  const at = h.state.mcursor;
+
+  // Somebody says something new: every index shifts, the selection doesn't.
+  await h.call("post", { space: "ship-kona", text: "and another thing" });
+  expect(h.state.reading).toBe("m1");
+  expect(h.state.open!.messages[h.state.mcursor]!.id).toBe("m1");
+  expect(h.state.mcursor).toBe(at);
+
+  // Reading something Webex no longer has drops you back to the conversation
+  // rather than to a blank frame.
+  h.state.reading = "m-deleted";
+  await h.call("refresh");
+  expect(h.state.reading).toBeNull();
+  expect(h.state.open?.space.title).toBe("ship-kona");
+});
+
+test("writing leaves the reader — you post to the space, not into a message", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "Ada", message: "lunch" });
+  expect(h.state.reading).not.toBeNull();
+  await h.call("compose");
+  expect(h.state.reading).toBeNull();
+  expect(h.state.composing).toBe(true);
+
+  // And a filter takes you all the way back out.
+  await h.call("open", { space: "ship-kona" });
+  await h.call("open");
+  await h.call("search", { q: "quiet" });
+  expect(h.state.open).toBeNull();
+  expect(h.state.reading).toBeNull();
+  expect(h.state.mcursor).toBe(0);
 });
 
 test("the applet renders through the real host stage", async () => {

@@ -1,6 +1,6 @@
 import { defineSnapshots } from "../../sdk/testing.ts";
 
-/** The space list, a space drilled into, and the unauthenticated state. */
+/** The space list, a space drilled into, one message read, and the empty state. */
 const MIN = 60_000;
 
 const SPACES = [
@@ -14,6 +14,56 @@ const SPACES = [
 
 const spaces = () =>
   SPACES.map(([id, title, kind, mins]) => ({ id, title, kind, lastActivity: Date.now() - mins * MIN }));
+
+// One conversation, and the message the reader is for: a row shows its first
+// line cut off at the frame, the reader shows the whole of it.
+const SHIP = [
+  {
+    id: "m1",
+    from: "grace",
+    personId: "p1",
+    email: "g@x",
+    text: "shots generator is in — 80x24, one per applet",
+    body: "shots generator is in — 80x24, one per applet",
+    at: Date.now() - 12 * MIN,
+    files: 0,
+  },
+  {
+    id: "m2",
+    from: "ada",
+    personId: "p2",
+    email: "a@x",
+    text: "does the drift test catch a theme change?",
+    body: "does the drift test catch a theme change?",
+    at: Date.now() - 7 * MIN,
+    files: 0,
+  },
+  {
+    id: "m3",
+    from: "grace",
+    personId: "p1",
+    email: "g@x",
+    text: "how the drift test works: it renders every hero fresh and diffs it, so a theme change shows up as a failing…",
+    body: [
+      "## how the drift test works",
+      "",
+      "it never trusts what is committed:",
+      "",
+      "1. renders it **fresh**, headless, at 80x24",
+      "2. diffs that against the frame in the repo",
+      "3. fails loudly on the first character that moved",
+      "",
+      "so yes — a theme change shows up as a failing gallery, not as a surprise",
+      "in someone's screenshot. regenerate with:",
+      "",
+      "```sh",
+      "bun run shots",
+      "```",
+    ].join("\n"),
+    at: Date.now() - 3 * MIN,
+    files: 0,
+  },
+];
 
 // The two 1:1s and who they are with: Grace is at her keyboard, Alan went for
 // a walk 40 minutes ago. Times are built off `Date.now()` so the portrait says
@@ -52,16 +102,33 @@ export default defineSnapshots([
       spaces: spaces(),
       open: {
         space: { id: "s1", title: "ship-kona", kind: "group", lastActivity: Date.now() },
-        messages: [
-          { id: "m1", from: "grace", personId: "p1", email: "g@x", text: "shots generator is in — 80x24, one per applet", at: Date.now() - 12 * MIN, files: 0 },
-          { id: "m2", from: "ada", personId: "p2", email: "a@x", text: "does the drift test catch a theme change?", at: Date.now() - 7 * MIN, files: 0 },
-          { id: "m3", from: "grace", personId: "p1", email: "g@x", text: "it renders fresh and diffs the committed svg, so yes", at: Date.now() - 3 * MIN, files: 0 },
-        ],
+        messages: SHIP,
       },
+      mcursor: 2,
     }),
     width: 84,
     height: 20,
-    contains: ["ship-kona", "3 messages", "grace", "webex.post"],
+    contains: ["ship-kona", "3 messages", "grace", "webex.open"],
+  },
+  {
+    name: "a message opened reads in full, as the markdown it was written in",
+    state: () => ({
+      authed: true,
+      me: "ada",
+      spaces: spaces(),
+      open: {
+        space: { id: "s1", title: "ship-kona", kind: "group", lastActivity: Date.now() },
+        messages: SHIP,
+      },
+      mcursor: 2,
+      reading: "m3",
+    }),
+    width: 84,
+    height: 28,
+    // The row showed one cut-off line; the reader shows the heading, the list
+    // and the fenced command — none of it as raw markdown.
+    contains: ["ship-kona", "how the drift test works", "renders it fresh", "bun run shots", "back to the space"],
+    excludes: ["**", "```"],
   },
   {
     name: "a 1:1 says whether the other person is around",
@@ -74,8 +141,8 @@ export default defineSnapshots([
       open: {
         space: { id: "s6", title: "Alan Turing", kind: "direct", lastActivity: Date.now() - 4 * 60 * MIN },
         messages: [
-          { id: "m1", from: "Alan Turing", personId: "p-alan", email: "alan@example.com", text: "can you look at the imitation branch?", at: Date.now() - 4 * 60 * MIN, files: 0 },
-          { id: "m2", from: "ada", personId: "p-ada", email: "a@x", text: "on it after standup", at: Date.now() - 3.5 * 60 * MIN, files: 0 },
+          { id: "m1", from: "Alan Turing", personId: "p-alan", email: "alan@example.com", text: "can you look at the imitation branch?", body: "can you look at the imitation branch?", at: Date.now() - 4 * 60 * MIN, files: 0 },
+          { id: "m2", from: "ada", personId: "p-ada", email: "a@x", text: "on it after standup", body: "on it after standup", at: Date.now() - 3.5 * 60 * MIN, files: 0 },
         ],
       },
     }),

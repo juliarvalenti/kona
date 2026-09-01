@@ -11,6 +11,7 @@ import {
   type ViewNode,
 } from "../../sdk/index.ts";
 import { divider, recordRow, keyValue } from "../../sdk/components.ts";
+import { renderMarkdown } from "../../sdk/markdown.ts";
 import { notify, freshIds } from "../../server/notify.ts";
 import {
   listSpaces,
@@ -34,11 +35,18 @@ import {
 /**
  * webex — your spaces in the terminal, and one verb that talks back.
  *
- * The list is spaces newest-first with an unread dot; → drills into a space and
- * shows its recent messages. The bimodal seam is the interesting part: `post` is
- * ONE verb with two callers. You press `c`, type into the field and hit enter;
- * an agent posts `{"space":"ship-kona","text":"deploy is green"}` with no
- * terminal in sight. Neither the applet nor Webex can tell which happened.
+ * Three levels, browser-like: the space list, one space's messages, and one
+ * message read in full. → drills in, ← backs out. A row in a conversation is
+ * one line however much was said, so the reader is where a long message
+ * actually gets read — rendered through the shared markdown primitive, because
+ * that is what Webex messages are written in.
+ *
+ * The bimodal seam is the interesting part: `post` is ONE verb with two
+ * callers. You press `c`, type into the field and hit enter; an agent posts
+ * `{"space":"ship-kona","text":"deploy is green"}` with no terminal in sight.
+ * Neither the applet nor Webex can tell which happened. The reader is the same
+ * shape — `open {"space":"ship-kona","message":"m3"}` hands an agent the whole
+ * body that the human is looking at.
  *
  * Read-only plus post, as the issue scopes it: calls and meetings are not here.
  */
@@ -58,6 +66,10 @@ interface WebexState {
   spaces: Space[];
   cursor: number;
   open: { space: Space; messages: Message[] } | null;
+  /** Cursor over the OPEN space's messages — the row → reads. */
+  mcursor: number;
+  /** The message the reader is showing, by id. A space is always open under it. */
+  reading: string | null;
   /** spaceId -> the activity timestamp we have read up to. */
   seen: SeenMap;
   /** personId -> whether Webex thinks they are around. The dots come from here. */
@@ -93,6 +105,88 @@ function visible(state: WebexState): Space[] {
   const q = state.query.trim().toLowerCase();
   if (!q) return state.spaces;
   return state.spaces.filter((s) => s.title.toLowerCase().includes(q));
+}
+
+/** The message the cursor is on, if a space is open. */
+function selectedMessage(state: WebexState): Message | null {
+  return state.open?.messages[state.mcursor] ?? null;
+}
+
+/** The message the reader is showing — null unless one is open AND still there. */
+function readingMessage(state: WebexState): Message | null {
+  if (!state.reading || !state.open) return null;
+  return state.open.messages.find((m) => m.id === state.reading) ?? null;
+}
+
+/**
+ * Resolve a message the way `findSpace` resolves a space: by id, by row index,
+ * or by what it says (substring, case-insensitive) — and, with nothing named at
+ * all, whatever the cursor is on, which is what a keypress means.
+ */
+function findMessage(state: WebexState, args: Record<string, unknown>): Message | null {
+  const messages = state.open?.messages ?? [];
+  const want = args.message ?? args.messageId ?? args.id ?? args.index;
+  if (typeof want === "number") return messages[want] ?? null;
+  if (typeof want === "string" && want.trim()) {
+    const q = want.trim().toLowerCase();
+    return (
+      messages.find((m) => m.id === want) ??
+      messages.find((m) => m.text.toLowerCase().includes(q)) ??
+      messages.find((m) => m.body.toLowerCase().includes(q)) ??
+      null
+    );
+  }
+  return selectedMessage(state);
+}
+
+/**
+ * Move the message cursor. The reader FOLLOWS it, so ↑/↓ pages through the
+ * conversation from inside a message exactly as it moves the highlight from
+ * outside one — one selection, two views of it.
+ */
+function moveMessage(state: WebexState, delta: number, emit: () => void) {
+  const messages = state.open?.messages ?? [];
+  if (!messages.length) return { message: null };
+  state.mcursor = Math.min(messages.length - 1, Math.max(0, state.mcursor + delta));
+  const m = messages[state.mcursor]!;
+  if (state.reading) state.reading = m.id;
+  emit();
+  return { message: m.id, from: m.from, index: state.mcursor, reading: !!state.reading };
+}
+
+/**
+ * Open the reader on a message. The return value is the whole body, not a
+ * summary: an agent asking to read the last message in a space gets the same
+ * text the human is now looking at, in one call.
+ */
+function openReader(state: WebexState, args: Record<string, unknown>, emit: () => void) {
+  const m = findMessage(state, args);
+  if (!m) return { error: state.open?.messages.length ? "no such message" : "no messages to read" };
+  state.mcursor = state.open!.messages.indexOf(m);
+  state.reading = m.id;
+  state.composing = false;
+  emit();
+  return {
+    message: m.id,
+    space: state.open!.space.title,
+    from: m.from,
+    at: m.at,
+    ago: ago(m.at),
+    files: m.files,
+    text: m.body,
+  };
+}
+
+/** "14:32" today, "1 Sep 14:32" before that — the reader's timestamp. */
+function stamp(at: number): string {
+  if (!at) return "";
+  const d = new Date(at);
+  const now = new Date();
+  const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const sameDay =
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (sameDay) return time;
+  return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })} ${time}`;
 }
 
 // Spaces we have already bannered, keyed by space + activity so each new burst
@@ -262,10 +356,21 @@ async function loadSpaces(state: WebexState, emit: () => void) {
 /** Load a space's messages and mark it read up to its newest message. */
 async function loadSpace(state: WebexState, space: Space, emit: () => void) {
   state.loading = true;
+  // Re-reading the space we already have open must not move the human's place
+  // in it, so remember the selection by id: a poll that brings two new messages
+  // shifts every index, and an id doesn't.
+  const held = state.open?.space.id === space.id ? (state.reading ?? selectedMessage(state)?.id) : null;
   emit();
   try {
     const messages = await listMessages(space.id, PAGE);
     state.open = { space, messages };
+    // A conversation is read from the bottom: a space opens on its newest
+    // message, and a reload lands back on the one we were holding.
+    const at = held ? messages.findIndex((m) => m.id === held) : -1;
+    state.mcursor = at >= 0 ? at : Math.max(0, messages.length - 1);
+    // Reading something Webex no longer has (deleted, or off the end of the
+    // page) drops you back to the conversation rather than to a blank frame.
+    if (state.reading && at < 0) state.reading = null;
     // Read up to the newest thing we actually saw — the last message, or the
     // room's own activity stamp when the space is empty.
     const upTo = messages[messages.length - 1]?.at ?? space.lastActivity;
@@ -338,6 +443,8 @@ page   = 30          # messages per space`,
     spaces: [],
     cursor: 0,
     open: null,
+    mcursor: 0,
+    reading: null,
     seen: {},
     presence: {},
     dm: {},
@@ -357,7 +464,10 @@ page   = 30          # messages per space`,
   docs: {
     refresh: "Re-read the space list, the unread count and who is around.",
     search: { doc: "Filter the space list by title — local, no refetch.", args: { q: "ship" } },
-    open: { doc: "Drill into a space by name (or `index`) and read its messages.", args: { space: "ship-kona" } },
+    open: {
+      doc: "Drill in one level: a space by name (or `index`), then a message by id, `index` or what it says — `{space, message}` does both at once, and a bare call from inside a space reads the newest. Returns the whole body; `back` climbs out again.",
+      args: { space: "ship-kona", message: "m3" },
+    },
     post: { doc: "Post a message. Names the space, so nothing needs to be open.", args: { space: "ship-kona", text: "deploy is green" } },
     read: { doc: "Mark a space read — or every space with `{\"all\":true}`.", args: { space: "ship-kona" } },
     presence: {
@@ -369,6 +479,15 @@ page   = 30          # messages per space`,
   },
 
   recipes: [
+    {
+      title: "Read me the last message in ship-kona",
+      steps: [
+        `kona call webex open '{"space":"ship-kona"}'`,
+        `kona call webex open`,
+        `kona call webex up`,
+      ],
+      note: "A space opens on its newest message, so a bare `open` reads that one in full — markdown and all, never truncated. `up` walks back through the conversation without leaving the reader; `back` leaves it.",
+    },
     {
       title: "Is Grace around before I ping her?",
       steps: [
@@ -398,36 +517,65 @@ page   = 30          # messages per space`,
     search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "");
       state.open = null;
+      state.reading = null;
+      state.mcursor = 0;
       state.cursor = 0;
       emit();
       return { query: state.query, matches: visible(state).length };
     },
 
-    /** Drill into a space — by list index (a keypress or a click) or by id/title (an agent). */
+    /**
+     * Drill in one level. `open` means "the space under the cursor" from the
+     * list and "the message under the cursor" from inside a space, so → is one
+     * key all the way down and a bare call from an agent does the same thing.
+     *
+     * Named, it skips the levels: `{"space":"ship-kona"}` opens that space,
+     * `{"message":"m3"}` reads that message, and the two together do both in
+     * one call. `index` is the row the mouse clicked — a space from the list,
+     * a message from inside one.
+     */
     async open(args, { state, emit }) {
+      const named = args.space ?? args.room ?? args.title;
+      const wantsSpace = typeof named === "string" && !!named.trim();
+
+      // Already inside a space, and not being sent to another one: this is the
+      // reader.
+      if (state.open && !wantsSpace) return openReader(state, args, emit);
+
       const rows = visible(state);
       const { space: target, error } = targetSpace(state, args, rows[typeof args.index === "number" ? args.index : state.cursor]);
       if (!target) return { error };
       const idx = rows.findIndex((s) => s.id === target.id);
       if (idx >= 0) state.cursor = idx;
+      state.reading = null;
       await loadSpace(state, target, emit);
-      return state.open
-        ? { space: state.open.space.title, id: state.open.space.id, messages: state.open.messages.length }
-        : { error: state.error };
+      if (!state.open) return { error: state.error };
+      // `{space, message}`: an agent that knows exactly what it wants to read.
+      if (args.message !== undefined || args.messageId !== undefined) return openReader(state, args, emit);
+      return { space: state.open.space.title, id: state.open.space.id, messages: state.open.messages.length };
     },
 
+    /** Back out one level: the open message, then the space, then the launcher. */
     back(_args, { state, emit }) {
+      if (state.reading) {
+        state.reading = null;
+        emit();
+        return { at: "space", space: state.open?.space.title };
+      }
       state.open = null;
+      state.mcursor = 0;
       state.composing = false;
       state.draft = "";
       state.sent = null;
       emit();
+      return { at: "spaces" };
     },
 
     /** Give the compose field the keyboard (`c`). Agents skip straight to `post`. */
     compose(_args, { state, emit }) {
       if (!state.open) return { error: "open a space first" };
       state.composing = true;
+      state.reading = null; // you write to the space, not into the message you were reading
       state.sent = null;
       emit();
       return { composing: true, space: state.open.space.title };
@@ -528,11 +676,15 @@ page   = 30          # messages per space`,
       return answer(found);
     },
 
+    // One pair of cursor verbs, two lists: spaces out here, messages inside a
+    // space (where the reader, if it is open, follows along).
     up(_args, { state, emit }) {
+      if (state.open) return moveMessage(state, -1, emit);
       state.cursor = Math.max(0, state.cursor - 1);
       emit();
     },
     down(_args, { state, emit }) {
+      if (state.open) return moveMessage(state, 1, emit);
       state.cursor = Math.min(Math.max(0, visible(state).length - 1), state.cursor + 1);
       emit();
     },
@@ -568,15 +720,19 @@ page   = 30          # messages per space`,
     up: "up",
     down: "down",
     select: "open",
-    selectLabel: "space",
+    selectLabel: "open",
     back: "back",
-    backLabel: "spaces",
+    backLabel: "back",
     canBack: (s) => !!s.open,
   },
 
   search: { verb: "search", placeholder: "filter spaces by name" },
 
-  crumb: (s) => (s.open ? s.open.space.title : null),
+  crumb: (s) => {
+    if (!s.open) return null;
+    const m = readingMessage(s);
+    return m ? `${s.open.space.title}  ›  ${m.from}` : s.open.space.title;
+  },
 
   accent(state) {
     const { ACCENT, AMBER, RED } = palette();
@@ -635,6 +791,35 @@ page   = 30          # messages per space`,
       ];
     }
 
+    // One message, read in full. A row in the conversation is one line however
+    // much was said; this is where the rest of it lives — rendered as markdown,
+    // which is what Webex messages are written in, and wrapped rather than cut.
+    const reading = readingMessage(state);
+    if (state.open && reading) {
+      const them = state.presence[reading.personId] ?? null;
+      const body = renderMarkdown(reading.body, { width: W - 1, breaks: true, color: FG });
+      const meta = [
+        state.open.space.title,
+        stamp(reading.at),
+        ago(reading.at) ? `${ago(reading.at)} ago` : "",
+        reading.files ? `${reading.files} attachment${reading.files === 1 ? "" : "s"}` : "",
+      ].filter(Boolean);
+      const who = text(reading.from, { color: reading.from === state.me ? ACCENT : FG });
+      return [
+        col([
+          them?.status
+            ? row([text(`${dot(them)} `, { color: them.status === "active" ? UNREAD : DIM }), who])
+            : who,
+          text(meta.join("  ·  "), { color: DIM }),
+          divider(W - 1),
+          spacer(),
+          ...(body.length ? body : [text("(no text — attachments only)", { dim: true })]),
+          spacer(),
+          text("← back to the space  ·  ↑/↓ the message before or after", { dim: true }),
+        ]),
+      ];
+    }
+
     // One space, drilled into.
     if (state.open) {
       const { space, messages } = state.open;
@@ -659,7 +844,7 @@ page   = 30          # messages per space`,
 
       if (!messages.length) nodes.push(text("(no messages yet)", { dim: true }));
       const fromW = Math.min(18, Math.max(10, Math.floor(W * 0.18)));
-      for (const m of messages) {
+      for (const [i, m] of messages.entries()) {
         nodes.push(
           recordRow(
             [
@@ -668,7 +853,15 @@ page   = 30          # messages per space`,
               { text: m.text, grow: true },
               { text: ago(m.at), width: 5, align: "right" },
             ],
-            { width: W, color: m.from === state.me ? ACCENT : FG },
+            {
+              width: W,
+              // While the composer has the keyboard IT is the anchor: a
+              // highlighted row above it would scroll the field off screen.
+              selected: i === state.mcursor && !state.composing,
+              accent: ACCENT,
+              color: m.from === state.me ? ACCENT : FG,
+              index: i,
+            },
           ),
         );
       }
@@ -689,15 +882,15 @@ page   = 30          # messages per space`,
           }),
         );
       } else {
-        // `focus` here is the scroll anchor, not a selection: a conversation is
-        // read from the bottom, so the host keeps the newest messages (and this
-        // line) in view rather than parking at the top of the backlog. While
-        // composing, the focused field is the anchor instead.
+        // The selected row carries the scroll anchor (and a space opens on its
+        // newest message), so the host keeps the bottom of the backlog in view
+        // rather than parking at the top of it. With nothing to select — an
+        // empty space — this line is the anchor instead.
         nodes.push(
-          text(state.sent ? `sent: ${state.sent}` : "press c to write · agents call webex.post", {
-            dim: true,
-            focus: true,
-          }),
+          text(
+            state.sent ? `sent: ${state.sent}` : "enter reads a message · c writes one · agents call webex.open",
+            { dim: true, focus: !messages.length },
+          ),
         );
       }
       return [col(nodes)];
