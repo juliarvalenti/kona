@@ -85,8 +85,26 @@ export async function runHost(startAppletId: string | null) {
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
   const states: States = {};
 
-  const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: true });
+  // Own ctrl+c so shutdown is clean and single-press. The default tears down
+  // the renderer's buffers but leaves our async loops (SSE subscribe, pending
+  // renders) running — they then write to a destroyed buffer ("TextBuffer is
+  // destroyed") and the process lingers until a second ctrl+c.
+  const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: false });
   const stage = createStage(renderer);
+
+  let alive = true;
+  function shutdown() {
+    if (!alive) return;
+    alive = false;
+    try {
+      (renderer as unknown as { destroy?: () => void }).destroy?.();
+    } catch {
+      /* already torn down */
+    }
+    process.exit(0);
+  }
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
   // null = launcher; otherwise the applet id currently open
   let current: string | null = startAppletId;
@@ -94,6 +112,7 @@ export async function runHost(startAppletId: string | null) {
 
   let filling = false;
   function render() {
+    if (!alive) return; // never touch renderables after teardown
     const def = current ? byId.get(current) : null;
     if (!def) {
       current = null;
@@ -124,14 +143,18 @@ export async function runHost(startAppletId: string | null) {
   // Auto-reconnects, so a dropped stream just shows a brief footer note.
   subscribe(
     (snap) => {
+      if (!alive) return;
       Object.assign(states, snap);
       render();
     },
     (id, s) => {
+      if (!alive) return;
       states[id] = s;
       if (id === current) render();
     },
-    (attempt) => stage.footerNote(`reconnecting… (${attempt})`),
+    (attempt) => {
+      if (alive) stage.footerNote(`reconnecting… (${attempt})`);
+    },
   );
 
   // Canonical navigation intents, each matched by an arrow key AND a vim key.
@@ -148,7 +171,9 @@ export async function runHost(startAppletId: string | null) {
     "keypress",
     async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
       const n = k.name;
-      // ctrl+c is handled by exitOnCtrlC.
+
+      // ctrl+c: exit cleanly on the first press.
+      if (k.ctrl && n === "c") return shutdown();
 
       if (current === null) {
         // launcher navigation
