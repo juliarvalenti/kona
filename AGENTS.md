@@ -62,6 +62,13 @@ kona new <id> --executable   # ...and make index.ts runnable on its own
 bun test applets/<id> && bun run check
 ```
 
+An applet you did not write arrives the same way it would for a human:
+`kona plugin install <git-url|path>` clones or copies a package into
+`~/.config/kona/plugins/`, `kona plugin list` says what is installed and where
+it came from, and `kona plugin remove <name>` deletes it. Installing one adds
+verbs to the manifest, so re-read `kona tools` (or regenerate the skill)
+afterwards.
+
 An applet file can also live nowhere in particular: `kona link <file.ts>` (or
 running a `chmod +x` module with `#!/usr/bin/env kona` on line one) hands it to
 the daemon and remembers it, so `kona call <id> <verb>` works from that moment

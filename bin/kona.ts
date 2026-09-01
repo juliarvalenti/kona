@@ -11,6 +11,7 @@ import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { copyToClipboard, clipboardHelpers } from "../core/clipboard.ts";
 import { scaffoldApplet, validId } from "../core/scaffold.ts";
 import { linkApplet, linkPath, linksFile, readLinks, unlinkApplet } from "../core/links.ts";
+import { installPlugin, listPlugins, pluginsDir, removePlugin, type Installed, type Plugin } from "../core/plugins.ts";
 import type { AnyApplet, AppletCall, AuthProvider, ToolSpec } from "../sdk/index.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -161,6 +162,10 @@ async function usage() {
   kona link [file.ts]      keep a module loadable by id (no args: list links)
   kona unlink <id|file>    forget one
   kona ls                  list applets
+  kona plugin install <git-url|path>   install an applet package someone else
+                           built (--as <name>, --link a checkout you're editing)
+  kona plugin list         what is installed under ~/.config/kona/plugins
+  kona plugin remove <name>            delete one
   kona new <id>            scaffold a new applet package (--plugin for one
                            outside the repo, --executable for a runnable file)
   kona docs [applet]       the applet catalog, or one applet's README
@@ -284,6 +289,118 @@ switch (cmd) {
     // The daemon keeps the applet until it restarts; say so rather than let a
     // still-answering `kona call` look like the unlink failed.
     console.log(`unlinked ${gone.id} (${gone.entry}) — konad drops it on its next restart`);
+    break;
+  }
+
+  // Installing an applet package someone else built. Discovery already handles
+  // `~/.config/kona/plugins/*` — this is the step before it, so pulling in a
+  // private applet is a command rather than a hand-rolled `git clone`.
+  case "plugin": {
+    const [action, ...args] = rest;
+
+    /** How `kona plugin list` prints one plugin (and what an install echoes). */
+    const describe = (p: Plugin): string => {
+      const applets = p.ids.length ? `applets: ${p.ids.join(", ")}` : "no applets";
+      return [
+        `${p.name}  (${p.kind})`,
+        `  ${p.dir}`,
+        p.source ? `  from ${p.source}` : null,
+        `  ${p.error ? `! ${p.error}` : applets}`,
+      ]
+        .filter((l) => l !== null)
+        .join("\n");
+    };
+
+    switch (action ?? "list") {
+      case "install":
+      case "add": {
+        const flags = new Set(args.filter((a) => a.startsWith("--")));
+        const asAt = args.indexOf("--as");
+        if (asAt >= 0 && !args[asAt + 1]) {
+          console.error("usage: kona plugin install <git-url|path> --as <name>");
+          process.exit(1);
+        }
+        const unknown = [...flags].filter((f) => !["--as", "--link", "--no-install"].includes(f));
+        if (unknown.length) {
+          console.error(`unknown flag: ${unknown.join(", ")}\nusage: kona plugin install <git-url|path> [--as <name>] [--link] [--no-install]`);
+          process.exit(1);
+        }
+        // The first bare word, minus whatever `--as` consumed.
+        const source = args.find((a, i) => !a.startsWith("--") && (asAt < 0 || i !== asAt + 1));
+        if (!source) {
+          console.error("usage: kona plugin install <git-url|path> [--as <name>] [--link] [--no-install]");
+          process.exit(1);
+        }
+        let installed: Installed;
+        try {
+          installed = await installPlugin(source, {
+            as: asAt >= 0 ? args[asAt + 1] : undefined,
+            link: flags.has("--link"),
+            deps: !flags.has("--no-install"),
+          });
+        } catch (e) {
+          console.error(e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+        console.log(`${installed.kind === "git" ? "cloned" : installed.kind === "link" ? "linked" : "copied"} ${installed.name} -> ${installed.dir}\n`);
+        console.log(describe(installed));
+        if (installed.deps === "failed") console.log(`\n  ! bun install failed in ${installed.dir} — run it yourself`);
+        // A running daemon watches the plugin roots and restarts itself, but
+        // only for a dir that existed when it started; registering the entries
+        // closes that gap. With no daemon up there is nothing to tell — and
+        // installing an applet is no reason to start one.
+        for (const dir of installed.packages) await registerApplet(join(dir, "index.ts")).catch(() => {});
+        const [first] = installed.ids;
+        if (first) {
+          console.log(`\nkona ${first}                 open it`);
+          console.log(`kona call ${first} <verb> [json]  ...and what an agent does instead`);
+        }
+        break;
+      }
+
+      case "list":
+      case "ls": {
+        const plugins = await listPlugins();
+        if (!plugins.length) {
+          console.log(`no plugins installed — \`kona plugin install <git-url|path>\`\n${pluginsDir()}`);
+          break;
+        }
+        for (const p of plugins) console.log(`${describe(p)}\n`);
+        // The other roots are yours to manage: they are loaded, never installed
+        // here, and `kona plugin remove` will not touch them.
+        const extra = loadConfig().plugins;
+        if (extra.length || process.env.KONA_PLUGINS) {
+          console.log(`also loaded from: ${[...extra, ...(process.env.KONA_PLUGINS ?? "").split(":").filter(Boolean)].join(", ")}`);
+        }
+        break;
+      }
+
+      case "remove":
+      case "rm": {
+        const name = args[0];
+        if (!name) {
+          console.error("usage: kona plugin remove <name>");
+          process.exit(1);
+        }
+        try {
+          const gone = await removePlugin(name);
+          // konad keeps the applet until it restarts; say so rather than let a
+          // still-answering `kona call` look like the removal failed.
+          console.log(
+            `removed ${gone.name}${gone.kind === "link" ? " (the link, not the checkout)" : ""} — ${gone.dir}` +
+              `${gone.ids.length ? `\n${gone.ids.join(", ")} — konad drops ${gone.ids.length > 1 ? "them" : "it"} on its next restart` : ""}`,
+          );
+        } catch (e) {
+          console.error(e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+        break;
+      }
+
+      default:
+        console.error(`usage: kona plugin [list | install <git-url|path> [--as <name>] [--link] | remove <name>]`);
+        process.exit(1);
+    }
     break;
   }
 

@@ -138,6 +138,7 @@ kona timer pomodoro        # ...or a 25/5 work-break cycle
 kona ls                    # list applets (plugins and linked files marked)
 kona docs [applet]         # the applet catalog, or one applet's README
 kona new <id>              # scaffold a new applet package
+kona plugin install <url>  # ...or install a package someone else built
 ./applets/timer/index.ts   # an applet file with a shebang, run directly
 kona link <file.ts>        # ...or keep one loadable by id without opening it
 kona tools                 # the manifest an agent reads
@@ -621,6 +622,36 @@ and from anything named by `plugins` in config.toml or `KONA_PLUGINS`. The
 stable surface a plugin targets — `defineApplet`, the view vocabulary,
 `sdk/components.ts`, `AppletCtx`, `sdk/testing.ts` — is written down in
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Installing someone else's applet
+
+An applet nobody here can see is still an applet: a package in a private repo
+loads exactly like a built-in once it is on the machine. `kona plugin install`
+is that "once" — the step before discovery, so it is a command rather than a
+hand-rolled `git clone`.
+
+```sh
+kona plugin install git@github.com:me/kona-tome.git   # clone into the plugin dir
+kona plugin install ~/src/kona-tome                   # ...or copy a local package
+kona plugin install ~/src/kona-tome --link            # ...or point at the checkout
+kona plugin install <src> --as tome                   # name the directory yourself
+kona plugin list                                      # what is installed, and from where
+kona plugin remove tome                               # delete it (a link, never its target)
+```
+
+It lands in `~/.config/kona/plugins/<name>/`, which the loader already scans, so
+there is nothing to register and no config to edit: the applet is in `kona ls`,
+the launcher, `kona docs` and the agent manifest from that moment on. A package
+with its own `package.json` gets `bun install` run inside it; one that turns out
+not to contain an `index.ts` is undone rather than left half-installed; and
+`--link` symlinks a checkout you are still editing, so the plugin dir and your
+working copy stay the same files.
+
+The directory is the unit, not the applet: a package holding several applets
+installs and removes as one plugin, and the applet ids stay whatever the
+applets declare. `plugins = [...]` roots in config.toml are yours to manage —
+they are loaded, never installed here, and `kona plugin remove` will not touch
+them.
 
 ### An applet as an executable
 
