@@ -121,6 +121,10 @@ export default defineApplet<${titleize(id).replace(/ /g, "")}State>({
     ]),
   ],
 
+  // Your line on the dashboard. Return null when nothing of yours is live and
+  // you take up no room there; the dash collects whatever the applets say.
+  dash: (state) => (state.count > 0 ? { priority: 20, text: \`◆ count is \${state.count}\` } : null),
+
   keymap: {
     "+": { verb: "bump", args: { by: 1 }, label: "up" },
     "-": { verb: "bump", args: { by: -1 }, label: "down" },

@@ -49,7 +49,7 @@ Everything below is stable — target it. Everything else (the daemon's internal
 | `defineApplet(...)` from `sdk/index.ts` | the applet contract, typed |
 | the view vocabulary | `text`, `big`, `row`, `col`, `box`, `bar`, `input`, `spacer` |
 | `sdk/components.ts` | composed widgets: lists, meters, sparklines, cards, modals |
-| `AppletCtx` | `state`, `emit()`, `peek(id)` — what a verb and a tick get |
+| `AppletCtx` | `state`, `emit()`, `peek(id)`, `applets()` — what a verb and a tick get |
 | `theme()` / `appletConfig(id)` | the palette and your own settings block |
 | `sdk/testing.ts` | `renderApplet`, `defineSnapshots`, `testSnapshots` |
 | `sdk/fake.ts` | `fakeProviders(routes)` — answer an applet's provider calls from fixtures |
@@ -72,6 +72,7 @@ The fields that used to be entries in shared files:
 | `cli` | an `if (cmd === "…")` branch in `bin/kona.ts` |
 | `configSample` | a block in the starter file `kona config init` writes |
 | `labels` / `requires` | a paragraph appended to the README |
+| `dash` | a branch in the dashboard's aggregator — your own line on the cockpit |
 
 ```ts
 export default defineApplet<PomodoroState>({
@@ -88,9 +89,28 @@ export default defineApplet<PomodoroState>({
   notifications: { "pomodoro.done": { summary: "a round ends", default: true } },
   cli: { usage: "kona pomodoro 50m", open: (args) => (args[0] ? { verb: "start", args: { minutes: args[0] } } : null) },
   configSample: `[applets.pomodoro]\nwork = "25m"`,
+  dash: (state) => (state.round ? { priority: 60, text: `◕ round ${state.round}` } : null),
   view: (state) => [/* ... */],
 });
 ```
+
+### Say what is live, and land on the dashboard
+
+`dash(state)` is the one field another applet reads. The dashboard asks every
+loaded applet what it has to say right now and draws the answers, urgency first,
+so a card is how your applet reaches a screen nobody opened:
+
+```ts
+dash: (state) =>
+  state.unread ? { priority: 50, text: `✉ ${state.unread} unread` } : null,
+```
+
+Return `null` (or `show: false`) when nothing is going on — an idle applet
+contributes nothing, which is what keeps the cockpit free of empty counters.
+Return an array when two things can be live at once. `priority` runs 0..100 (80+
+on fire, 60 live, 40 waiting on you, 20 ambient, 5 calm) and the row jumps into
+your applet when it is selected. It is pure, like `view`, and it is called about
+once a second: read state, return a line, do no work.
 
 ### Tests live with the applet
 

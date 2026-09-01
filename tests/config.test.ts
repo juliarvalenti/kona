@@ -6,6 +6,7 @@ import {
   DEFAULT_THEME,
   appletAccent,
   appletConfig,
+  appletList,
   appletNumber,
   appletString,
   configPath,
@@ -122,7 +123,20 @@ test("unset applet settings fall back to the caller's default", () => {
   expect(appletAccent("dash", "#1db954")).toBe("#1db954");
   expect(appletString("timer", "default", "5m")).toBe("5m");
   expect(appletNumber("email", "page", 20)).toBe(20);
+  expect(appletList("dash", "pin", ["timer"])).toEqual(["timer"]);
   expect(appletConfig("nope")).toEqual({});
+});
+
+test("a list setting takes a list, or the one entry someone typed bare", () => {
+  withConfig(`[applets.dash]
+pin  = ["timer", " email "]
+hide = "weather"
+`);
+  expect(appletList("dash", "pin")).toEqual(["timer", "email"]);
+  expect(appletList("dash", "hide")).toEqual(["weather"]);
+  // A number in the list is dropped rather than stringified or thrown over.
+  withConfig(`[applets.dash]\npin = ["timer", 3]\n`);
+  expect(appletList("dash", "pin")).toEqual(["timer"]);
 });
 
 test("bad values are ignored and reported, never thrown", () => {

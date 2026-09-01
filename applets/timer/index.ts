@@ -1,4 +1,4 @@
-import { defineApplet, big, text, spacer, col, theme, appletConfig, appletString, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer, col, theme, appletConfig, appletString, type ViewNode, type DashCard } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
 
@@ -977,6 +977,40 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
   // the selected countdown's state once you move onto one.
   accent: (state) =>
     pomoFocused(state) ? pomoTint(state.pomodoro) : tintOf(selected(state)),
+
+  /**
+   * Two clocks can be running at once and both earn a row: the countdown that
+   * expires soonest, and a live pomodoro session. A countdown inside its last
+   * minute outranks everything else on the board — it is about to go off.
+   */
+  dash: (s) => {
+    const cards: DashCard[] = [];
+    const live = s.timers.filter((t) => t.running || t.remaining > 0);
+    const soonest = [...live].sort(
+      (a, b) => Number(b.running) - Number(a.running) || a.remaining - b.remaining,
+    )[0];
+    if (soonest) {
+      const more = live.length - 1;
+      cards.push({
+        id: "countdown",
+        priority: !soonest.running ? 35 : soonest.remaining <= 60 ? 85 : 65,
+        text: `⏲ ${fmt(soonest.remaining)}${soonest.label ? `  ${soonest.label}` : ""}${more > 0 ? `  +${more} more` : ""}`,
+        note: soonest.running ? "" : "paused",
+        color: tintOf(soonest),
+      });
+    }
+    if (s.pomodoro.active) {
+      const p = s.pomodoro;
+      cards.push({
+        id: "pomodoro",
+        priority: p.running ? 60 : 35,
+        text: `◕ ${PHASE_LABEL[p.phase]} ${fmt(p.remaining)}  ·  round ${p.round}/${p.plan.every}`,
+        note: p.awaiting ? "waiting" : p.running ? "" : "paused",
+        color: pomoTint(p),
+      });
+    }
+    return cards;
+  },
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 62);

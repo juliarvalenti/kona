@@ -407,6 +407,17 @@ page   = 30          # messages per space`,
     return ACCENT;
   },
 
+  /** Spaces with something new in them — the same question mail answers. */
+  dash: (s) =>
+    s.authed && s.unread
+      ? {
+          priority: 45,
+          text: `◇ ${s.unread} space${s.unread === 1 ? "" : "s"} with new messages`,
+          note: `${s.spaces.length} total`,
+          color: palette().UNREAD,
+        }
+      : null,
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
     const { ACCENT, FG, DIM, AMBER, UNREAD } = palette();

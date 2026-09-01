@@ -151,6 +151,9 @@ function writeFailed(state: MyceliumState, e: unknown, what: string): { error: s
   return { error: detail };
 }
 
+/** A room with chatter this recent is "hot" — marked in the list, and on the dash. */
+const HOT_MS = 120_000;
+
 /** Message counts as of the last sync. null until the first, which adopts. */
 let counted: Map<string, number> | null = null;
 
@@ -666,6 +669,25 @@ agent = "kona"       # the name your messages are posted under`,
     };
   },
 
+  /**
+   * Rooms that are talking right now. Agents post while nobody is watching the
+   * applet, so a live room belongs on the cockpit; a quiet swarm does not.
+   */
+  dash: (s) => {
+    const hot = s.rooms
+      .filter((r) => r.lastAt > 0 && Date.now() - r.lastAt < HOT_MS)
+      .sort((a, b) => b.lastAt - a.lastAt);
+    const top = hot[0];
+    if (!top) return null;
+    const names = hot.slice(0, 2).map((r) => r.name).join(", ");
+    return {
+      priority: 40,
+      text: `⁂ ${hot.length} room${hot.length === 1 ? "" : "s"} active  ·  ${names}${hot.length > 2 ? ", …" : ""}`,
+      note: ago(top.lastAt),
+      color: ACCENT,
+    };
+  },
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
 
@@ -786,7 +808,7 @@ agent = "kona"       # the name your messages are posted under`,
     }
 
     for (const [i, r] of rows.entries()) {
-      const hot = r.lastAt > 0 && Date.now() - r.lastAt < 120_000; // chatter in the last 2 min
+      const hot = r.lastAt > 0 && Date.now() - r.lastAt < HOT_MS;
       nodes.push(
         recordRow(
           [
