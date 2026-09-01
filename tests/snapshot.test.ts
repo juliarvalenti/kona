@@ -102,5 +102,5 @@ test("spotify shows now-playing with track, times, and state", async () => {
   expect(frame).toContain("Sounders FC");
   expect(frame).toContain("1:18"); // position
   expect(frame).toContain("3:34"); // duration
-  expect(frame).toContain("playing");
+  expect(frame).toContain("▶"); // playing indicator
 });

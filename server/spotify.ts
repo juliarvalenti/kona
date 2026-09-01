@@ -244,3 +244,31 @@ export const play = () => api("/v1/me/player/play", { method: "PUT" });
 export const pause = () => api("/v1/me/player/pause", { method: "PUT" });
 export const next = () => api("/v1/me/player/next", { method: "POST" });
 export const previous = () => api("/v1/me/player/previous", { method: "POST" });
+
+export interface SearchResult {
+  uri: string;
+  track: string;
+  artist: string;
+  album: string;
+}
+
+export async function searchTracks(query: string, limit = 10): Promise<SearchResult[]> {
+  if (!query.trim()) return [];
+  // Development-mode apps cap search `limit` at 10 (higher -> 400 "Invalid limit").
+  const lim = Math.min(Math.max(1, limit), 10);
+  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "track", limit: String(lim) })}`);
+  return ((r?.tracks?.items ?? []) as any[]).map((t) => ({
+    uri: t.uri,
+    track: t.name ?? "",
+    artist: (t.artists ?? []).map((a: any) => a.name).join(", "),
+    album: t.album?.name ?? "",
+  }));
+}
+
+/** Start playback of specific track URIs on the active device. */
+export const playUris = (uris: string[]) =>
+  api("/v1/me/player/play", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ uris }),
+  });

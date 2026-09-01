@@ -1,6 +1,16 @@
 import { defineApplet, text, spacer, col, row, type ViewNode } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
-import { nowPlaying, play, pause, next, previous, type QueueItem } from "../../server/spotify.ts";
+import {
+  nowPlaying,
+  play,
+  pause,
+  next,
+  previous,
+  searchTracks,
+  playUris,
+  type QueueItem,
+  type SearchResult,
+} from "../../server/spotify.ts";
 
 /**
  * spotify — now-playing + transport control. The daemon holds the OAuth token
@@ -22,6 +32,11 @@ interface SpotifyState {
   authed: boolean;
   loading: boolean;
   error: string | null;
+  // search
+  mode: "now" | "results";
+  query: string;
+  results: SearchResult[];
+  cursor: number;
 }
 
 const GREEN = "#1db954"; // Spotify green
@@ -76,6 +91,10 @@ export default defineApplet<SpotifyState>({
     authed: false,
     loading: false,
     error: null,
+    mode: "now",
+    query: "",
+    results: [],
+    cursor: 0,
   },
 
   verbs: {
@@ -112,6 +131,47 @@ export default defineApplet<SpotifyState>({
       await Bun.sleep(400);
       await loadNow(state, emit);
     },
+    async search(args, { state, emit }) {
+      state.query = String(args.q ?? args.query ?? "");
+      state.mode = "results";
+      state.cursor = 0;
+      state.loading = true;
+      emit();
+      try {
+        state.results = await searchTracks(state.query);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        state.loading = false;
+        emit();
+      }
+      return { query: state.query, count: state.results.length };
+    },
+    async playSelected(_a, { state, emit }) {
+      const r = state.results[state.cursor];
+      if (!r) return {};
+      try {
+        await playUris([r.uri]);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      }
+      state.mode = "now";
+      await Bun.sleep(400);
+      await loadNow(state, emit);
+      return { playing: r.track };
+    },
+    back(_a, { state, emit }) {
+      state.mode = "now";
+      emit();
+    },
+    up(_a, { state, emit }) {
+      state.cursor = Math.max(0, state.cursor - 1);
+      emit();
+    },
+    down(_a, { state, emit }) {
+      state.cursor = Math.min(state.results.length - 1, state.cursor + 1);
+      emit();
+    },
   },
 
   init({ state, emit }) {
@@ -136,6 +196,20 @@ export default defineApplet<SpotifyState>({
     p: { verb: "previous", label: "prev" },
   },
 
+  nav: {
+    up: "up",
+    down: "down",
+    select: "playSelected",
+    selectLabel: "play",
+    back: "back",
+    backLabel: "now playing",
+    canBack: (s) => s.mode === "results",
+  },
+
+  search: { verb: "search", placeholder: "search spotify tracks…" },
+
+  crumb: (s) => (s.mode === "results" ? `search: ${s.query}` : null),
+
   accent(state) {
     if (state.error && !state.authed) return AMBER;
     return state.playing ? GREEN : DIM;
@@ -152,6 +226,25 @@ export default defineApplet<SpotifyState>({
           text("Run  kona login spotify  to connect.", { dim: true }),
         ], { align: "center", justify: "center", grow: true }),
       ];
+    }
+
+    // Search results
+    if (state.mode === "results") {
+      const head = state.loading
+        ? text("searching…", { color: AMBER })
+        : text(`results for "${state.query}"   ${state.results.length}`, { dim: true });
+      const rows: ViewNode[] = state.results.map((r, i) =>
+        recordRow(
+          [
+            { text: r.track, grow: true },
+            { text: r.artist, width: Math.min(24, Math.floor(W * 0.24)) },
+            { text: r.album, width: Math.min(24, Math.floor(W * 0.24)) },
+          ],
+          { width: W, selected: i === state.cursor, accent: GREEN, color: FG },
+        ),
+      );
+      if (!rows.length && !state.loading) rows.push(text("no matches", { dim: true }));
+      return [col([head, divider(W - 1), ...rows])];
     }
 
     if (!state.track) {
