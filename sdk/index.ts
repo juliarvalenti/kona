@@ -182,6 +182,33 @@ export interface Nav<S extends object = AppletState> {
   canBack?: (state: S) => boolean;
 }
 
+/**
+ * A floating layer drawn ON TOP of the applet body — a confirm dialog, a detail
+ * popover. The terminal has no z-axis of its own, so the host provides one: an
+ * overlay is positioned absolutely over the content viewport, does not scroll
+ * with the body, and does not displace it.
+ *
+ * It is also an INPUT MODE. While `overlay(state)` returns non-null the host
+ * routes keys here instead of to `nav`/`keymap`, so the body cannot be scrolled
+ * or navigated behind a dialog. The one deliberate exception: with no `dismiss`
+ * verb, back (esc/←) falls through to the applet's normal back — an applet can
+ * never trap you in a dialog it forgot to give an exit.
+ */
+export interface Overlay {
+  /** What to draw, centered over the body. Usually `modal(...)`. */
+  node: ViewNode;
+  /** Cover the body behind the layer. Off by default: the body shows around it. */
+  scrim?: boolean;
+  /** Verb fired by enter/→ (the affirmative action). */
+  confirm?: string;
+  confirmLabel?: string;
+  /** Verb fired by esc/← (dismiss). */
+  dismiss?: string;
+  dismissLabel?: string;
+  /** Extra keys while the layer is up. Replaces the applet's keymap. */
+  keymap?: Record<string, KeyBinding>;
+}
+
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
@@ -201,6 +228,11 @@ export interface AppletDef<S extends object = AppletState> {
   accent?: (state: S) => Color;
   /** Navigation intents (arrows + vim + browser-like back). */
   nav?: Nav<S>;
+  /**
+   * A floating layer above the body. Returning non-null both draws the layer
+   * and puts the host in overlay input mode — see `Overlay`.
+   */
+  overlay?: (state: S) => Overlay | null;
   /**
    * Makes the applet searchable. The host binds `/` to open a search line;
    * submitting fires `verb` with `{ q: <typed query> }`. First-class across

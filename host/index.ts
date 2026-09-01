@@ -1,5 +1,5 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding } from "../sdk/index.ts";
+import type { AppletDef, AppletState, KeyBinding, Overlay } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
 import { createStage, type Draft } from "./stage.ts";
@@ -21,6 +21,32 @@ type States = Record<string, AppletState>;
 
 function resolveBinding(b: KeyBinding): { verb: string; args: Record<string, unknown> } {
   return typeof b === "string" ? { verb: b, args: {} } : { verb: b.verb, args: b.args ?? {} };
+}
+
+// Canonical navigation intents, each matched by an arrow key AND a vim key.
+const isUp = (n: string) => n === "up" || n === "k";
+const isDown = (n: string) => n === "down" || n === "j";
+const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
+const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
+
+/** What a keypress does while an overlay owns the keyboard. */
+export type OverlayAction =
+  | { kind: "verb"; verb: string; args: Record<string, unknown> }
+  | { kind: "trap" } // swallowed: the body must not move behind a dialog
+  | { kind: "pass" }; // handled as usual by the applet
+
+/**
+ * Resolve a keypress against an open overlay. Confirm/dismiss/keymap fire
+ * verbs; everything else is trapped — EXCEPT back on an overlay with no
+ * dismiss verb, which passes through so an applet can never strand you in a
+ * dialog it forgot to give an exit.
+ */
+export function overlayAction(overlay: Overlay, key: string): OverlayAction {
+  if (isSelect(key) && overlay.confirm) return { kind: "verb", verb: overlay.confirm, args: {} };
+  if (isBack(key)) return overlay.dismiss ? { kind: "verb", verb: overlay.dismiss, args: {} } : { kind: "pass" };
+  const b = overlay.keymap?.[key];
+  if (b) return { kind: "verb", ...resolveBinding(b) };
+  return { kind: "trap" };
 }
 
 /** Stream the daemon's SSE, invoking onState for every state change. */
@@ -185,12 +211,6 @@ export async function runHost(startAppletId: string | null) {
     else current = null;
   }
 
-  // Canonical navigation intents, each matched by an arrow key AND a vim key.
-  const isUp = (n: string) => n === "up" || n === "k";
-  const isDown = (n: string) => n === "down" || n === "j";
-  const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
-  const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
-
   renderer.keyInput.on(
     "keypress",
     async (k: { name: string; ctrl: boolean; sequence?: string; meta?: boolean }) => {
@@ -216,6 +236,20 @@ export async function runHost(startAppletId: string | null) {
       }
       const state = (states[def.id] ?? def.initialState) as AppletState;
       const nav = def.nav;
+
+      // --- Overlay input mode: a floating layer owns the keyboard. Everything
+      // that would move or navigate the body behind it is trapped, so a dialog
+      // can't be scrolled out from under you. The exception is back with no
+      // dismiss verb: it falls through, so an applet can never strand you.
+      const overlay = def.overlay?.(state) ?? null;
+      if (overlay) {
+        const action = overlayAction(overlay, n);
+        if (action.kind === "verb") {
+          await callVerb(def.id, action.verb, action.args).catch(() => {});
+          return;
+        }
+        if (action.kind === "trap") return;
+      }
 
       // --- Search input mode: the footer line editor owns the keyboard.
       if (search && def.search) {
