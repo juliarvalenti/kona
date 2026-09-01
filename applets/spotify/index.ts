@@ -10,7 +10,6 @@ import {
   searchMoreTracks,
   artistDetail,
   albumDetail,
-  playlistDetail,
   home as fetchHome,
   playUris,
   playContext,
@@ -45,7 +44,10 @@ interface SpotifyState {
 }
 
 /** A selectable row: catalog Row plus a synthetic "play this whole thing" action. */
-type BrowseRow = Row | { kind: "play"; uri: string; name: string; subtitle: string };
+type BrowseRow =
+  | Row
+  | { kind: "play"; uri: string; name: string; subtitle: string }
+  | { kind: "header"; name: string };
 interface Screen {
   title: string;
   rows: BrowseRow[];
@@ -63,6 +65,8 @@ function fmt(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
+
+const truncate = (s: string, n: number): string => (s.length <= n ? s : s.slice(0, n - 1) + "…");
 
 async function loadNow(state: SpotifyState, emit: () => void) {
   try {
@@ -188,7 +192,15 @@ export default defineApplet<SpotifyState>({
       state.loading = true;
       emit();
       try {
-        state.stack[0]!.rows = await fetchHome();
+        const h = await fetchHome();
+        const rows: BrowseRow[] = [];
+        // Recently played FIRST (it's the dated stuff you care about), then
+        // top artists, then playlists — with section headers.
+        if (h.recents.length) rows.push({ kind: "header", name: "Recently played" }, ...h.recents);
+        if (h.artists.length) rows.push({ kind: "header", name: "Top artists" }, ...h.artists);
+        if (h.playlists.length) rows.push({ kind: "header", name: "Your playlists" }, ...h.playlists);
+        const first = rows.findIndex((r) => r.kind !== "header");
+        state.stack[0] = { title: "Home", rows, cursor: first < 0 ? 0 : first };
       } catch (e) {
         state.error = e instanceof Error ? e.message : String(e);
       } finally {
@@ -196,11 +208,12 @@ export default defineApplet<SpotifyState>({
         emit();
       }
     },
-    // enter: play a track / play-a-context, or drill into an artist/album/playlist.
+    // enter: play a track/playlist/context, or drill into an artist/album.
+    // (Playlist tracklists are 403 for dev apps, so a playlist just plays.)
     async enter(_a, { state, emit }) {
       const scr = state.stack[state.stack.length - 1];
       const r = scr?.rows[scr.cursor];
-      if (!r) return {};
+      if (!r || r.kind === "header") return {};
       try {
         if (r.kind === "track") {
           await playUris([r.uri]);
@@ -209,22 +222,17 @@ export default defineApplet<SpotifyState>({
           await loadNow(state, emit);
           return { playing: r.name };
         }
-        if (r.kind === "play") {
+        if (r.kind === "play" || r.kind === "playlist") {
           await playContext(r.uri);
           state.mode = "now";
           await Bun.sleep(400);
           await loadNow(state, emit);
           return { playing: r.name };
         }
-        // artist / album / playlist -> push a detail screen with a Play action.
+        // artist / album -> push a detail screen with a Play action on top.
         state.loading = true;
         emit();
-        const d =
-          r.kind === "artist"
-            ? await artistDetail(r.id)
-            : r.kind === "playlist"
-              ? await playlistDetail(r.id)
-              : await albumDetail(r.id);
+        const d = r.kind === "artist" ? await artistDetail(r.id) : await albumDetail(r.id);
         state.stack.push({
           title: d.name,
           rows: [{ kind: "play", uri: d.uri, name: `Play ${d.name}`, subtitle: "" }, ...d.rows],
@@ -245,12 +253,18 @@ export default defineApplet<SpotifyState>({
     },
     up(_a, { state, emit }) {
       const scr = state.stack[state.stack.length - 1];
-      if (scr) scr.cursor = Math.max(0, scr.cursor - 1);
+      if (!scr) return emit();
+      let i = scr.cursor - 1;
+      while (i >= 0 && scr.rows[i]?.kind === "header") i--; // skip section headers
+      if (i >= 0) scr.cursor = i;
       emit();
     },
     down(_a, { state, emit }) {
       const scr = state.stack[state.stack.length - 1];
-      if (scr) scr.cursor = Math.min(scr.rows.length - 1, scr.cursor + 1);
+      if (!scr) return emit();
+      let i = scr.cursor + 1;
+      while (i < scr.rows.length && scr.rows[i]?.kind === "header") i++;
+      if (i < scr.rows.length) scr.cursor = i;
       emit();
     },
   },
@@ -331,11 +345,12 @@ export default defineApplet<SpotifyState>({
       const head = state.loading ? text("loading…", { color: AMBER }) : text(scr?.title ?? "", { dim: true });
       const tag = (k: BrowseRow["kind"]) =>
         k === "play" ? "▶" : k === "artist" ? "artist" : k === "album" ? "album" : k === "playlist" ? "playlist" : "";
-      const rows: ViewNode[] = (scr?.rows ?? []).map((r, i) =>
-        recordRow(
+      const rows: ViewNode[] = (scr?.rows ?? []).map((r, i) => {
+        if (r.kind === "header") return text(r.name.toUpperCase(), { color: GREEN });
+        return recordRow(
           [
-            { text: r.kind === "play" ? r.name : r.name, grow: true },
-            { text: r.subtitle, width: Math.min(28, Math.floor(W * 0.3)) },
+            { text: r.name, grow: true },
+            { text: "subtitle" in r ? r.subtitle : "", width: Math.min(28, Math.floor(W * 0.3)) },
             { text: tag(r.kind), width: 9, align: "right" },
           ],
           {
@@ -344,8 +359,8 @@ export default defineApplet<SpotifyState>({
             accent: GREEN,
             color: r.kind === "play" ? GREEN : FG,
           },
-        ),
-      );
+        );
+      });
       if (!rows.length && !state.loading) {
         rows.push(
           state.error

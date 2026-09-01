@@ -362,9 +362,15 @@ export async function artistDetail(id: string): Promise<Detail> {
   return { name: a?.name ?? "Artist", uri: a?.uri ?? "", rows: [...topTracks, ...albums] };
 }
 
-/** Your personal home: playlists (incl. Discover Weekly etc.), top artists,
- * and recently played — the closest thing to Spotify's home the API still gives. */
-export async function home(): Promise<Row[]> {
+export interface HomeSections {
+  recents: Row[];
+  artists: Row[];
+  playlists: Row[];
+}
+
+/** Your personal home, in sections: recently played (dated), top artists, and
+ * your playlists — the closest thing to Spotify's home the API still gives. */
+export async function home(): Promise<HomeSections> {
   // Playlists is the primary section — let its error propagate (e.g. a scope
   // 403) so the applet can show a clear message; the others are best-effort.
   const pls = await api("/v1/me/playlists?limit=50");
@@ -390,7 +396,7 @@ export async function home(): Promise<Row[]> {
   const recents: Row[] = ((recent?.items ?? []) as any[])
     .filter((it) => it.track && !seen.has(it.track.id) && (seen.add(it.track.id), true))
     .map((it) => ({ ...trackRow(it.track), subtitle: `${artistsOf(it.track)}  ·  ${ago(it.played_at)}` }));
-  return [...playlists, ...artists, ...recents];
+  return { recents, artists, playlists };
 }
 
 export async function playlistDetail(id: string): Promise<Detail> {
