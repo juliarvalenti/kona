@@ -613,6 +613,30 @@ page = 20            # threads per fetch`,
     scopeNeeded: null,
   },
 
+  /**
+   * The applet where the guard earns its keep: an agent with your mailbox can
+   * send mail as you and throw mail away, and neither undoes. `send`/`reply`/
+   * `forward` act as you and commit — `high`. `trash` does not come back —
+   * `critical`. Read/unread and archive change the SERVER's mailbox but undo
+   * trivially, so they are `medium` — reversible remote effects that run free.
+   */
+  priority: {
+    send: "high",
+    reply: "high",
+    replyAll: "high",
+    forward: "high",
+    archive: "medium",
+    trash: "critical",
+    markRead: "medium",
+    markUnread: "medium",
+    toggleRead: "medium",
+    // Drafting is not sending: a composer an agent fills in is state a human
+    // still has to press enter on.
+    compose: "low",
+    draft: "low",
+    field: "low",
+  },
+
   docs: {
     refresh: "Reload the inbox. Call this before you read state.",
     search: { doc: "Run a Gmail query and replace the list with its results.", args: { q: "is:unread newer_than:1d" } },

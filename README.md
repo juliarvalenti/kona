@@ -21,75 +21,79 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <table>
 <tr>
 <td width="50%" valign="top">
+<img src="docs/shots/approvals.svg" width="100%" alt="Approvals — a queued send shows its exact arguments and what is holding it">
+<br><sub><a href="applets/approvals/README.md"><code>approvals</code></a> — Agent-proposed actions waiting on you, and what your agents did</sub>
+</td>
+<td width="50%" valign="top">
 <img src="docs/shots/clock.svg" width="100%" alt="World Clock — renders a hero time plus a row per zone">
 <br><sub><a href="applets/clock/README.md"><code>clock</code></a> — Every city you care about, at a glance. Add zones by hand or by agent.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/dash.svg" width="100%" alt="Dashboard — the cockpit: one card per applet with something live, urgent first">
 <br><sub><a href="applets/dash/README.md"><code>dash</code></a> — Live cockpit — whatever your applets say is happening right now.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/email.svg" width="100%" alt="Email — the unified inbox: both mailboxes, newest first, unread led">
 <br><sub><a href="applets/email/README.md"><code>email</code></a> — Read, write, reply and file mail from Gmail and Outlook in one list.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/mycelium.svg" width="100%" alt="Mycelium — room view shows agents, messages, and shared memory">
 <br><sub><a href="applets/mycelium/README.md"><code>mycelium</code></a> — The coordination layer — rooms, agents, and what you say to them.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/notes.svg" width="100%" alt="Notes — lists titles with a preview and a count">
 <br><sub><a href="applets/notes/README.md"><code>notes</code></a> — A notepad: titled, multi-line notes that survive restarts.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/rss.svg" width="100%" alt="RSS — the river: every feed merged, newest first, unread lit">
 <br><sub><a href="applets/rss/README.md"><code>rss</code></a> — Your feeds as one river. Agents can search and open items too.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/spotify.svg" width="100%" alt="Spotify — now-playing shows the active device and its volume">
 <br><sub><a href="applets/spotify/README.md"><code>spotify</code></a> — Now playing + transport control.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/storybook.svg" width="100%" alt="Storybook — renders every component; bars fill mid-sweep">
 <br><sub><a href="applets/storybook/README.md"><code>storybook</code></a> — Live gallery of kona components.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/sys.svg" width="100%" alt="System — draws a labeled gauge per metric with a cpu history line">
 <br><sub><a href="applets/sys/README.md"><code>sys</code></a> — Live CPU, memory, disk, and battery gauges.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/theme.svg" width="100%" alt="Theme — previewing a preset marks the row and says what enter would keep">
 <br><sub><a href="applets/theme/README.md"><code>theme</code></a> — Catppuccin, Nord, Dracula and friends — previewed live, saved on enter.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/ticker.svg" width="100%" alt="Ticker — board lists symbols with price, %chg, and a sparkline">
 <br><sub><a href="applets/ticker/README.md"><code>ticker</code></a> — Watchlist board — stocks and crypto, price, %chg, sparkline.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/timer.svg" width="100%" alt="Timer — shows status, label, and a partly-filled bar">
 <br><sub><a href="applets/timer/README.md"><code>timer</code></a> — Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/weather.svg" width="100%" alt="Weather — the week: now, the next hours, and a day per row">
 <br><sub><a href="applets/weather/README.md"><code>weather</code></a> — Current conditions and the week ahead, from open-meteo.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/webex.svg" width="100%" alt="Webex — space list is newest first, with a dot on what is unread and who is around">
 <br><sub><a href="applets/webex/README.md"><code>webex</code></a> — Spaces, their messages, and a verb that posts back.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/workflows.svg" width="100%" alt="Workflows — lists what each one does, when it runs, and how it went">
 <br><sub><code>workflows</code> — Named sequences of applet verbs — run them by hand, or on a cron.</sub>
@@ -508,6 +512,58 @@ skill's worked examples. The manifest also carries the applet's title and the
 key each verb binds in the TUI, which is the bimodal thesis in one line: the
 same verb, whichever hand fires it.
 
+### Guarded verbs
+
+A keypress confirms itself — you pressed it. An agent's POST doesn't, and until
+now nothing told the two apart: an agent could `email.send`, `email.trash`,
+post as you or move your speakers, unasked and unseen. So verbs now declare a
+**priority** — how much human oversight they need — and the daemon holds the
+high-stakes ones for a human.
+
+```ts
+priority: { send: "high", trash: "critical", playPause: "medium", draft: "low" },
+```
+
+`low` is reads and kona-local state, `medium` is reversible remote effects
+(playback, mark-read), `high` acts as you and commits, `critical` doesn't come
+back. An applet that says nothing gets a guess from the verb's name — but the
+applet always wins, which is how `spotify.playPause` (a reversible nudge) stays
+`medium` and runs free while `email.send` is `high` and held.
+
+The TUI, `kona <applet>` and `kona approvals` are **trusted**: they send a
+loopback token, because a human is right there. Everything else is an agent,
+and its `high`/`critical` verbs come back parked instead of run:
+
+```console
+$ kona call email send '{"to":"ada@example.com","subject":"ship it"}'
+{ "ok": false, "pending": "p3", "hint": "held for a human: high-priority verbs need a human" }
+```
+
+Nothing was sent. The proposal is now in front of you — in the **`approvals`**
+applet with its exact arguments, on the dash, and as a desktop banner — where
+`a` runs it and `d` drops it (`kona approvals approve p3` from a shell). The
+agent watches `GET /approvals/p3` for the decision and gets the verb's real
+result when you say yes. A workflow an agent starts pauses at its first guarded
+step and resumes when you approve that step. A second tab is the **audit
+trail**: every agent-fired verb, held or not, with who asked and what came back.
+
+Where the line sits is yours:
+
+```toml
+[security]
+hold  = "default"                 # high + critical (the shipped policy)
+# hold = "all-writes"             # ...or anything past a read/local (>= medium)
+# hold = "none"                   # ...or nothing at all
+allow = ["spotify.playPause"]     # these run regardless
+guard = ["notes.clear"]           # ...and these are always held
+expire = "10m"                    # how long a proposal waits for you
+```
+
+`kona tools --json` marks each verb's `priority` and flags `guarded: true`, and
+the generated skill says **(needs approval)** next to each one — so an agent
+plans around the wait instead of discovering it. `KONA_TRUST_AGENTS=1` trusts
+every caller, if you want the old behaviour back.
+
 ### Copy prompt
 
 The skill is the durable half — installed once, describing every applet. The
@@ -548,6 +604,11 @@ about the file; a bad value is ignored, never fatal).
 
 ```toml
 default = "dash"      # applet a bare `kona` opens; omit for the launcher
+
+[security]            # which agent-fired verbs need you first (above)
+hold  = "default"     # high + critical; "all-writes" or "none" move it
+allow = ["spotify.playPause"]   # ...and per-verb exceptions either way
+guard = ["notes.clear"]
 
 [theme]               # the palette — applets name ROLES, never hexes
 preset = "nord"       # start from a named palette (`kona theme` lists them)

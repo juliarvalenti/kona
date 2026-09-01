@@ -1,14 +1,26 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
-import { bindingFor, type AppletDef, type AppletState } from "../sdk/index.ts";
+import { bindingFor, type AppletDef, type AppletState, type Priority } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { filterApplets } from "../core/catalog.ts";
-import { base, callVerb, ensureDaemon } from "../core/client.ts";
+import { base, callVerb as fireVerb, ensureDaemon } from "../core/client.ts";
 import { createStage, COPY_PROMPT_KEY, LAUNCHER_COPY_PROMPT_KEY, type Draft } from "./stage.ts";
 import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
 import { resolveKey, keyName, isUp, isDown, isSelect, isBack, type InputContext } from "./input.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { clipboardHelpers, copyToClipboard } from "../core/clipboard.ts";
-import { refreshConfig, setThemeOverride, theme } from "../core/config.ts";
+import { loadConfig, refreshConfig, setThemeOverride, theme } from "../core/config.ts";
+import { wouldHold } from "../core/guard.ts";
+
+/**
+ * Every verb this file fires came from a KEYPRESS — a human was here and did
+ * it, which is the one thing an agent's POST can never say for itself. So the
+ * host marks its calls trusted (core/trust.ts) and they run outright: the
+ * approval queue exists to hold what *nobody* confirmed, and confirming is
+ * exactly what pressing the key is.
+ */
+const callVerb = (id: string, verb: string, args: Record<string, unknown> = {}) =>
+  fireVerb(id, verb, args, { trusted: true });
+
 
 /**
  * The host is a THIN client. It never owns state — it loads applet modules only
@@ -348,7 +360,11 @@ export async function runHost(startAppletId: string | null) {
   async function copyPrompt() {
     const def = current ? byId.get(current) : null;
     const url = base();
-    const text = def ? appletPrompt(def, { base: url }) : surfacePrompt(applets, { base: url });
+    // The prompt the human hands an agent says which verbs that agent will have
+    // to ask them about — read from this machine's policy, at copy time.
+    const policy = loadConfig().security;
+    const guard = (ref: { applet: string; verb: string; priority: Priority }) => wouldHold(ref, policy);
+    const text = def ? appletPrompt(def, { base: url, guard }) : surfacePrompt(applets, { base: url, guard });
     const what = def ? `\`${def.id}\`` : `all ${applets.length} applets`;
     const result = await copyToClipboard(text);
     const { ok, error } = theme();

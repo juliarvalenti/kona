@@ -640,6 +640,9 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
     },
   },
 
+  /** Countdowns live and die in this applet's own state. */
+  priority: { clear: "low" },
+
   /** What an agent reads in `kona tools` / the generated skill. */
   docs: {
     start: {

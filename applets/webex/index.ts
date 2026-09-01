@@ -461,6 +461,13 @@ page   = 30          # messages per space`,
     sent: null,
   },
 
+  /**
+   * `post` lands a message in a space under your name — it acts as you and
+   * commits, so it is `high`. `read` marks spaces read on the SERVER, a
+   * reversible remote effect — `medium`. Everything else is a local read.
+   */
+  priority: { post: "high", read: "medium" },
+
   docs: {
     refresh: "Re-read the space list, the unread count and who is around.",
     search: { doc: "Filter the space list by title — local, no refetch.", args: { q: "ship" } },

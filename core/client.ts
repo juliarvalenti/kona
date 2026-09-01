@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { DEFAULT_PORT } from "../server/daemon.ts";
+import { trustHeaders } from "./trust.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const KONAD = join(here, "..", "bin", "konad.ts");
@@ -66,10 +67,27 @@ export async function registerApplet(entry: string): Promise<{ id?: string; adde
   }) as Promise<{ id?: string; added?: boolean; error?: string }>;
 }
 
-export async function callVerb(id: string, verb: string, args: Record<string, unknown> = {}) {
+/**
+ * Fire a verb.
+ *
+ * `trusted` is the whole human-in-the-loop seam from the client side: pass it
+ * when a PRESENT HUMAN caused this call — a keypress in the TUI, `kona timer
+ * 5m`, an approval from `kona approvals` — and the daemon runs the verb
+ * outright. Leave it off for the agent path (`kona call`), where a guarded verb
+ * comes back `{ pending }` for a human to approve. See core/trust.ts.
+ */
+export async function callVerb(
+  id: string,
+  verb: string,
+  args: Record<string, unknown> = {},
+  opts: { trusted?: boolean } = {},
+) {
   return api(`/applets/${id}/verbs/${verb}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(opts.trusted ? trustHeaders() : {}),
+    },
     body: JSON.stringify(args),
   });
 }

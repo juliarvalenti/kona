@@ -2,13 +2,24 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { mkdirSync, watch } from "node:fs";
 import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
-import { toolsForApplet } from "../sdk/index.ts";
+import { toolsForApplet, priorityFor } from "../sdk/index.ts";
 import { loadPackages, pluginRoots, APPLETS_DIR } from "../core/load.ts";
 import { skillMarkdown } from "../core/skill.ts";
+import { securityConfig } from "../core/config.ts";
+import { decide, reason as holdReason, wouldHold } from "../core/guard.ts";
+import { callerOf, trustToken, DAEMON, type Caller } from "../core/trust.ts";
 import { CronScheduler } from "./cron.ts";
 import { registerEvents } from "./notify.ts";
+import { approvals, PendingResult } from "./approvals.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
+
+/**
+ * The applet that owns the pending tray. Named here because the daemon has ONE
+ * rule about it — an untrusted caller can never fire its verbs, or approving
+ * would itself be something an agent could approve.
+ */
+const APPROVALS_ID = "approvals";
 
 // Overridable so tests can point at a throwaway dir instead of the real state.
 const stateDir = () => process.env.KONA_STATE_DIR ?? join(homedir(), ".local", "state", "kona");
@@ -114,7 +125,13 @@ export async function startDaemon(port = DEFAULT_PORT) {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const push of subscribers) push(payload);
   }
-  function ctxFor(id: string): AppletCtx {
+  /**
+   * The applet's seam. `caller` rides along so a verb that fires ANOTHER verb
+   * (workflows) proposes with the same authority it was proposed with: an
+   * agent's workflow run hits the guard at every step, and a human's keypress
+   * does not. The applet itself never sees it — it is `invoke`'s business.
+   */
+  function ctxFor(id: string, caller: Caller = DAEMON): AppletCtx {
     return {
       state: states[id]!,
       emit: () => {
@@ -132,7 +149,11 @@ export async function startDaemon(port = DEFAULT_PORT) {
       // the daemon wants an error it can read, not a status code.
       call: async (other, verb, callArgs) => {
         try {
-          return await invoke(other, verb, callArgs ?? {});
+          // `wait` is the difference between the two callers of a guarded verb:
+          // HTTP takes an id and leaves, an applet awaits the human. A workflow
+          // step therefore PAUSES on a held verb and resumes when it is
+          // approved — the engine never learns that approval exists.
+          return await invoke(other, verb, callArgs ?? {}, caller, { wait: true });
         } catch (e) {
           if (e instanceof Response) throw new Error(`${other}.${verb}: ${await e.text()}`);
           throw e;
@@ -214,13 +235,83 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // can't bind must exit BEFORE hitting any applet init (which calls APIs),
   // otherwise a spawn storm becomes an API storm.
 
-  async function invoke(id: string, verb: string, args: Record<string, unknown>) {
+  /**
+   * Fire a verb. THE entry point: a keypress, an agent's POST, a cron pass and
+   * one applet calling another all land here, which is what makes the guard a
+   * property of the platform rather than of the HTTP route.
+   *
+   * A trusted caller (a human at the keyboard) runs straight through. An
+   * untrusted one meets the policy: allowed verbs run and are logged; held ones
+   * are parked for a human and NOT run. What comes back then depends on whether
+   * the caller can wait — `wait: true` (an applet) awaits the decision,
+   * `wait: false` (HTTP) gets a `PendingResult` carrying the id to watch.
+   */
+  async function invoke(
+    id: string,
+    verb: string,
+    args: Record<string, unknown>,
+    caller: Caller = DAEMON,
+    opts: { wait?: boolean } = {},
+  ) {
     const def = byId.get(id);
     if (!def) throw new Response("no such applet", { status: 404 });
     const fn = def.verbs[verb];
     if (!fn) throw new Response("no such verb", { status: 404 });
-    return await fn(args ?? {}, ctxFor(id));
+    args ??= {};
+    if (caller.trusted) return await fn(args, ctxFor(id, caller));
+
+    const ref = { applet: id, verb, priority: priorityFor(def, verb) };
+    // The tray is the human's seam, full stop. Parking an approval for approval
+    // would be a loop whose fixed point is "the agent decides", so an untrusted
+    // caller is refused outright rather than queued — and that goes for moving
+    // the cursor too, since the row under it is the row `a` approves. Reading
+    // the queue stays open: an agent watching for its own proposal is the
+    // point. `low` folds reads in with cursor movement, so the nav verbs are
+    // named out explicitly here — only a genuine read (refresh) gets through.
+    const navVerb = new Set([def.nav?.up, def.nav?.down, def.nav?.back, def.nav?.select].filter(Boolean));
+    if (id === APPROVALS_ID && (ref.priority !== "low" || navVerb.has(verb))) {
+      throw new Response(`${id}.${verb} is the human's to fire — decide in the TUI, or \`kona approvals ${verb} <id>\``, {
+        status: 403,
+      });
+    }
+    if (decide(ref, caller) === "hold") {
+      const parked = approvals.park(
+        {
+          ...ref,
+          args,
+          requestedBy: caller.by,
+          reason: holdReason(ref),
+          expiresMs: securityConfig().expireMs,
+        },
+        // What approving will run: the same verb, now with a human behind it.
+        () => Promise.resolve(fn(args, ctxFor(id, DAEMON))),
+      );
+      if (opts.wait) return await parked.settled;
+      return new PendingResult(parked.action);
+    }
+
+    // Allowed through — but still an agent acting as you, so it is on the record.
+    try {
+      const result = await fn(args, ctxFor(id, caller));
+      approvals.record({ ...ref, args, by: caller.by, result });
+      return result;
+    } catch (e) {
+      approvals.record({ ...ref, args, by: caller.by, error: e instanceof Response ? await e.clone().text() : String(e) });
+      throw e;
+    }
   }
+
+  // This machine's loopback token, minted on first boot. The host sends it back
+  // so the daemon can tell "a human pressed a key" from "something POSTed".
+  const TOKEN = trustToken();
+
+  // Mirror the tray onto the wire: an agent whose call was parked watches
+  // /events for the decision instead of polling, and gets the verb's result the
+  // moment a human approves it.
+  approvals.onChange((e) => {
+    if (e.type === "parked") broadcast("approval", { type: "parked", action: e.action });
+    else if (e.type === "decided") broadcast("approval", { type: "decided", entry: e.entry });
+  });
 
   const json = (data: unknown, status = 200) =>
     new Response(JSON.stringify(data), {
@@ -234,6 +325,7 @@ export async function startDaemon(port = DEFAULT_PORT) {
     async fetch(req) {
       const url = new URL(req.url);
       const path = url.pathname;
+      let m: RegExpMatchArray | null;
 
       if (path === "/health") return json({ ok: true, applets: applets.length });
 
@@ -268,29 +360,51 @@ export async function startDaemon(port = DEFAULT_PORT) {
         }
       }
 
-      // The manifest an agent reads to learn what it can call.
+      // The manifest an agent reads to learn what it can call — annotated with
+      // how far each verb reaches and whether THIS machine's policy would hold
+      // it for a human, so an agent can plan around the wait.
       if (path === "/tools" && req.method === "GET") {
-        return json(applets.flatMap(toolsForApplet));
+        const policy = securityConfig();
+        return json(applets.flatMap((a) => toolsForApplet(a, (ref) => wouldHold(ref, policy))));
+      }
+
+      // The pending tray, and what your agents have been doing. Read-only, so
+      // an agent can watch for its own parked call without holding the token.
+      if (path === "/approvals" && req.method === "GET") {
+        return json({ pending: approvals.list(), log: approvals.log() });
+      }
+      m = path.match(/^\/approvals\/([^/]+)$/);
+      if (m && req.method === "GET") {
+        const id = m[1]!;
+        const waiting = approvals.find(id);
+        if (waiting) return json({ status: "pending", action: waiting });
+        const done = approvals.log().find((e) => e.id === id);
+        if (done) return json({ status: done.outcome, entry: done });
+        return json({ error: "no such approval" }, 404);
       }
 
       // The same manifest as a drop-in agent skill. Generated here, from the
       // applets this daemon actually loaded, so it can never describe verbs the
       // machine doesn't have. `kona tools --skill` is a thin client for it.
       if (path === "/skill" && req.method === "GET") {
-        return new Response(skillMarkdown(applets, { base: `${url.protocol}//${url.host}` }), {
+        const policy = securityConfig();
+        return new Response(skillMarkdown(applets, { base: `${url.protocol}//${url.host}`, guard: (ref) => wouldHold(ref, policy) }), {
           headers: { "content-type": "text/markdown; charset=utf-8" },
         });
       }
 
       // Current state of one applet (host initial paint; agent read).
-      let m = path.match(/^\/applets\/([^/]+)\/state$/);
+      m = path.match(/^\/applets\/([^/]+)\/state$/);
       if (m && req.method === "GET") {
         const id = m[1];
         if (!states[id]) return json({ error: "no such applet" }, 404);
         return json(states[id]);
       }
 
-      // Fire a verb. YOU (via host) and the AGENT both land here.
+      // Fire a verb. YOU (via host) and the AGENT both land here — the same
+      // route, the same verb, the same state. What differs is the TOKEN: the
+      // host sends one, so its calls are a present human's; anything else is an
+      // agent, and a guarded verb comes back parked instead of run.
       m = path.match(/^\/applets\/([^/]+)\/verbs\/([^/]+)$/);
       if (m && req.method === "POST") {
         const [, id, verb] = m;
@@ -302,8 +416,20 @@ export async function startDaemon(port = DEFAULT_PORT) {
           return json({ error: "bad json body" }, 400);
         }
         try {
-          const result = await invoke(id, verb, args);
-          return json({ ok: true, result, state: states[id] });
+          const result = await invoke(id!, verb!, args, callerOf(req, TOKEN), { wait: false });
+          if (result instanceof PendingResult) {
+            const { action } = result;
+            return json(
+              {
+                ok: false,
+                pending: action.id,
+                action,
+                hint: `held for a human: ${action.reason}. Watch \`GET /approvals/${action.id}\` (or the \`approval\` SSE event) for the decision.`,
+              },
+              202,
+            );
+          }
+          return json({ ok: true, result, state: states[id!] });
         } catch (e) {
           if (e instanceof Response) return json({ error: await e.text() }, e.status);
           return json({ error: String(e) }, 500);

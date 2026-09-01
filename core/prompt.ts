@@ -1,6 +1,6 @@
 import type { AnyApplet } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
-import { appletSection, recipeBlock } from "./skill.ts";
+import { appletSection, recipeBlock, type SkillOpts } from "./skill.ts";
 
 /**
  * "Copy prompt" — the on-demand sibling of the generated skill.
@@ -20,6 +20,12 @@ import { appletSection, recipeBlock } from "./skill.ts";
 export interface PromptOpts {
   /** Base URL to document for the HTTP seam. Defaults to the standard port. */
   base?: string;
+  /**
+   * Would an agent's call be held for a human? Passed by a caller with the
+   * machine's `[security]` policy in hand, so a pasted prompt marks the verbs
+   * that will actually wait here — see core/guard.ts.
+   */
+  guard?: SkillOpts["guard"];
 }
 
 const DEFAULT_BASE = "http://localhost:4177";
@@ -60,11 +66,16 @@ function seams(base: string, id?: string): string {
   ].join("\n");
 }
 
-/** How to read what comes back — the two rules an agent gets wrong first. */
-const RULES = `A verb answers with the applet's whole state, so read the result instead of
+/** How to read what comes back — the rules an agent gets wrong first. */
+const rules = (base: string) => `A verb answers with the applet's whole state, so read the result instead of
 polling. Applets report failure in a state field (\`error\`, \`status\`) rather
 than throwing, and verbs that act on a selection take \`id\`/\`label\`/\`index\` —
-use those rather than moving the human's cursor with \`up\`/\`down\`.`;
+use those rather than moving the human's cursor with \`up\`/\`down\`.
+
+A verb marked **(needs approval)** does NOT run when you fire it: it is parked
+for the human (\`202 { "pending": "<id>" }\`) and runs only if they approve.
+Watch \`GET ${base}/approvals/<id>\` for the decision — a denial is an answer,
+re-firing just queues a second copy, and \`approvals.approve\` refuses you.`;
 
 /**
  * The blurb for ONE applet — what the host copies when you press the
@@ -80,10 +91,10 @@ export function appletPrompt(def: AnyApplet, opts: PromptOpts = {}): string {
     "",
     seams(base, def.id),
     "",
-    appletSection(def, 2),
+    appletSection(def, 2, opts.guard),
     ...(def.recipes?.length ? ["", "## Worked examples", "", def.recipes.map(recipeBlock).join("\n\n")] : []),
     "",
-    RULES,
+    rules(base),
     "",
     `${verbs} verb${verbs === 1 ? "" : "s"} on \`${def.id}\`; \`kona tools --json\` lists every applet installed here.`,
     "",
@@ -106,9 +117,9 @@ export function surfacePrompt(applets: AnyApplet[], opts: PromptOpts = {}): stri
     "",
     `Installed: ${ids}.`,
     "",
-    applets.map((a) => appletSection(a, 2)).join("\n\n"),
+    applets.map((a) => appletSection(a, 2, opts.guard)).join("\n\n"),
     "",
-    RULES,
+    rules(base),
     "",
   ].join("\n");
 }

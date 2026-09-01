@@ -104,6 +104,13 @@ export default defineApplet<${titleize(id).replace(/ /g, "")}State>({
     },
   },
 
+  // How much oversight each verb needs, for the human-in-the-loop guard: "low"
+  // (reads and kona-local state), "medium" (reversible remote effects), "high"
+  // (acts as them and commits) or "critical" (irreversible loss). What you
+  // leave out is guessed from the name — \`reset\` reads as critical, and here
+  // it is a counter — so say so when you know better.
+  priority: { bump: "low", reset: "low" },
+
   // What an agent reads in \`kona tools\` — written where the verb is written,
   // so the manifest and the generated skill can never drift from the code.
   docs: {

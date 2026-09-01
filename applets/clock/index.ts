@@ -249,6 +249,13 @@ export default defineApplet<ClockState>({
     pick: 0,
   },
 
+  /**
+   * Everything here is this applet's own list of cities. `remove` reads
+   * destructive, but the thing it destroys is a row you can add back in two
+   * keystrokes — so it is `low`, and an agent may curate the board freely.
+   */
+  priority: { remove: "low" },
+
   docs: {
     list: { doc: "Read the board without changing it; `tz` reads any zone, on the board or not.", args: { tz: "Asia/Kathmandu" } },
     add: { doc: "Add a city (an IANA zone, or a name from the catalog).", args: { tz: "Europe/Lisbon" } },

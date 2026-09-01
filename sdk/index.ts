@@ -453,6 +453,14 @@ export interface AppletDef<S extends object = AppletState> {
   ephemeral?: boolean;
   /** Actions. Keyed by verb name. */
   verbs: Record<string, Verb<S>>;
+  /**
+   * How much oversight each verb needs, keyed by verb name — see `Priority`.
+   * Anything you leave out is guessed from the verb's name, so declare the ones
+   * where the guess would be wrong (or dangerous): `{ send: "high", trash:
+   * "critical" }`. An untrusted caller's `high`/`critical` verb is parked for a
+   * human to approve instead of run.
+   */
+  priority?: Record<string, Priority>;
   /** Pure render: current state (+ viewport size) -> what the host draws. */
   view: (state: S, ctx?: ViewCtx) => View;
   /** Optional frame tint (border/title color) derived from state. */
@@ -568,6 +576,70 @@ export interface CronJob {
   args?: Record<string, unknown>;
 }
 
+/**
+ * How much human oversight a verb needs — an ordinal PRIORITY, low to high.
+ * This is the applet's own answer to "what happens if a stranger fires this?",
+ * and it is the only input the approval layer needs:
+ *
+ *   - `low`      reads AND kona-local state (refresh, search, open a row, move
+ *                the cursor, add a note, fill a field). Runs free.
+ *   - `medium`   reversible REMOTE effects — Spotify transport, mark-read,
+ *                archive: real but easily undone. Runs free by default.
+ *   - `high`     acts AS YOU and commits: sends the mail, posts the message,
+ *                schedules a job. Held for a human by default.
+ *   - `critical` irreversible loss: trash, clear, delete the room. Held too.
+ *
+ * A keypress is self-confirming (the human pressed it); an agent's POST is not,
+ * so the daemon holds `high` and `critical` for approval when the caller is
+ * untrusted (see core/guard.ts and the `approvals` applet). Declaring a level
+ * is therefore a SAFETY statement about your verb, not documentation — the
+ * applet is still the only thing that knows what its verbs do.
+ */
+export type Priority = "low" | "medium" | "high" | "critical";
+
+/** Ordered least- to most-oversight, for comparisons and for sorting a list. */
+export const PRIORITIES: Priority[] = ["low", "medium", "high", "critical"];
+
+/** Verbs whose NAME says they act AS YOU and commit. */
+const HIGH_NAMES =
+  /^(send|reply|forward|post|publish|share|announce|create|schedule|invite|dispatch|upload|push)/i;
+/** Verbs whose NAME says they are irreversible loss. */
+const CRITICAL_NAMES =
+  /^(trash|delete|destroy|remove|drop|purge|wipe|erase|clear|reset|revoke)/i;
+/** Verbs whose NAME says they are reversible remote effects. */
+const MEDIUM_NAMES =
+  /^(play|pause|next|prev|previous|skip|seek|volume|shuffle|repeat|queue|transfer|mark|archive)/i;
+
+/**
+ * The level to assume when an applet doesn't say. Names are a decent prior —
+ * `send` acts as you, `trash` doesn't come back, `playPause` is a reversible
+ * remote nudge, and anything unrecognised is `low`, the level that needs no
+ * permission. Guessing is the fallback, never the contract: an applet that
+ * cares declares `priority`.
+ */
+export function defaultPriority(verb: string): Priority {
+  if (CRITICAL_NAMES.test(verb)) return "critical";
+  if (HIGH_NAMES.test(verb)) return "high";
+  if (MEDIUM_NAMES.test(verb)) return "medium";
+  return "low";
+}
+
+/**
+ * This verb's priority level: what the applet declared, else what its name
+ * suggests. The ONE place that answers the question, so the manifest, the
+ * guard and the approvals list can never disagree about how much oversight a
+ * verb needs.
+ */
+export function priorityFor(def: Pick<AnyApplet, "priority" | "nav">, verb: string): Priority {
+  const declared = def.priority?.[verb];
+  if (declared && PRIORITIES.includes(declared)) return declared;
+  // Cursor movement is the keyboard's business and touches nothing but the
+  // selection — never make a human approve an arrow key.
+  const { up, down, back, select } = def.nav ?? {};
+  if (verb === up || verb === down || verb === back || verb === select) return "low";
+  return defaultPriority(verb);
+}
+
 /** Identity helper — gives you types and a stable shape. */
 export function defineApplet<S extends object>(def: AppletDef<S>): AppletDef<S> {
   return def;
@@ -615,6 +687,15 @@ export interface ToolSpec {
   /** A cursor/navigation verb (up/down/back/select) — the keyboard's business,
    * rarely an agent's: address a row by id or index instead. */
   nav?: boolean;
+  /** How much oversight this verb needs — see `Priority`. Always present. */
+  priority: Priority;
+  /**
+   * True when firing this as an agent parks a pending action for a human to
+   * approve instead of running it, under THIS machine's `[security]` policy.
+   * The manifest says so up front so you can plan around the wait rather than
+   * discovering it from a `202`.
+   */
+  guarded?: boolean;
 }
 
 /** key -> verb, for annotating the manifest with the keyboard's equivalent. */
@@ -632,17 +713,29 @@ function navVerbs(def: AnyApplet): Set<string> {
   return new Set([up, down, back].filter((v): v is string => !!v));
 }
 
-export function toolsForApplet(def: AnyApplet): ToolSpec[] {
+/**
+ * Build the manifest for one applet. `guard` — when the caller has a policy in
+ * hand (the daemon does; a plain `toolsForApplet` doesn't) — answers "would an
+ * agent's call be held for approval?" per verb, so `/tools` can flag it.
+ */
+export function toolsForApplet(
+  def: AnyApplet,
+  guard?: (ref: { applet: string; verb: string; priority: Priority }) => boolean,
+): ToolSpec[] {
   const keys = keysByVerb(def);
   const cursor = navVerbs(def);
   return Object.keys(def.verbs).map((verb) => {
     const doc = def.docs?.[verb];
+    const name = `${def.id}.${verb}`;
+    const priority = priorityFor(def, verb);
     const spec: ToolSpec = {
-      name: `${def.id}.${verb}`,
+      name,
       applet: def.id,
       verb,
       title: def.title,
+      priority,
     };
+    if (guard?.({ applet: def.id, verb, priority })) spec.guarded = true;
     if (def.summary) spec.summary = def.summary;
     if (typeof doc === "string") spec.doc = doc;
     else if (doc) {
