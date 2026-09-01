@@ -122,6 +122,7 @@ function kcDelete(account: string): void {
 export function logout(): void {
   kcDelete(KC_REFRESH);
   kcDelete(KC_TOKEN);
+  resetPresence(); // nothing we learned about people outlives the credential
 }
 
 /** OAuth client from env or ~/.config/kona/webex.json. */
@@ -482,6 +483,135 @@ export async function postMessage(roomId: string, text: string): Promise<Message
   if (!body) throw new Error("empty message");
   const j = await api("/v1/messages", { method: "POST", body: JSON.stringify({ roomId, text: body }) });
   return normalizeMessage(j, people);
+}
+
+// --- presence ----------------------------------------------------------------
+
+/**
+ * Presence, as far as REST can tell it. The People API carries `status` and
+ * `lastActivity` on the scope we already hold (`spark:people_read`), so "is
+ * this person around right now?" costs nothing extra to ask.
+ *
+ * Two limits are the API's, not ours, and both are handled by saying nothing:
+ * presence is same-org only, and a person who turned status sharing off comes
+ * back without one. Either way `status` is null and the applet draws no dot —
+ * an absent presence is never an error.
+ */
+export type PresenceStatus = "active" | "idle";
+
+export interface Presence {
+  id: string;
+  name: string;
+  email: string;
+  /** null when Webex won't say: another org, sharing off, or "unknown". */
+  status: PresenceStatus | null;
+  /** Epoch ms Webex last saw them; 0 when unknown. */
+  lastActivity: number;
+}
+
+/** How long a reading stays good enough to reuse. Presence is cheap, not free. */
+export const PRESENCE_TTL_MS = 60_000;
+
+// Webex's status vocabulary is wider than this, but the rich states (DND, out
+// of office) need the real-time SDK to be trustworthy and are out of scope
+// here — see the issue. What REST reports honestly is "at the keyboard" or
+// "not", so anything we don't recognise reads as no presence at all rather
+// than as idle: a wrong dot is worse than no dot.
+const AT_THE_KEYBOARD = new Set(["active", "call", "meeting", "presenting"]);
+
+export function normalizePresence(raw: unknown): Presence | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === "string" ? r.id : "";
+  if (!id) return null;
+  const status = typeof r.status === "string" ? r.status.toLowerCase() : "";
+  const email = String((r.emails as unknown[] | undefined)?.[0] ?? "");
+  return {
+    id,
+    name: (typeof r.displayName === "string" && r.displayName.trim()) || nameFromEmail(email),
+    email,
+    status: AT_THE_KEYBOARD.has(status) ? "active" : status === "inactive" ? "idle" : null,
+    lastActivity: toMs(r.lastActivity),
+  };
+}
+
+// personId -> the last reading, with when we took it.
+const presenceCache = new Map<string, { at: number; p: Presence }>();
+// A display name (or email) -> who it resolved to, or null for "the directory
+// doesn't know them". Names don't start resolving later, so a miss is kept.
+const byName = new Map<string, Presence | null>();
+
+function remember(p: Presence): void {
+  presenceCache.set(p.id, { at: Date.now(), p });
+  people.set(p.id, p.name);
+  byName.set(p.name.toLowerCase(), p);
+  if (p.email) byName.set(p.email.toLowerCase(), p);
+}
+
+/** Forget every reading — tests, and after a credential change. */
+export function resetPresence(): void {
+  presenceCache.clear();
+  byName.clear();
+}
+
+/**
+ * Presence for a batch of people. Readings younger than `maxAgeMs` come from
+ * the cache, so a screenful of message authors is one call per minute rather
+ * than one per repaint. Ids Webex says nothing about are simply absent from
+ * the map.
+ */
+export async function presence(personIds: string[], maxAgeMs = PRESENCE_TTL_MS): Promise<Map<string, Presence>> {
+  const out = new Map<string, Presence>();
+  const now = Date.now();
+  const want: string[] = [];
+  for (const id of new Set(personIds.filter(Boolean))) {
+    const hit = presenceCache.get(id);
+    if (hit && now - hit.at < maxAgeMs) out.set(id, hit.p);
+    else want.push(id);
+  }
+  // Same 85-id ceiling as the name lookup; one page covers a screen of people.
+  for (let i = 0; i < want.length; i += 80) {
+    const j = await api(`/v1/people?${new URLSearchParams({ id: want.slice(i, i + 80).join(",") })}`);
+    for (const raw of (Array.isArray(j?.items) ? j.items : []) as unknown[]) {
+      const p = normalizePresence(raw);
+      if (!p) continue;
+      remember(p);
+      out.set(p.id, p);
+    }
+  }
+  return out;
+}
+
+/**
+ * Who a name belongs to. A 1:1 space is titled with the other person's display
+ * name and its payload carries no person id, so this is how a DM finds its
+ * counterpart: the org directory, on the scope presence already rides on
+ * (reading the membership would need one we don't ask for).
+ *
+ * Two people sharing a display name resolve to nobody — a dot on the wrong
+ * person is worse than none.
+ */
+export async function lookupPerson(nameOrEmail: string): Promise<Presence | null> {
+  const key = nameOrEmail.trim().toLowerCase();
+  if (!key) return null;
+  const cached = byName.get(key);
+  if (cached !== undefined) return cached;
+
+  let found: Presence | null = null;
+  try {
+    const q: Record<string, string> = key.includes("@") ? { email: key } : { displayName: nameOrEmail.trim() };
+    const j = await api(`/v1/people?${new URLSearchParams({ ...q, max: "10" })}`);
+    const items = ((Array.isArray(j?.items) ? j.items : []) as unknown[])
+      .map((r) => normalizePresence(r))
+      .filter((p): p is Presence => !!p);
+    const exact = items.filter((p) => p.name.toLowerCase() === key || p.email.toLowerCase() === key);
+    found = exact.length === 1 ? exact[0]! : items.length === 1 ? items[0]! : null;
+  } catch {
+    return null; // a hiccup is not an answer — leave the name unresolved and retry later
+  }
+  byName.set(key, found);
+  if (found) remember(found);
+  return found;
 }
 
 // --- read receipts -----------------------------------------------------------

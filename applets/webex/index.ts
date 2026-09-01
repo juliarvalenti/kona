@@ -3,6 +3,7 @@ import {
   text,
   spacer,
   col,
+  row,
   input,
   theme,
   appletAccent,
@@ -21,10 +22,13 @@ import {
   isUnread,
   unreadCount,
   ago,
+  presence as fetchPresence,
+  lookupPerson,
   SETUP_HINT,
   type Space,
   type Message,
   type SeenMap,
+  type Presence,
 } from "../../server/webex.ts";
 
 /**
@@ -56,6 +60,10 @@ interface WebexState {
   open: { space: Space; messages: Message[] } | null;
   /** spaceId -> the activity timestamp we have read up to. */
   seen: SeenMap;
+  /** personId -> whether Webex thinks they are around. The dots come from here. */
+  presence: Record<string, Presence>;
+  /** spaceId -> the other person in a 1:1, once we know who that is. */
+  dm: Record<string, string>;
   unread: number;
   query: string;
   /** True while the compose field owns the keyboard. */
@@ -65,6 +73,8 @@ interface WebexState {
   error: string | null;
   authed: boolean;
   me: string;
+  /** Our own person id — the one presence we never need to ask about. */
+  meId: string;
   syncedAt: number;
   /** Last post, echoed under the composer so a send is visibly acknowledged. */
   sent: string | null;
@@ -120,6 +130,95 @@ function recount(state: WebexState) {
   state.unread = unreadCount(state.spaces, state.seen);
 }
 
+// Presence rides its own, slower schedule than the space list: it is one call
+// for everyone on screen, and nobody's status changes fast enough to be worth
+// a poll every 30 seconds.
+const PRESENCE_MS = 60_000;
+let presenceAt = 0;
+let presenceInFlight = false;
+
+/** Everyone we would draw a dot for: the people we DM, and the open space's authors. */
+function watched(state: WebexState): string[] {
+  const ids = new Set(Object.values(state.dm));
+  for (const m of state.open?.messages ?? []) if (m.personId && m.personId !== state.meId) ids.add(m.personId);
+  ids.delete(state.meId);
+  return [...ids].filter(Boolean);
+}
+
+/**
+ * Refresh the dots. Presence is a nicety — another org, a person who turned
+ * status sharing off, a lookup that fails — so every path here ends in "no
+ * dot" rather than in an error on screen. The only thing it may never do is
+ * make the space list look broken.
+ */
+async function loadPresence(state: WebexState, emit: () => void, force = false) {
+  if (presenceInFlight) return;
+  // Off the schedule for somebody NEW — a space just opened, a stranger just
+  // spoke — because a face with no dot beside it reads as "offline".
+  const unknown =
+    state.spaces.some((s) => s.kind === "direct" && !state.dm[s.id]) ||
+    watched(state).some((id) => !state.presence[id]);
+  if (!force && !unknown && Date.now() < presenceAt) return;
+  presenceInFlight = true;
+  try {
+    // A 1:1 carries no person id, so we have to work out who it is with. An
+    // open space hands us that for free (whoever wrote the messages); for the
+    // rest, the title is their display name and the directory knows it. One
+    // lookup per unmatched DM, in parallel — after the first pass they are all
+    // remembered.
+    const unmatched = state.spaces.filter((s) => s.kind === "direct" && !state.dm[s.id]);
+    await Promise.all(
+      unmatched.map(async (space) => {
+        const p = await lookupPerson(space.title);
+        if (p) state.dm[space.id] = p.id;
+      }),
+    );
+    const ids = watched(state);
+    if (ids.length) {
+      for (const [id, p] of await fetchPresence(ids, force ? 0 : PRESENCE_MS)) state.presence[id] = p;
+    }
+  } catch {
+    /* the dots just don't appear */
+  } finally {
+    presenceInFlight = false;
+    presenceAt = Date.now() + PRESENCE_MS;
+    emit();
+  }
+}
+
+/** The presence to draw beside a space — a 1:1's counterpart, or nobody. */
+function spacePresence(state: WebexState, space: Space): Presence | null {
+  if (space.kind !== "direct") return null;
+  const id = state.dm[space.id];
+  return (id && state.presence[id]) || null;
+}
+
+/** `●` around, `○` idle, a blank when Webex won't say. */
+function dot(p: Presence | null): string {
+  return p?.status === "active" ? "●" : p?.status === "idle" ? "○" : " ";
+}
+
+/** "active now" / "last seen 12m ago" — empty when there is nothing to claim. */
+function seenLine(p: Presence | null): string {
+  if (!p?.status) return "";
+  if (p.status === "active") return "active now";
+  const since = ago(p.lastActivity);
+  return since ? `last seen ${since} ago` : "idle";
+}
+
+/**
+ * The list's status column. A dot on its own can't say whether it means unread
+ * or present — the two markers sit near each other — so in a 1:1 this column
+ * spells the same answer out, and carries the last-seen time while it is at it.
+ */
+function statusCell(space: Space, p: Presence | null): string {
+  if (space.kind !== "direct") return "space";
+  if (!p?.status) return "direct";
+  if (p.status === "active") return "active";
+  const since = ago(p.lastActivity);
+  return since ? `seen ${since}` : "idle";
+}
+
 async function loadSpaces(state: WebexState, emit: () => void) {
   if (inFlight) return;
   inFlight = true;
@@ -137,11 +236,15 @@ async function loadSpaces(state: WebexState, emit: () => void) {
     nextAt = Date.now() + REFRESH_MS;
     if (!state.me) {
       try {
-        state.me = (await whoami()).displayName;
+        const who = await whoami();
+        state.me = who.displayName;
+        state.meId = who.id;
       } catch {
         /* a name is a nicety */
       }
     }
+    emit(); // paint the spaces before going off to ask who is around
+    await loadPresence(state, emit);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     state.error = msg;
@@ -167,6 +270,12 @@ async function loadSpace(state: WebexState, space: Space, emit: () => void) {
     // room's own activity stamp when the space is empty.
     const upTo = messages[messages.length - 1]?.at ?? space.lastActivity;
     state.seen = markSeen(space.id, Math.max(upTo, space.lastActivity));
+    // Whoever else spoke here IS the other half of a 1:1 — an exact answer,
+    // where the directory lookup is only a good guess at a display name.
+    if (space.kind === "direct") {
+      const them = messages.find((m) => m.personId && m.personId !== state.meId)?.personId;
+      if (them) state.dm[space.id] = them;
+    }
     recount(state);
     state.error = null;
   } catch (e) {
@@ -175,6 +284,7 @@ async function loadSpace(state: WebexState, space: Space, emit: () => void) {
     state.loading = false;
     emit();
   }
+  await loadPresence(state, emit);
 }
 
 /** Resolve an agent's `space` argument: an id, or a title (substring, case-insensitive). */
@@ -229,6 +339,8 @@ page   = 30          # messages per space`,
     cursor: 0,
     open: null,
     seen: {},
+    presence: {},
+    dm: {},
     unread: 0,
     query: "",
     composing: false,
@@ -237,9 +349,35 @@ page   = 30          # messages per space`,
     error: null,
     authed: false,
     me: "",
+    meId: "",
     syncedAt: 0,
     sent: null,
   },
+
+  docs: {
+    refresh: "Re-read the space list, the unread count and who is around.",
+    search: { doc: "Filter the space list by title — local, no refetch.", args: { q: "ship" } },
+    open: { doc: "Drill into a space by name (or `index`) and read its messages.", args: { space: "ship-kona" } },
+    post: { doc: "Post a message. Names the space, so nothing needs to be open.", args: { space: "ship-kona", text: "deploy is green" } },
+    read: { doc: "Mark a space read — or every space with `{\"all\":true}`.", args: { space: "ship-kona" } },
+    presence: {
+      doc: "Is this person around? `active`/`idle` plus when Webex last saw them; no args lists everyone we watch.",
+      args: { person: "Grace Hopper" },
+    },
+    compose: "Give the compose field the keyboard (agents call `post` instead).",
+    cancel: "Drop the draft and leave the composer.",
+  },
+
+  recipes: [
+    {
+      title: "Is Grace around before I ping her?",
+      steps: [
+        `kona call webex presence '{"person":"Grace Hopper"}'`,
+        `kona call webex post '{"space":"Grace Hopper","text":"got a minute?"}'`,
+      ],
+      note: "Presence is same-org and coarse: `active`/`idle`, or `unknown` when Webex won't say.",
+    },
+  ],
 
   verbs: {
     async refresh(_args, { state, emit }) {
@@ -248,7 +386,12 @@ page   = 30          # messages per space`,
         const fresh = state.spaces.find((s) => s.id === state.open!.space.id) ?? state.open.space;
         await loadSpace(state, fresh, emit);
       }
-      return { spaces: state.spaces.length, unread: state.unread, authed: state.authed };
+      return {
+        spaces: state.spaces.length,
+        unread: state.unread,
+        authed: state.authed,
+        active: Object.values(state.presence).filter((p) => p.status === "active").length,
+      };
     },
 
     /** Filter the space list by title. */
@@ -350,6 +493,41 @@ page   = 30          # messages per space`,
       return { read: targets.map((s) => s.title), unread: state.unread };
     },
 
+    /**
+     * Who is around. `{"person":"Grace"}` answers "is Grace online?" — for
+     * someone we DM, for anyone in the space that is open, and, failing both,
+     * for whoever the org directory says that name is. No argument answers for
+     * everyone we are watching.
+     */
+    async presence(args, { state, emit }) {
+      await loadPresence(state, emit, true);
+      const want = String(args.person ?? args.who ?? args.name ?? args.q ?? "").trim().toLowerCase();
+      const answer = (p: Presence) => ({
+        person: p.name,
+        email: p.email,
+        status: p.status ?? "unknown",
+        lastSeen: ago(p.lastActivity),
+        at: p.lastActivity,
+      });
+      const known = Object.values(state.presence);
+      if (!want) {
+        return {
+          active: known.filter((p) => p.status === "active").length,
+          people: known.map(answer).sort((a, b) => b.at - a.at),
+        };
+      }
+      const hit =
+        known.find((p) => p.name.toLowerCase() === want || p.email.toLowerCase() === want) ??
+        known.find((p) => p.name.toLowerCase().includes(want));
+      if (hit) return answer(hit);
+      // Not on screen anywhere — ask the directory before saying we don't know.
+      const found = await lookupPerson(String(args.person ?? args.who ?? args.name ?? args.q ?? ""));
+      if (!found) return { error: `no presence for ${want}`, status: "unknown" };
+      state.presence[found.id] = found;
+      emit();
+      return answer(found);
+    },
+
     up(_args, { state, emit }) {
       state.cursor = Math.max(0, state.cursor - 1);
       emit();
@@ -407,16 +585,39 @@ page   = 30          # messages per space`,
     return ACCENT;
   },
 
-  /** Spaces with something new in them — the same question mail answers. */
-  dash: (s) =>
-    s.authed && s.unread
-      ? {
-          priority: 45,
-          text: `◇ ${s.unread} space${s.unread === 1 ? "" : "s"} with new messages`,
-          note: `${s.spaces.length} total`,
-          color: palette().UNREAD,
-        }
-      : null,
+  /**
+   * Two things this applet knows that a dashboard wants: what is waiting, and
+   * who is around to answer.
+   */
+  dash: (s) => {
+    if (!s.authed) return null;
+    const { UNREAD, DIM } = palette();
+    const active = Object.values(s.presence).filter((p) => p.status === "active").length;
+    return [
+      ...(s.unread
+        ? [
+            {
+              id: "unread",
+              priority: 45,
+              text: `◇ ${s.unread} space${s.unread === 1 ? "" : "s"} with new messages`,
+              note: `${s.spaces.length} total`,
+              color: UNREAD,
+            },
+          ]
+        : []),
+      ...(active
+        ? [
+            {
+              id: "presence",
+              priority: 15, // ambient: nice to know, never urgent
+              text: `● ${active} ${active === 1 ? "person" : "people"} active`,
+              note: "on Webex",
+              color: DIM,
+            },
+          ]
+        : []),
+    ];
+  },
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
@@ -437,9 +638,22 @@ page   = 30          # messages per space`,
     // One space, drilled into.
     if (state.open) {
       const { space, messages } = state.open;
+      // In a 1:1 the title IS a person, so the header answers the question the
+      // space is really asking: are they there?
+      const them = spacePresence(state, space);
+      const seen = seenLine(them);
       const nodes: ViewNode[] = [
-        text(space.title, { color: ACCENT }),
-        keyValue(space.kind === "direct" ? "direct" : "space", `${messages.length} message${messages.length === 1 ? "" : "s"}`, { color: DIM }),
+        them?.status
+          ? row([
+              text(`${dot(them)} `, { color: them.status === "active" ? UNREAD : DIM }),
+              text(space.title, { color: ACCENT }),
+            ])
+          : text(space.title, { color: ACCENT }),
+        keyValue(
+          space.kind === "direct" ? "direct" : "space",
+          [seen, `${messages.length} message${messages.length === 1 ? "" : "s"}`].filter(Boolean).join("  ·  "),
+          { color: DIM },
+        ),
         divider(W - 1),
       ];
 
@@ -449,6 +663,7 @@ page   = 30          # messages per space`,
         nodes.push(
           recordRow(
             [
+              { text: dot(state.presence[m.personId] ?? null), width: 1 },
               { text: m.from, width: fromW },
               { text: m.text, grow: true },
               { text: ago(m.at), width: 5, align: "right" },
@@ -510,12 +725,14 @@ page   = 30          # messages per space`,
 
     for (const [i, s] of rows.entries()) {
       const unread = isUnread(s, state.seen);
+      const them = spacePresence(state, s);
       nodes.push(
         recordRow(
           [
             { text: unread ? "●" : " ", width: 1 },
+            { text: dot(them), width: 1 },
             { text: s.title, grow: true },
-            { text: s.kind === "direct" ? "direct" : "space", width: 6 },
+            { text: statusCell(s, them), width: 8 },
             { text: ago(s.lastActivity), width: 5, align: "right" },
           ],
           { width: W, selected: i === state.cursor, accent: ACCENT, color: unread ? UNREAD : FG, index: i },

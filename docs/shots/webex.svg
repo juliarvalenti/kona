@@ -14,7 +14,7 @@
 <path d="M26.6 66V84" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M673.4 66V84" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 84V102" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<text x="39.2" y="97" fill="#6a6a6a" textLength="445.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">5 spaces  ·  2 unread  ·  ada@example.com  ·  20s ago</text>
+<text x="39.2" y="97" fill="#6a6a6a" textLength="445.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">6 spaces  ·  2 unread  ·  ada@example.com  ·  20s ago</text>
 <rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
@@ -25,31 +25,32 @@
 <path d="M673.4 102V120" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <rect x="39.2" y="120" width="613.2" height="18" fill="#00cfa0"/>
-<text x="39.2" y="133" fill="#0b0b0b" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●  ship-kona                                              space      3m</text>
+<text x="39.2" y="133" fill="#0b0b0b" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●     ship-kona                                         space        3m</text>
 <rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 120V138" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<text x="39.2" y="151" fill="#00d488" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●  Grace Hopper                                           direct    40m</text>
+<text x="39.2" y="151" fill="#00d488" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●  ●  Grace Hopper                                      active      40m</text>
 <rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<text x="39.2" y="169" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">     platform-oncall                                        space      1h</text>
+<text x="39.2" y="169" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        platform-oncall                                   space        1h</text>
 <rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<text x="39.2" y="187" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">     design-review                                          space      1d</text>
+<text x="39.2" y="187" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">     ○  Alan Turing                                       seen 40m     4h</text>
 <rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<text x="39.2" y="205" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">     random                                                 space      3d</text>
+<text x="39.2" y="205" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        design-review                                     space        1d</text>
 <rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="223" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        random                                            space        3d</text>
 <rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
 <rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#00cfa0" stroke-width="1.2" fill="none"/>

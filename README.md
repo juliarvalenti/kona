@@ -81,7 +81,7 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/shots/webex.svg" width="100%" alt="Webex — space list is newest first, with a dot on what is unread">
+<img src="docs/shots/webex.svg" width="100%" alt="Webex — space list is newest first, with a dot on what is unread and who is around">
 <br><sub><a href="applets/webex/README.md"><code>webex</code></a> — Spaces, their messages, and a verb that posts back.</sub>
 </td>
 <td width="50%" valign="top">
