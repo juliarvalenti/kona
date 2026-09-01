@@ -16,8 +16,11 @@ const spaces = () =>
   SPACES.map(([id, title, kind, mins]) => ({ id, title, kind, lastActivity: Date.now() - mins * MIN }));
 
 // One conversation, and the message the reader is for: a row shows its first
-// line cut off at the frame, the reader shows the whole of it.
-const SHIP = [
+// line cut off at the frame, the reader shows the whole of it. Built per
+// call, never at import: the shot runner pins the clock while it renders
+// (core/shots.ts), so a stamp taken at module-load time would carry the real
+// wall clock into a committed image and go stale a minute later.
+const ship = () => [
   {
     id: "m1",
     from: "grace",
@@ -102,7 +105,7 @@ export default defineSnapshots([
       spaces: spaces(),
       open: {
         space: { id: "s1", title: "ship-kona", kind: "group", lastActivity: Date.now() },
-        messages: SHIP,
+        messages: ship(),
       },
       mcursor: 2,
     }),
@@ -118,7 +121,7 @@ export default defineSnapshots([
       spaces: spaces(),
       open: {
         space: { id: "s1", title: "ship-kona", kind: "group", lastActivity: Date.now() },
-        messages: SHIP,
+        messages: ship(),
       },
       mcursor: 2,
       reading: "m3",

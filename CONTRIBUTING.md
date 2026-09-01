@@ -155,7 +155,14 @@ like and the suite fails until you re-run it. Two rules follow from that:
   not its empty state.
 - **A hero must render the same twice.** Build state from `Date.now()` in a
   state *function* (`at: Date.now() - 5 * 60_000` reads "5m ago" forever)
-  rather than pinning a literal epoch that drifts into "3 years ago".
+  rather than pinning a literal epoch that drifts into "3 years ago". Inside
+  the function, not beside it: the renderer stops the clock while it draws
+  (`pinned()` in `core/shots.ts` swaps the whole `Date`, so `new Date()` in a
+  stamp is covered too), and a module-level `const` stamped at import time is
+  outside that pin — it lands the real wall clock in a committed image, which
+  then goes stale on its own and fails the suite on unrelated PRs (#66).
+  `tests/shots-clock.test.ts` re-checks the gallery on a machine whose clock
+  says it is weeks from now, which is what catches this.
 
 `tests/` itself is for the PLATFORM — `sdk/`, `core/`, `host/`, and the
 `server/` seams shared by more than one applet. If a test only makes sense for

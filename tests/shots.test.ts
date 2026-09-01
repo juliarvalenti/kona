@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { resetConfig } from "../core/config.ts";
 import { loadPackages, REPO_ROOT } from "../core/load.ts";
 import { galleryMarkdown, heroOf, renderShots, SHOTS_DIR, spliceGallery, WINDOW } from "../core/shots.ts";
+import { SKEW_MS, skewedDate } from "./fixtures/skew-clock.ts";
 
 /**
  * The anti-rot guard for the README gallery.
@@ -68,8 +69,14 @@ test("a shot is one fixed window, whoever is in it", () => {
 
 test("a second render is the same render, whatever the machine looks like", async () => {
   // The shots are committed, so a diff has to mean the UI changed. Render the
-  // whole set again — later in wall-clock time, in another timezone, against a
-  // config.toml that retints everything — and it must come out byte-identical.
+  // whole set again — weeks later in wall-clock time, in another timezone,
+  // against a config.toml that retints everything — and it must come out
+  // byte-identical.
+  //
+  // The clock is moved for real (#66): pinning `Date.now` alone left a stamp
+  // written as `new Date()` reading the machine, so a hero with a relative
+  // timestamp drew a different frame the next day and failed on PRs that had
+  // touched nothing. What the pin does not cover, this catches.
   const dir = mkdtempSync(join(tmpdir(), "kona-shots-"));
   writeFileSync(
     join(dir, "config.toml"),
@@ -77,13 +84,16 @@ test("a second render is the same render, whatever the machine looks like", asyn
   );
   const cfg = process.env.KONA_CONFIG_DIR;
   const tz = process.env.TZ;
+  const clock = globalThis.Date;
   process.env.KONA_CONFIG_DIR = dir;
   process.env.TZ = "Asia/Tokyo";
+  globalThis.Date = skewedDate(clock, SKEW_MS);
   resetConfig();
   try {
     const again = await renderShots(packages);
     expect(again.map((s) => [s.id, s.svg])).toEqual(shots.map((s) => [s.id, s.svg]));
   } finally {
+    globalThis.Date = clock;
     if (cfg === undefined) delete process.env.KONA_CONFIG_DIR;
     else process.env.KONA_CONFIG_DIR = cfg;
     if (tz === undefined) delete process.env.TZ;
