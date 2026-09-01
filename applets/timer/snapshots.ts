@@ -68,6 +68,35 @@ export default defineSnapshots([
     ],
   },
   {
+    name: "a selected countdown takes the hero, session still a row above it",
+    state: {
+      timers: [{ id: "t1", label: "tea", remaining: 125, total: 300, running: true }],
+      cursor: 0,
+      focus: "timers",
+      pomodoro: {
+        active: true,
+        phase: "work",
+        round: 2,
+        remaining: 180,
+        total: 1500,
+        running: true,
+        awaiting: false,
+        completed: 3,
+        day: "2026-01-01",
+        plan: { work: 1500, short: 300, long: 900, every: 4, auto: true },
+      },
+    },
+    width: 62,
+    height: 30,
+    contains: [
+      "02:05", // the countdown, big
+      "running",
+      "pomodoro · work", // ...and the session, still on screen and still counting
+      "03:00",
+      "1 timer",
+    ],
+  },
+  {
     name: "with nothing running points at the presets",
     width: 62,
     height: 14,
