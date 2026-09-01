@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { configDir } from "../core/config.ts";
+import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 
 /**
  * Webex — spaces, their messages, and posting one back.
@@ -223,7 +224,7 @@ export async function login(): Promise<string> {
   await Bun.sleep(400); // let the browser render the success page first
   server.stop(true);
 
-  const res = await fetch(TOKEN_URL(), {
+  const res = await providerFetch("webex", TOKEN_URL(), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -266,12 +267,13 @@ export function resetAuth(): void {
 }
 
 async function accessToken(): Promise<string> {
+  if (faked()) return FAKE_TOKEN; // a fake transport authenticates nothing
   if (cached && cached.exp > Date.now() + 30_000) return cached.token;
 
   const refresh = kcGet(KC_REFRESH);
   const creds = await clientCreds();
   if (refresh && creds) {
-    const res = await fetch(TOKEN_URL(), {
+    const res = await providerFetch("webex", TOKEN_URL(), {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -299,16 +301,13 @@ async function accessToken(): Promise<string> {
 /**
  * Authenticated Webex API call. Returns null for an empty body (204).
  *
- * Under `bun test` the live API is off limits (tests must never touch a real
- * account — see tests/setup.ts and #41) UNLESS the caller pointed
- * KONA_WEBEX_API at its own fixture server, which by definition isn't live.
+ * Under `bun test` the live API is off limits — `providerFetch` blocks any call
+ * that would leave the machine unless a fake is installed or KONA_WEBEX_API
+ * points at a fixture server, which by definition isn't live (see #41).
  */
 export async function api(path: string, init?: RequestInit): Promise<Record<string, unknown> & any> {
-  if (process.env.KONA_FAKE_PROVIDERS === "1" && !process.env.KONA_WEBEX_API) {
-    throw new Error("webex: fake-providers mode (no live API in tests)");
-  }
   const token = await accessToken();
-  const res = await fetch(`${apiBase()}${path}`, {
+  const res = await providerFetch("webex", `${apiBase()}${path}`, {
     ...init,
     headers: {
       authorization: `Bearer ${token}`,

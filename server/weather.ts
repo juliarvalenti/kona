@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { providerFetch } from "./transport.ts";
 
 /**
  * open-meteo — forecasts with no account, no key, no OAuth. That makes weather
@@ -201,7 +202,7 @@ export function parseForecast(payload: ForecastPayload): Forecast {
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await providerFetch("weather", url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   const body = (await res.json().catch(() => null)) as (T & { reason?: string }) | null;
   if (!res.ok) throw new Error(body?.reason ?? `${res.status} ${res.statusText}`);
   if (!body) throw new Error("bad response");

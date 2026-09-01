@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join, extname, basename } from "node:path";
 import { constants, existsSync } from "node:fs";
 import { access, appendFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { providerFetch } from "./transport.ts";
 
 /**
  * Mycelium — the multi-agent coordination layer — read into kona.
@@ -295,7 +296,7 @@ async function getJson(base: string, paths: string[]): Promise<unknown> {
   let last = "";
   for (const p of paths) {
     try {
-      const res = await fetch(`${base}${p}`, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
+      const res = await providerFetch("mycelium", `${base}${p}`, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
       if (res.ok) return await res.json();
       last = `${res.status} ${p}`;
     } catch (e) {
@@ -316,7 +317,7 @@ async function postJson(base: string, paths: string[], body: Rec): Promise<unkno
   let last = "";
   for (const p of paths) {
     try {
-      const res = await fetch(`${base}${p}`, {
+      const res = await providerFetch("mycelium", `${base}${p}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

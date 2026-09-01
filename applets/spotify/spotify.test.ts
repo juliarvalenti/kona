@@ -1,18 +1,26 @@
-// MUST be set before the applet/server modules load: forces the Spotify
-// server's api() to no-op instead of hitting a live account. Without it,
-// running this suite on a signed-in machine actually seeks/sets volume on your
-// real Spotify (it did — see #41 for the proper provider mock layer).
+// Belt and braces: the suite preload (tests/setup.ts) already sets this, but a
+// lone `bun test applets/spotify/spotify.test.ts --preload=""` must be safe
+// too. With it, `server/transport.ts` refuses any call that would leave the
+// machine — running this file on a signed-in machine once actually seeked and
+// set the volume on the human's real Spotify (#41).
 process.env.KONA_FAKE_PROVIDERS = "1";
 
-import { test, expect } from "bun:test";
+import { test, expect, describe, afterEach } from "bun:test";
 import spotify from "./index.ts";
+import { fakeProviders, type FakeProviders } from "../../sdk/fake.ts";
+import { spotifyRoutes, SPEAKER_ID, TRACK_URI } from "../../tests/fixtures/spotify.ts";
 
 
 /**
- * Transport math, exercised through the real verbs. The Web API call is
- * short-circuited (KONA_FAKE_PROVIDERS above) so it lands in state.error — what
- * we assert here is the optimistic state the verb leaves behind, which is what
- * the TUI draws before the API answers.
+ * Two halves.
+ *
+ * Below: transport math, exercised through the real verbs with NO fake
+ * installed — the Web API call is blocked, lands in state.error, and what we
+ * assert is the optimistic state the verb leaves behind, which is what the TUI
+ * draws before the API answers.
+ *
+ * Further down: the same verbs against a fake Spotify, where the assertion is
+ * the command that would have gone on the wire.
  */
 type SpotifyState = typeof spotify.initialState;
 
@@ -84,9 +92,76 @@ test("queue takes the track under the cursor while browsing (the `q` key)", asyn
     ],
   });
   const res = (await call("queue", {}, browsing)) as { queued: boolean };
-  // The Web API is stubbed out under test, so the call lands in state.error —
-  // what matters here is that the verb RESOLVED the selection instead of
-  // refusing for want of arguments.
+  // No fake here, so the blocked call lands in state.error — what matters is
+  // that the verb RESOLVED the selection instead of refusing for want of
+  // arguments. The next section asserts the request it resolved to.
   expect(res.queued).toBe(false);
-  expect(String(browsing.error)).toContain("fake-providers");
+  expect(String(browsing.error)).toContain("blocked a live POST");
+});
+
+// --- against a fake Spotify --------------------------------------------------
+
+/**
+ * The verbs, driven end to end against recorded payloads: state comes back
+ * parsed from a real response shape, and every playback command is recorded
+ * rather than sent. This is the test that would have caught #41 — the
+ * assertion is literally "what would we have POSTed", so a verb that starts
+ * touching an account it shouldn't shows up as a line here.
+ */
+describe("against a fake Spotify", () => {
+  let fake: FakeProviders | null = null;
+  afterEach(() => {
+    fake?.restore();
+    fake = null;
+  });
+
+  test("refresh parses now-playing out of a real response shape", async () => {
+    fake = fakeProviders(spotifyRoutes());
+    const state = st({});
+    await call("refresh", {}, state);
+
+    expect(state.track).toBe("Rave Green");
+    expect(state.artist).toBe("Four Tet");
+    expect(state.album).toBe("Sixteen Oceans");
+    expect(state.device).toBe("MacBook Pro");
+    expect(state.volumePct).toBe(62);
+    expect(state.durationMs).toBe(214_000);
+    expect(state.error).toBeNull();
+    expect(fake.writes()).toEqual([]); // a read-only verb writes nothing
+  });
+
+  test("volume sends the clamped percent and nothing else", async () => {
+    fake = fakeProviders(spotifyRoutes());
+    await call("volume", { pct: 120 }, st({ volumeSupported: true, volumePct: 40 }));
+
+    expect(fake.writes().map((c) => c.line)).toEqual(["PUT /v1/me/player/volume?volume_percent=100"]);
+  });
+
+  test("seek sends an absolute position, clamped to the track", async () => {
+    fake = fakeProviders(spotifyRoutes());
+    await call("seek", { deltaMs: 10_000 }, st({ track: "Rave Green", positionMs: 208_000, durationMs: 214_000 }));
+
+    expect(fake.writes().map((c) => c.line)).toEqual(["PUT /v1/me/player/seek?position_ms=214000"]);
+  });
+
+  test("queue resolves free text to a uri and queues that", async () => {
+    fake = fakeProviders(spotifyRoutes());
+    const state = st({ mode: "now" });
+    const res = (await call("queue", { q: "four tet rave green" }, state)) as { queued: boolean; track?: string };
+
+    expect(res.queued).toBe(true);
+    expect(state.error).toBeNull();
+    expect(fake.writes().map((c) => c.line)).toEqual([`POST /v1/me/player/queue?uri=${encodeURIComponent(TRACK_URI)}`]);
+  });
+
+  test("transfer hands playback to the named device", async () => {
+    fake = fakeProviders(spotifyRoutes());
+    const state = st({ playing: true });
+    await call("transfer", { name: "kitchen" }, state);
+
+    const write = fake.writes()[0]!;
+    expect(write.line).toBe("PUT /v1/me/player");
+    expect(write.json).toEqual({ device_ids: [SPEAKER_ID], play: true });
+    expect(state.error).toBeNull();
+  });
 });

@@ -50,6 +50,7 @@ Everything below is stable — target it. Everything else (the daemon's internal
 | `AppletCtx` | `state`, `emit()`, `peek(id)` — what a verb and a tick get |
 | `theme()` / `appletConfig(id)` | the palette and your own settings block |
 | `sdk/testing.ts` | `renderApplet`, `defineSnapshots`, `testSnapshots` |
+| `sdk/fake.ts` | `fakeProviders(routes)` — answer an applet's provider calls from fixtures |
 
 An applet is a pure object over its own state slice. `verbs` run in the daemon;
 `view` is a pure `state -> nodes` render the host draws; `keymap`/`nav` bind
@@ -109,6 +110,42 @@ the scaffolder, since nothing in this checkout scans its directory.
 `tests/` itself is for the PLATFORM — `sdk/`, `core/`, `host/`, and the
 `server/` seams shared by more than one applet. If a test only makes sense for
 one applet, it belongs in that applet's package.
+
+### No test touches a real account
+
+Every provider call in `server/` goes through `providerFetch()`
+(`server/transport.ts`), and the suite preload sets `KONA_FAKE_PROVIDERS=1`. A
+call that would leave the machine throws, saying so. This is not paranoia: a
+`bun test` on a signed-in machine once fired real seek/volume/transfer commands
+at the human's Spotify.
+
+An applet whose verbs fetch installs a fake and asserts on what it WOULD have
+sent:
+
+```ts
+import { fakeProviders } from "../../sdk/fake.ts";
+import { spotifyRoutes } from "../../tests/fixtures/spotify.ts";
+
+const fake = fakeProviders(spotifyRoutes());   // reads answer from fixtures
+await spotify.verbs.volume!({ pct: 55 }, ctx); // writes are recorded, not sent
+expect(fake.writes().map((c) => c.line)).toEqual(["PUT /v1/me/player/volume?volume_percent=55"]);
+fake.restore();
+```
+
+Recorded payloads live in `tests/fixtures/<provider>.ts`; an unrouted read says
+which fixture is missing, and an unrouted write answers 204 so the verb takes
+its success path. A localhost URL is always allowed through, so a fixture server
+a test starts itself (`KONA_GMAIL_API`, `KONA_TICKER_API`, `KONA_WEBEX_API`,
+`KONA_SPOTIFY_API`) works as before. A `gh`-based provider has the same seam:
+`setGhRunner()` in `server/github.ts`.
+
+The real provider stays reachable on purpose, from a `*.live.test.ts` that calls
+`allowLive()` — it needs `KONA_LIVE=1` too, so a stray flag can't unlock the
+rest of the suite:
+
+```sh
+KONA_LIVE=1 bun test applets/spotify/spotify.live.test.ts
+```
 
 ## Applets outside the repo
 

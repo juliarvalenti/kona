@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
+import { providerFetch, assertAllowed, faked, FAKE_TOKEN } from "./transport.ts";
 
 /**
  * Spotify OAuth (Authorization Code + PKCE — no client secret) and a thin Web
@@ -32,6 +33,11 @@ const SCOPE = [
 const AUTH_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 
+// Point these at a fixture server (or a fake transport) instead of the real
+// thing — the same seam KONA_GMAIL_API / KONA_WEBEX_API already give the mail
+// and webex tests.
+const apiBase = () => process.env.KONA_SPOTIFY_API ?? "https://api.spotify.com";
+
 async function readJson<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await Bun.file(path).text()) as T;
@@ -58,6 +64,7 @@ export function logout(): void {
   Bun.spawnSync(["security", "delete-generic-password", "-s", KC_SERVICE, "-a", KC_ACCOUNT]);
 }
 export async function isAuthed(): Promise<boolean> {
+  if (process.env.KONA_SPOTIFY_TOKEN || faked()) return true; // a fake is "signed in"
   return kcGet() !== null;
 }
 
@@ -127,7 +134,7 @@ export async function login(): Promise<string> {
   await Bun.sleep(400);
   server.stop(true);
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await providerFetch("spotify", TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -152,12 +159,17 @@ export async function login(): Promise<string> {
 
 let cached: { token: string; exp: number } | null = null;
 async function accessToken(): Promise<string> {
+  // A fake transport authenticates nothing, so never read the keychain or spend
+  // a refresh round-trip under one (KONA_SPOTIFY_TOKEN is the same escape hatch
+  // google/microsoft/webex already have).
+  if (process.env.KONA_SPOTIFY_TOKEN) return process.env.KONA_SPOTIFY_TOKEN;
+  if (faked()) return FAKE_TOKEN;
   if (cached && cached.exp > Date.now() + 30_000) return cached.token;
   const id = await clientId();
   if (!id) throw new Error("Spotify not configured — no client id");
   const refresh = kcGet();
   if (!refresh) throw new Error("Not signed in — run `kona login spotify`");
-  const res = await fetch(TOKEN_URL, {
+  const res = await providerFetch("spotify", TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: id }).toString(),
@@ -169,16 +181,20 @@ async function accessToken(): Promise<string> {
   return cached.token;
 }
 
-/** Authenticated Web API call. Returns null for 204 (nothing playing). */
+/**
+ * Authenticated Web API call. Returns null for 204 (nothing playing).
+ *
+ * Every call goes through `providerFetch`, so under test a fake answers it from
+ * fixtures and records what would have been sent — a `bun test` can never seek,
+ * set the volume or transfer playback on a real account (#41).
+ */
 export async function api(path: string, init?: RequestInit): Promise<Record<string, unknown> & any> {
-  // Test/offline guard: never touch a real account under test. Without this, a
-  // `bun test` on a machine that happens to be signed in fires real playback
-  // commands (seek/volume/transfer) at the live account. Tests set this env;
-  // the proper fix is the provider mock layer (#41). Reads return empty, writes
-  // no-op — the verbs' optimistic state is what tests assert anyway.
-  if (process.env.KONA_FAKE_PROVIDERS === "1") throw new Error("spotify: fake-providers mode (no live API in tests)");
+  const url = `${apiBase()}${path}`;
+  // Before the keychain, not after: a blocked call should fail because we are
+  // under test, whether or not this machine happens to be signed in.
+  assertAllowed("spotify", url, init?.method);
   const token = await accessToken();
-  const res = await fetch(`https://api.spotify.com${path}`, {
+  const res = await providerFetch("spotify", url, {
     ...init,
     headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
   });
