@@ -79,6 +79,23 @@ RSS 2.0 and Atom both work. Feeds are merged into one newest-first river,
 refreshed every five minutes; `/` filters it, `o` opens the selected item in a
 browser.
 
+### Mycelium
+
+The `mycelium` applet is a read-only window onto your coordination layer —
+rooms, the agents in them, recent messages, and shared memory. It finds the
+data wherever it lives, in this order:
+
+```sh
+MYCELIUM_URL=http://127.0.0.1:8765   # the local daemon / OpenAPI backend
+mycelium                             # the CLI, on PATH or ~/.local/bin/mycelium
+~/.mycelium/rooms/                   # room files (dirs or JSONL logs)
+```
+
+```sh
+kona mycelium                        # browse rooms, → to drill in, ← back
+kona call mycelium open '{"room":"ship-kona"}'   # ← what an agent does
+```
+
 ## Writing an applet
 
 Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its

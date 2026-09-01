@@ -162,3 +162,60 @@ test("an empty notes pad shows how to jot the first line", async () => {
   expect(frame).toContain("nothing jotted yet");
   expect(frame).toContain("notes.add");
 });
+
+test("mycelium lists rooms with agent and message counts", async () => {
+  const frame = await snapshot(
+    "mycelium",
+    {
+      source: "cli",
+      syncedAt: Date.now(),
+      cursor: 0,
+      rooms: [
+        { id: "ship-kona", name: "ship-kona", topic: "getting v0 out", agents: ["planner", "coder", "critic"], messages: 42, lastAt: Date.now() },
+        { id: "research", name: "research", topic: "", agents: ["scout"], messages: 7, lastAt: Date.now() - 3_600_000 },
+      ],
+    },
+    80,
+    20,
+  );
+  expect(frame).toContain("2 rooms");
+  expect(frame).toContain("via cli");
+  expect(frame).toContain("ship-kona");
+  expect(frame).toContain("3 agents");
+  expect(frame).toContain("1 agent"); // singular
+  expect(frame).toContain("42 msg");
+  expect(frame).toContain("●"); // recent chatter marker on ship-kona
+});
+
+test("mycelium room view shows agents, messages, and shared memory", async () => {
+  const frame = await snapshot(
+    "mycelium",
+    {
+      source: "fs",
+      open: {
+        source: "fs",
+        room: { id: "ship-kona", name: "ship-kona", topic: "getting v0 out", agents: ["planner"], messages: 2, lastAt: 0 },
+        agents: [{ name: "planner", status: "thinking", lastSeen: 0 }],
+        messages: [
+          { id: "1", from: "planner", at: Date.now() - 60_000, text: "split the work into two PRs" },
+          { id: "2", from: "coder", at: Date.now(), text: "on it" },
+        ],
+        memory: [{ key: "repo", value: "juliarvalenti/kona", at: 0 }],
+      },
+    },
+    80,
+    22,
+  );
+  expect(frame).toContain("getting v0 out");
+  expect(frame).toContain("planner (thinking)"); // status when reported
+  expect(frame).toContain("split the work into two PRs");
+  expect(frame).toContain("SHARED MEMORY");
+  expect(frame).toContain("juliarvalenti/kona");
+});
+
+test("mycelium explains how to connect when no backend answered", async () => {
+  const frame = await snapshot("mycelium", {}, 76, 16);
+  expect(frame).toContain("No coordination layer found");
+  expect(frame).toContain("MYCELIUM_URL");
+  expect(frame).toContain(".mycelium/rooms");
+});
