@@ -1,6 +1,7 @@
 import { defineApplet, text, spacer, col, theme, appletAccent, appletNumber, type ViewNode } from "../../sdk/index.ts";
 import { keyValue, divider, recordRow } from "../../sdk/components.ts";
 import { listInbox, getThread, type MailThread, type OpenThread } from "../../server/gmail.ts";
+import { notify, freshIds } from "../../server/notify.ts";
 
 /** Threads per fetch. `[applets.email] page = 50` in config.toml raises it. */
 const PAGE = Math.max(1, Math.min(100, Math.round(appletNumber("email", "page", 20))));
@@ -42,6 +43,37 @@ function pad(s: string, n: number): string {
   return truncate(s, n).padEnd(n);
 }
 
+// Unread threads we have already announced. null until the first successful
+// load: signing in shouldn't banner an inbox you already have open elsewhere.
+let announced: Set<string> | null = null;
+
+/** Banner unread mail that arrived since the last sync; batch a flood into one. */
+function announceUnread(threads: MailThread[]) {
+  const unread = threads.filter((t) => t.unread);
+  const { seen, fresh } = freshIds(announced, unread.map((t) => t.id));
+  announced = seen;
+  if (!fresh.length) return;
+  const rows = fresh.map((id) => unread.find((t) => t.id === id)!).filter(Boolean);
+  if (rows.length > 3) {
+    void notify({
+      event: "email.unread",
+      title: "Mail",
+      body: `${rows.length} new unread messages`,
+      key: `email.unread:batch:${rows.length}:${rows[0]!.id}`,
+    });
+    return;
+  }
+  for (const t of rows) {
+    void notify({
+      event: "email.unread",
+      title: t.from,
+      body: t.subject,
+      key: `email.unread:${t.id}`,
+      dedupeMs: 6 * 3_600_000, // one banner per thread, not one per re-sync
+    });
+  }
+}
+
 /** (Re)load the first page. Used by refresh/search and the auto-refresh tick. */
 async function loadInbox(state: EmailState, emit: () => void) {
   if (state.loading) return;
@@ -54,6 +86,8 @@ async function loadInbox(state: EmailState, emit: () => void) {
     state.nextPage = page.nextPageToken ?? null;
     state.cursor = Math.min(state.cursor, Math.max(0, state.threads.length - 1));
     state.authed = true;
+    // Only the inbox is "new mail"; a search for old threads is not.
+    if (state.query === "in:inbox") announceUnread(state.threads);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     state.error = msg;

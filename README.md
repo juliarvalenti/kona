@@ -55,6 +55,35 @@ In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes
 and `/` searches. The mouse works the same way: click a row to select and open
 it, scroll the wheel to scroll.
 
+### Desktop notifications
+
+The daemon can post native macOS banners when something happens — a countdown
+hits zero, a new PR involves you, unread mail lands — so an always-open dash is
+actually ambient. Every event is opt-in and toggled from the CLI:
+
+```sh
+kona notify                    # what can fire, and what's on
+kona notify on email.unread    # opt in
+kona notify off timer.done     # opt out  (`all` for the master switch)
+kona notify test               # prove it reaches your screen
+```
+
+Settings live in `~/.config/kona/notify.json`; the daemon picks up a change
+within a second. `KONA_NOTIFY=0 kona daemon` runs a silent session. Banners go
+through `terminal-notifier` when it's installed (clickable — a GitHub banner
+opens the PR) and `osascript` otherwise; elsewhere than macOS it's a no-op.
+
+Applets fire them from any verb or tick:
+
+```ts
+import { notify } from "../../server/notify.ts";
+void notify({ event: "timer.done", title: "Timer", body: "05:00 is up." });
+```
+
+Repeats of the same `key` inside a window are dropped and a burst is rate
+limited, so a re-sync can't spam you. Add a new event to `EVENTS` in
+`server/notify.ts` to make it listable and toggleable.
+
 ### Gmail
 
 `kona login` runs a Google OAuth loopback flow (read-only) and stores the

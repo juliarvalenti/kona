@@ -21,6 +21,14 @@ lives in state, so you fill one by calling its verb — `storybook.save
 {"value":"ada"}` — exactly as a human pressing enter would. There is nothing
 keyboard-only to work around.
 
+## Notifications
+
+Verbs you fire can reach the human's screen: applets call `notify()` from
+`server/notify.ts` on events the human opted into (`kona notify`). So
+`timer.start` from you means a banner for them when it finishes — that is the
+point, not a side effect. Events are deduped and rate limited; you do not need
+to throttle your own calls.
+
 ## Daemon
 
 Base URL: `http://localhost:${KONA_PORT:-4177}`. Autostarts via the CLI; to run
