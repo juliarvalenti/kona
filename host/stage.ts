@@ -67,8 +67,12 @@ export interface Stage {
 }
 
 export function createStage(renderer: CliRenderer): Stage {
-  const colors = palette();
-  const { fg: FG, dim: DIM, accent: ACCENT, key: KEY, panel: PANEL, bg: ON_ACCENT } = colors;
+  // The palette is re-read at the top of every frame, not captured once: the
+  // theme can change under a RUNNING host (the picker previewing a preset, or
+  // the config file changing on disk), and a stage that cached its colors
+  // would keep drawing the old ones until you quit.
+  let colors = palette();
+  const repalette = () => (colors = palette());
 
   // Inner content size = terminal size minus fixed chrome. Width: stage pad 2 +
   // border 2 + frame pad 2 + scrollbar column 1 = 7. Height: the same 6, plus
@@ -80,7 +84,7 @@ export function createStage(renderer: CliRenderer): Stage {
   const innerWidth = () => Math.max(20, term.width - 7);
   const innerHeight = () => Math.max(6, term.height - 6 - footerLines);
 
-  const { frame, scroll, overlayLayer, footer } = createChrome(renderer, ACCENT);
+  const { frame, scroll, overlayLayer, footer } = createChrome(renderer, colors.accent);
 
   // --- One frame's worth of state. Rebuilt on every render.
   let seq = 0;
@@ -93,7 +97,7 @@ export function createStage(renderer: CliRenderer): Stage {
   let draft: Draft | null = null;
 
   const nodeToRenderable = createNodeRenderer(renderer, {
-    colors: { fg: FG, dim: DIM, accent: ACCENT },
+    colors: () => colors,
     inputChunks: (node) => inputChunks(node, draft, colors),
     inputLines: (node) => inputLines(node, draft, colors),
     claim: (index, node) => clickTargets.push({ index, node }),
@@ -110,7 +114,7 @@ export function createStage(renderer: CliRenderer): Stage {
     const affordable = linesFor(hints, cap) > linesFor(required, cap) ? required : hints;
     const shown = fitHints(affordable, cap);
     footerLines = Math.min(FOOTER_MAX_LINES, linesFor(shown, cap));
-    footer.content = new StyledText(hintChunks(shown, { dim: DIM, key: KEY }));
+    footer.content = new StyledText(hintChunks(shown, { dim: colors.dim, key: colors.key }));
     renderer.requestRender();
   }
 
@@ -156,17 +160,18 @@ export function createStage(renderer: CliRenderer): Stage {
       else if (focusLine + peek > top + vh - 1) top = focusLine + peek - vh + 1;
     }
     scroll.scrollTop = Math.max(0, top);
-    setOverlayLayer(overlayLayer, overlay ?? null, (node) => nodeToRenderable(node, `ov${gen}`), PANEL);
+    setOverlayLayer(overlayLayer, overlay ?? null, (node) => nodeToRenderable(node, `ov${gen}`), colors.panel);
     renderer.requestRender();
   }
 
   return {
     renderApplet(def, state) {
+      repalette();
       const body = def.view(state, { width: innerWidth(), height: innerHeight() });
       const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
       // An applet's own accent(state) is dynamic (the timer's run/pause tint)
       // and always wins; otherwise `[applets.<id>].accent` sets the frame color.
-      const accent = def.accent?.(state) ?? appletAccent(def.id, ACCENT);
+      const accent = def.accent?.(state) ?? appletAccent(def.id, colors.accent);
       const crumb = def.crumb?.(state);
       const overlay = def.overlay?.(state) ?? null;
       setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
@@ -179,6 +184,7 @@ export function createStage(renderer: CliRenderer): Stage {
       else setFooter(appletHints(def, state));
     },
     renderLauncher(applets, cursor, opts = {}) {
+      repalette();
       const W = innerWidth();
       const total = opts.total ?? applets.length;
       const q = opts.query ?? "";
@@ -188,7 +194,7 @@ export function createStage(renderer: CliRenderer): Stage {
       // gets the two-line cut, because a header must never eat the list it
       // introduces. Either way it scrolls away with the content above the fold.
       const nodes: ViewNode[] = [
-        { kind: "big", text: "kona", color: ACCENT, font: innerHeight() >= 24 ? "block" : "tiny" },
+        { kind: "big", text: "kona", color: colors.accent, font: innerHeight() >= 24 ? "block" : "tiny" },
         {
           kind: "text",
           text: q
@@ -206,12 +212,12 @@ export function createStage(renderer: CliRenderer): Stage {
       // terminal.
       applets.forEach((a, i) => {
         const sel = i === cursor;
-        const tint = appletAccent(a.id, a.tint ?? ACCENT);
+        const tint = appletAccent(a.id, a.tint ?? colors.accent);
         const icon = appletString(a.id, "icon", a.icon ?? "•");
         const title = clip(` ${sel ? "▸" : " "} ${icon}  ${a.title}`);
         nodes.push(
           sel
-            ? { kind: "text", text: title, color: ON_ACCENT, bg: tint, focus: true, index: i }
+            ? { kind: "text", text: title, color: colors.bg, bg: tint, focus: true, index: i }
             : { kind: "text", text: title, color: tint, index: i },
         );
         nodes.push({ kind: "text", text: clip(`      ${a.summary ?? ""}`), dim: true, index: i });
@@ -221,7 +227,7 @@ export function createStage(renderer: CliRenderer): Stage {
       }
 
       // peek 1: the selected row's summary line rides on screen with it.
-      setFrame("kona", ACCENT, nodes, null, 1);
+      setFrame("kona", colors.accent, nodes, null, 1);
       setFooter(launcherHints());
     },
     footerNote(text, color = palette().error) {
@@ -229,7 +235,7 @@ export function createStage(renderer: CliRenderer): Stage {
       renderer.requestRender();
     },
     searchBar(buf, placeholder, opts = {}) {
-      footer.content = new StyledText(searchChunks(buf, placeholder, { ...colors, accent: ACCENT }, opts));
+      footer.content = new StyledText(searchChunks(buf, placeholder, colors, opts));
       renderer.requestRender();
     },
     focusedInput() {

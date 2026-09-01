@@ -1,7 +1,8 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { Color } from "../sdk/index.ts";
+import { DEFAULT_PRESET, themePreset, presetIds } from "./themes.ts";
 
 /**
  * kona config — one file, `~/.config/kona/config.toml`, that owns the palette,
@@ -15,7 +16,8 @@ import type { Color } from "../sdk/index.ts";
  *   default = "dash"          # bare `kona` opens this applet (omit -> launcher)
  *
  *   [theme]
- *   accent = "#7aa2f7"
+ *   preset = "catppuccin-mocha"   # a named palette (core/themes.ts)
+ *   accent = "#7aa2f7"            # ...and a role that wins over it
  *   ok     = "#00d488"
  *
  *   [applets.spotify]
@@ -68,30 +70,25 @@ export interface Theme {
   panel: Color;
 }
 
-export const DEFAULT_THEME: Theme = {
-  accent: "#7aa2f7",
-  alt: "#bb9af7",
-  fg: "#d0d0d0",
-  dim: "#6a6a6a",
-  muted: "#5a5a5a",
-  ok: "#00d488",
-  warn: "#f0b000",
-  error: "#ff5c57",
-  key: "#e6e6e6",
-  bg: "#0b0b0b",
-  field: "#20222c",
-  fieldFocus: "#2b2e3d",
-  caret: "#7aa2f7",
-  caretFg: "#0b0b0b",
-  panel: "#0d0d12",
-};
+/**
+ * kona's own palette, and the base every other preset is an alternative to.
+ * It lives in the preset registry (core/themes.ts) as `kona-aloha`, so "no
+ * config at all" and `preset = "kona-aloha"` are the same colors by
+ * construction rather than by two lists agreeing.
+ */
+export const DEFAULT_THEME: Theme = themePreset(DEFAULT_PRESET)!.theme;
 
 const THEME_ROLES = Object.keys(DEFAULT_THEME) as (keyof Theme)[];
 
 export interface KonaConfig {
   /** Applet a bare `kona` opens. null = show the launcher. */
   defaultApplet: string | null;
+  /** The resolved palette: the preset, with any explicit role laid over it. */
   theme: Theme;
+  /** Which named preset that palette started from (core/themes.ts). */
+  preset: string;
+  /** The roles the file named EXPLICITLY — what still wins over a new preset. */
+  themeOverrides: Partial<Theme>;
   /** Raw `[applets.<id>]` blocks, keyed by applet id. */
   applets: Record<string, Record<string, unknown>>;
   /**
@@ -134,13 +131,24 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
   const doc = isTable(raw) ? raw : {};
   if (!isTable(raw) && raw !== undefined) errors.push("config root must be a table");
 
-  // --- theme
-  const theme: Theme = { ...DEFAULT_THEME };
+  // --- theme: a named preset is the BASE, explicit roles are laid over it, so
+  // switching presets keeps the two colors you hand-picked.
+  let preset = DEFAULT_PRESET;
+  const themeOverrides: Partial<Theme> = {};
   const rawTheme = doc.theme;
   if (rawTheme !== undefined && !isTable(rawTheme)) {
     errors.push("[theme] must be a table");
   } else if (isTable(rawTheme)) {
+    const rawPreset = rawTheme.preset;
+    if (rawPreset !== undefined) {
+      if (typeof rawPreset !== "string" || !themePreset(rawPreset)) {
+        errors.push(`theme.preset: unknown preset ${JSON.stringify(rawPreset)} (have: ${presetIds().join(", ")})`);
+      } else {
+        preset = rawPreset;
+      }
+    }
     for (const [role, value] of Object.entries(rawTheme)) {
+      if (role === "preset") continue;
       if (!THEME_ROLES.includes(role as keyof Theme)) {
         errors.push(`theme.${role}: unknown role (have: ${THEME_ROLES.join(", ")})`);
         continue;
@@ -149,9 +157,10 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
         errors.push(`theme.${role}: not a hex color (got ${JSON.stringify(value)})`);
         continue;
       }
-      theme[role as keyof Theme] = value;
+      themeOverrides[role as keyof Theme] = value;
     }
   }
+  const theme: Theme = { ...themePreset(preset)!.theme, ...themeOverrides };
 
   // --- default applet
   let defaultApplet: string | null = null;
@@ -194,15 +203,28 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     }
   }
 
-  return { defaultApplet, theme, applets, plugins, path: meta.path, exists: meta.exists, errors };
+  return {
+    defaultApplet,
+    theme,
+    preset,
+    themeOverrides,
+    applets,
+    plugins,
+    path: meta.path,
+    exists: meta.exists,
+    errors,
+  };
 }
 
 let cached: KonaConfig | null = null;
+/** Fingerprint of the file behind `cached` ("" = no file), for refreshConfig. */
+let cachedStamp = "";
 
 /** Read + memoize the config. Safe to call from anywhere, any number of times. */
 export function loadConfig(): KonaConfig {
   if (cached) return cached;
   const path = configPath();
+  cachedStamp = stampOf(path);
   let text: string | null = null;
   try {
     text = readFileSync(path, "utf8");
@@ -222,11 +244,107 @@ export function loadConfig(): KonaConfig {
 /** Drop the memoized config — for tests, and after writing the file. */
 export function resetConfig(): void {
   cached = null;
+  cachedStamp = "";
+  override = null;
+}
+
+/**
+ * A cheap fingerprint of the file: mtime AND size, because two writes inside
+ * the same millisecond are a real thing when a verb saves a theme and the host
+ * repaints in the same breath.
+ */
+function stampOf(path: string): string {
+  try {
+    const st = statSync(path);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return ""; // absent — and "absent" is itself a state worth noticing
+  }
+}
+
+/**
+ * Notice a config file that changed under us, cheaply enough to call once per
+ * rendered frame: one stat, and a re-read only when the mtime moved. This is
+ * what makes `kona theme` (or an editor) retint a RUNNING TUI — the host is a
+ * separate process from the daemon that wrote the file, so neither one can
+ * hand the other a fresh palette. Returns true when the config was reloaded.
+ */
+export function refreshConfig(): boolean {
+  if (!cached) return false; // nothing memoized — the next read is fresh anyway
+  const now = stampOf(cached.path);
+  if (now === cachedStamp) return false;
+  cached = null;
+  loadConfig();
+  return true;
+}
+
+/**
+ * A palette that stands in for the configured one until it is cleared — how a
+ * theme picker previews a preset LIVE, before anything is written to disk.
+ * Set by the host from the open applet's `theme(state)`; nothing else should
+ * touch it, and `resetConfig()` drops it with the rest of the memo.
+ */
+let override: Theme | null = null;
+
+export function setThemeOverride(next: Partial<Theme> | null): void {
+  override = next ? { ...loadConfig().theme, ...next } : null;
+}
+
+/** The palette the override is standing in for, if any. */
+export function themeOverride(): Theme | null {
+  return override;
 }
 
 /** The palette. This is the call sites' entry point; never hardcode a hex. */
 export function theme(): Theme {
-  return loadConfig().theme;
+  return override ?? loadConfig().theme;
+}
+
+/** The named preset the palette starts from. */
+export function themePresetId(): string {
+  return loadConfig().preset;
+}
+
+/**
+ * Write `[theme] preset = "<id>"` into the config file, leaving everything
+ * else — comments, per-applet blocks, hand-picked roles — exactly as it was.
+ *
+ * This is text surgery rather than a TOML round-trip on purpose: the file is
+ * hand-written and mostly comments, and re-emitting it from a parsed document
+ * would quietly eat them. Returns the path it wrote.
+ */
+export function writeThemePreset(id: string): string {
+  if (!themePreset(id)) throw new Error(`unknown theme preset: ${id}`);
+  const path = configPath();
+  let text = "";
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    text = ""; // no file yet — we are about to write the first one
+  }
+  const line = `preset = "${id}"`;
+  const header = /^[ \t]*\[theme\][ \t]*$/m.exec(text);
+  if (!header) {
+    const body = text.replace(/\s*$/, "");
+    text = `${body ? `${body}\n\n` : ""}[theme]\n${line}\n`;
+  } else {
+    // Only this section's keys are ours to touch: a `preset = ...` under
+    // [applets.foo] belongs to that applet.
+    const start = header.index + header[0].length;
+    const rest = text.slice(start);
+    const next = /^[ \t]*\[/m.exec(rest);
+    const end = next ? start + next.index : text.length;
+    const section = text.slice(start, end);
+    const existing = /^[ \t]*preset[ \t]*=.*$/m;
+    const patched = existing.test(section)
+      ? section.replace(existing, line)
+      : `\n${line}${section.startsWith("\n") ? "" : "\n"}${section}`;
+    text = text.slice(0, start) + patched + text.slice(end);
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+  resetConfig();
+  return path;
 }
 
 /** The `[applets.<id>]` block, or an empty table. */
@@ -307,17 +425,20 @@ ${blocks.join("\n\n")}
 # or a dir full of them. \`~/.config/kona/plugins/*\` is always scanned.
 # plugins = ["~/src/my-kona-applet"]
 
-# The palette. Applets name ROLES, so these ten colors retheme all of kona.
+# The palette. \`preset\` picks a named one (\`kona theme\` lists them, and the
+# \`theme\` applet previews them live); the roles below are kona's own defaults,
+# and uncommenting one makes it win over whatever preset is in force.
 [theme]
-accent = "${DEFAULT_THEME.accent}"  # frames, selection, links
-alt    = "${DEFAULT_THEME.alt}"  # secondary tint
-fg     = "${DEFAULT_THEME.fg}"  # body text
-dim    = "${DEFAULT_THEME.dim}"  # labels, hints
-muted  = "${DEFAULT_THEME.muted}"  # idle / inactive
-ok     = "${DEFAULT_THEME.ok}"  # running, unread, success
-warn   = "${DEFAULT_THEME.warn}"  # paused, degraded
-error  = "${DEFAULT_THEME.error}"  # failure
-key    = "${DEFAULT_THEME.key}"  # keybind glyphs
-bg     = "${DEFAULT_THEME.bg}"  # text on an accent fill
+# preset = "catppuccin-mocha"
+# accent = "${DEFAULT_THEME.accent}"  # frames, selection, links
+# alt    = "${DEFAULT_THEME.alt}"  # secondary tint
+# fg     = "${DEFAULT_THEME.fg}"  # body text
+# dim    = "${DEFAULT_THEME.dim}"  # labels, hints
+# muted  = "${DEFAULT_THEME.muted}"  # idle / inactive
+# ok     = "${DEFAULT_THEME.ok}"  # running, unread, success
+# warn   = "${DEFAULT_THEME.warn}"  # paused, degraded
+# error  = "${DEFAULT_THEME.error}"  # failure
+# key    = "${DEFAULT_THEME.key}"  # keybind glyphs
+# bg     = "${DEFAULT_THEME.bg}"  # text on an accent fill
 ${applets}`;
 }

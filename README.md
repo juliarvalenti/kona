@@ -65,25 +65,31 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <br><sub><a href="applets/sys/README.md"><code>sys</code></a> — Live CPU, memory, disk, and battery gauges.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/shots/ticker.svg" width="100%" alt="Ticker — board lists symbols with price, %chg, and a sparkline">
-<br><sub><a href="applets/ticker/README.md"><code>ticker</code></a> — Watchlist board — stocks and crypto, price, %chg, sparkline.</sub>
+<img src="docs/shots/theme.svg" width="100%" alt="Theme — previewing a preset marks the row and says what enter would keep">
+<br><sub><a href="applets/theme/README.md"><code>theme</code></a> — Catppuccin, Nord, Dracula and friends — previewed live, saved on enter.</sub>
 </td>
 </tr>
 <tr>
+<td width="50%" valign="top">
+<img src="docs/shots/ticker.svg" width="100%" alt="Ticker — board lists symbols with price, %chg, and a sparkline">
+<br><sub><a href="applets/ticker/README.md"><code>ticker</code></a> — Watchlist board — stocks and crypto, price, %chg, sparkline.</sub>
+</td>
 <td width="50%" valign="top">
 <img src="docs/shots/timer.svg" width="100%" alt="Timer — shows status, label, and a partly-filled bar">
 <br><sub><a href="applets/timer/README.md"><code>timer</code></a> — Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/weather.svg" width="100%" alt="Weather — the week: now, the next hours, and a day per row">
 <br><sub><a href="applets/weather/README.md"><code>weather</code></a> — Current conditions and the week ahead, from open-meteo.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/webex.svg" width="100%" alt="Webex — space list is newest first, with a dot on what is unread and who is around">
 <br><sub><a href="applets/webex/README.md"><code>webex</code></a> — Spaces, their messages, and a verb that posts back.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/workflows.svg" width="100%" alt="Workflows — lists what each one does, when it runs, and how it went">
 <br><sub><code>workflows</code> — Named sequences of applet verbs — run them by hand, or on a cron.</sub>
@@ -542,7 +548,8 @@ about the file; a bad value is ignored, never fatal).
 default = "dash"      # applet a bare `kona` opens; omit for the launcher
 
 [theme]               # the palette — applets name ROLES, never hexes
-accent = "#7aa2f7"    # frames, selection, links
+preset = "nord"       # start from a named palette (`kona theme` lists them)
+accent = "#7aa2f7"    # ...and any role you spell out wins over it
 alt    = "#bb9af7"    # secondary tint
 fg     = "#d0d0d0"    # body text
 dim    = "#6a6a6a"    # labels, hints
@@ -570,7 +577,7 @@ The per-applet blocks are contributed by the applets: each one ships a commented
 `configSample`, `kona config init` composes them, and `kona docs <id>` explains
 what they mean. `[applets.<id>] accent` and `icon` work for every applet.
 
-Ten roles retheme all of kona because no applet hardcodes a color: they call
+Fifteen roles retheme all of kona because no applet hardcodes a color: they call
 `theme().ok` and the stage paints from the same table.
 
 ```ts
@@ -581,6 +588,27 @@ view: (s) => [text(s.done ? "done" : "working", { color: theme().ok })]
 
 `appletConfig("<id>")` hands an applet its own `[applets.<id>]` block, and
 `appletAccent`/`appletString`/`appletNumber` read one key with a fallback.
+
+### Presets, and switching them without a restart
+
+`core/themes.ts` ships the palettes people already know — Catppuccin (all four),
+Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, Everforest, Kanagawa,
+One Dark, Ayu — each mapped onto **every** role, so nothing renders muddy. kona's
+own `kona-aloha` is the default.
+
+```sh
+kona theme                    # the picker: ↑↓ previews LIVE, enter saves, esc reverts
+kona theme nord               # apply one from the shell
+kona call theme list          # ...and the same thing from an agent
+```
+
+The picker is an ordinary applet (`applets/theme`), previewing through one
+addition to the applet ABI: `theme(state)` returns a palette that stands in for
+the configured one while that applet is open, so the frame, the hint bar and
+every row recolor as the cursor moves — and leaving drops the preview with
+nothing to undo. `enter` writes `[theme] preset` into your config, and the
+running TUI (a separate process from the daemon that wrote it) picks the file up
+on its next frame.
 
 ## Writing an applet
 

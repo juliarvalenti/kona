@@ -110,6 +110,8 @@ export type Color = string;
  * semantic ROLE — `theme().ok`, not "#00d488" — and one file rethemes all of
  * kona. `appletConfig("<id>")` is that applet's own `[applets.<id>]` block.
  */
+import type { Theme } from "../core/config.ts";
+
 export {
   theme,
   appletConfig,
@@ -432,6 +434,17 @@ export interface AppletDef<S extends object = AppletState> {
   view: (state: S, ctx?: ViewCtx) => View;
   /** Optional frame tint (border/title color) derived from state. */
   accent?: (state: S) => Color;
+  /**
+   * Retint THE WHOLE UI while this applet is open — the roles it returns stand
+   * in for the configured palette until you navigate away. It is how a theme
+   * picker previews a palette (arrow down and the frame, the hints and the body
+   * recolor under the cursor) without writing anything to disk: the preview
+   * lives in state, so leaving the applet — or an agent calling the same verb —
+   * puts the real palette back with no cleanup step.
+   *
+   * Pure, like `view`, and called on every frame. Return null for "don't".
+   */
+  theme?: (state: S) => Partial<Theme> | null;
   /**
    * What this applet is worth saying on the DASHBOARD right now — one card, a
    * few, or nothing at all. Pure, like `view`: the dash calls it with your live
