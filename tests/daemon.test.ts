@@ -96,10 +96,12 @@ test("a workflow runs other applets' verbs through the daemon's own seam", async
   // ...and the OTHER applets really moved.
   const timers = (await get("/applets/timer/state")) as { timers: Array<{ label: string; remaining: number }> };
   expect(timers.timers.some((t) => t.label === "from a workflow" && t.remaining === 90)).toBe(true);
-  const notes = (await get("/applets/notes/state")) as { notes: Array<{ text: string }> };
+  // A one-line `text` blob titles the note it writes, so a workflow step reads
+  // back exactly as it was written.
+  const notes = (await get("/applets/notes/state")) as { notes: Array<{ title: string }> };
   // The second step's text carried the first step's result into it.
-  const stamped = notes.notes.find((n) => n.text.startsWith("focus at "));
-  expect(stamped?.text).not.toBe("focus at "); // an id, not an empty reference
+  const stamped = notes.notes.find((n) => n.title.startsWith("focus at "));
+  expect(stamped?.title).not.toBe("focus at "); // an id, not an empty reference
 });
 
 test("the daemon fires a scheduled workflow with nobody watching", async () => {
@@ -120,8 +122,8 @@ test("the daemon fires a scheduled workflow with nobody watching", async () => {
   }
   expect(ran).toBeGreaterThan(0);
 
-  const notes = (await get("/applets/notes/state")) as { notes: Array<{ text: string }> };
-  expect(notes.notes.some((n) => n.text === "scheduled run")).toBe(true);
+  const notes = (await get("/applets/notes/state")) as { notes: Array<{ title: string }> };
+  expect(notes.notes.some((n) => n.title === "scheduled run")).toBe(true);
 
   // Take it off the clock so it can't keep firing through the rest of the suite.
   await call("workflows", "schedule", { name: "test-tick", cron: null });

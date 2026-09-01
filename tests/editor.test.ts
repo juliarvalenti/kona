@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { applyKey, edit, windowOf, type Edit, type KeyEvent } from "../host/editor.ts";
+import { applyKey, edit, frameOf, windowOf, type Edit, type KeyEvent } from "../host/editor.ts";
 
 /**
  * The line editor is the whole interaction model of a text field, so it is
@@ -100,4 +100,109 @@ test("windowOf scrolls text under the caret once it overflows", () => {
   expect(w.text).toBe("ovelace");
   expect(w.cursor).toBe(7);
   expect(w.cursor).toBeLessThan(8);
+});
+
+/**
+ * Multi-line mode — the textarea. Same brain, different exit key: enter is a
+ * newline and ctrl+d submits, which is what lets a note body contain blank
+ * lines and still be saved from the keyboard.
+ */
+const multi = { multiline: true };
+const typeIn = (buf: Edit, s: string): Edit =>
+  [...s].reduce((b, ch) => applyKey(b, { name: ch, sequence: ch }, multi).edit, buf);
+
+test("in a textarea enter inserts a newline instead of submitting", () => {
+  const first = applyKey(edit("one"), { name: "return" }, multi);
+  expect(first.action).toBe("edit");
+  expect(first.edit).toEqual({ value: "one\n", cursor: 4 });
+  expect(typeIn(first.edit, "two").value).toBe("one\ntwo");
+});
+
+test("ctrl+d (and ctrl+s) submit a textarea; both are inert in a one-line field", () => {
+  const buf = edit("one\ntwo");
+  expect(applyKey(buf, { name: "d", ctrl: true }, multi).action).toBe("submit");
+  expect(applyKey(buf, { name: "s", ctrl: true }, multi).action).toBe("submit");
+  expect(applyKey(buf, { name: "d", ctrl: true }).action).toBe("ignore");
+  expect(applyKey(buf, { name: "s", ctrl: true }).action).toBe("ignore");
+});
+
+test("esc still cancels, and a one-line field still submits on enter", () => {
+  expect(applyKey(edit("one\ntwo"), { name: "escape" }, multi).action).toBe("cancel");
+  expect(applyKey(edit("one"), { name: "return" }).action).toBe("submit");
+});
+
+test("↑/↓ move between lines, keeping the column and clamping at the ends", () => {
+  const buf = edit("alpha\nbeta\ngamma", 13); // "gam|ma" — line 3, column 2
+  const up = applyKey(buf, { name: "up" }, multi).edit;
+  expect(up.cursor).toBe(8); // "be|ta"
+  const back = applyKey(up, { name: "down" }, multi).edit;
+  expect(back.cursor).toBe(13);
+
+  // A short line takes the caret to its end rather than past it.
+  const short = applyKey(edit("alpha\nhi\ngamma", 14), { name: "up" }, multi).edit;
+  expect(short.cursor).toBe(8); // end of "hi"
+
+  // Nothing above the first line, nothing below the last.
+  expect(applyKey(edit("alpha\nbeta", 2), { name: "up" }, multi).edit.cursor).toBe(2);
+  expect(applyKey(edit("alpha\nbeta", 8), { name: "down" }, multi).edit.cursor).toBe(8);
+  // ...and in a one-line field the arrows are not the editor's business.
+  expect(applyKey(edit("alpha"), { name: "up", sequence: "\x1b[A" }).action).toBe("ignore");
+});
+
+test("the line bindings act on the cursor's line, not the whole buffer", () => {
+  const buf = edit("alpha\nbeta gamma", 10); // inside "beta|"
+  expect(applyKey(buf, { name: "home" }, multi).edit.cursor).toBe(6);
+  expect(applyKey(buf, { name: "end" }, multi).edit.cursor).toBe(16);
+  expect(applyKey(buf, { name: "a", ctrl: true }, multi).edit).toEqual({ value: buf.value, cursor: 6 });
+  expect(applyKey(buf, { name: "u", ctrl: true }, multi).edit).toEqual({ value: "alpha\n gamma", cursor: 6 });
+  expect(applyKey(buf, { name: "k", ctrl: true }, multi).edit).toEqual({ value: "alpha\nbeta", cursor: 10 });
+  // ctrl+w stops at the line break rather than eating the line above.
+  expect(applyKey(edit("alpha\nbeta", 6), { name: "w", ctrl: true }, multi).edit).toEqual({
+    value: "alpha\nbeta",
+    cursor: 6,
+  });
+});
+
+test("backspace at the start of a line joins it to the one above", () => {
+  const joined = applyKey(edit("one\ntwo", 4), { name: "backspace" }, multi).edit;
+  expect(joined).toEqual({ value: "onetwo", cursor: 3 });
+});
+
+test("a pasted paragraph keeps its newlines in a textarea, and loses them in a field", () => {
+  const pasted = applyKey(edit(), { name: "paste", sequence: "one\ntwo" }, multi).edit;
+  expect(pasted.value).toBe("one\ntwo");
+  expect(applyKey(edit(), { name: "paste", sequence: "one\ntwo" }).action).toBe("ignore");
+});
+
+test("frameOf splits hard newlines and word-wraps long lines", () => {
+  const f = frameOf(edit("alpha beta gamma\ndelta", 0), 12, 6);
+  expect(f.lines).toEqual(["alpha beta ", "gamma", "delta"]);
+  expect(f.total).toBe(3);
+  expect(f.cursor).toEqual({ row: 0, col: 0 });
+});
+
+test("frameOf puts the caret on the wrapped row it actually sits in", () => {
+  // cursor 13 is inside "gamma", which wrapped onto the second display row.
+  const f = frameOf(edit("alpha beta gamma", 13), 12, 6);
+  expect(f.cursor).toEqual({ row: 1, col: 2 });
+});
+
+test("frameOf scrolls vertically to keep the caret in view", () => {
+  const buf = edit("one\ntwo\nthree\nfour\nfive");
+  const f = frameOf(buf, 20, 2);
+  expect(f.lines).toEqual(["four", "five"]);
+  expect(f.top).toBe(3);
+  expect(f.cursor).toEqual({ row: 1, col: 4 });
+  expect(f.total).toBe(5);
+
+  // The caret at the top of the buffer shows the head instead.
+  const head = frameOf(edit(buf.value, 0), 20, 2);
+  expect(head.lines).toEqual(["one", "two"]);
+  expect(head.top).toBe(0);
+});
+
+test("frameOf keeps a trailing empty line, so a blank line is visible", () => {
+  const f = frameOf(edit("one\n\n"), 10, 4);
+  expect(f.lines).toEqual(["one", "", ""]);
+  expect(f.cursor).toEqual({ row: 2, col: 0 });
 });

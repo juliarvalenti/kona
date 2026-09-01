@@ -327,10 +327,13 @@ export async function runHost(startAppletId: string | null) {
       }
 
       // --- Text field: an `input` node in the view tree has focus, so every
-      // key is text (even `/` and the arrows) until enter or esc ends the edit.
+      // key is text (even `/` and the arrows) until submit or esc ends the edit
+      // — enter for a one-line field, ctrl+d for a textarea.
       if (field) {
         if (draft?.id !== field.id) draft = { id: field.id, edit: mkEdit(field.value) };
-        const { edit: next, action } = applyKey(draft.edit, k);
+        // A textarea spends enter on a newline, so the editor is told which
+        // shape the field is: same brain, different exit key (ctrl+d).
+        const { edit: next, action } = applyKey(draft.edit, k, { multiline: field.multiline });
         if (action === "submit") {
           const value = draft.edit.value;
           draft = null;

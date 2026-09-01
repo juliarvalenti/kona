@@ -13,7 +13,7 @@ import {
   type TextChunk,
 } from "@opentui/core";
 import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay, type ViewNode, type LayoutOpts, type InputNode } from "../sdk/index.ts";
-import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
+import { type Edit, edit as mkEdit, frameOf, windowOf } from "./editor.ts";
 import { theme, appletAccent, type Theme } from "../core/config.ts";
 
 /**
@@ -73,6 +73,22 @@ function bindingLabel(b: KeyBinding): string {
 /** What enter does in a focused field — the applet names it, else "save". */
 const fieldSubmitLabel = (f: InputNode): string => (f.submit ? (f.submitLabel ?? "save") : "done");
 
+/** Lines a field occupies on screen: one, or as many as a textarea asks for. */
+const fieldRows = (f: InputNode): number => (f.multiline ? Math.max(1, f.rows ?? 6) : 1);
+
+/**
+ * What the keyboard does inside the focused field. A textarea spends enter on a
+ * newline, so its exit key is ctrl+d and the footer has to say so — the hint bar
+ * is the only place that tells you how to get out.
+ */
+function fieldHints(f: InputNode): Hint[] {
+  if (!f.multiline) return [{ key: "enter", label: fieldSubmitLabel(f) }];
+  return [
+    { key: "ctrl+d", label: fieldSubmitLabel(f) },
+    { key: "enter", label: "newline" },
+  ];
+}
+
 /** Focusable leaves: a selected list row, or the text field with the keyboard. */
 const isFocused = (n: ViewNode): boolean =>
   typeof n === "object" && (n.kind === "text" || n.kind === "input") && !!n.focus;
@@ -116,9 +132,12 @@ function focusLineOf(nodes: ViewNode[]): number | null {
     }
     switch (n.kind) {
       case "text":
-      case "input":
         if (isFocused(n)) found = line;
         line += 1;
+        break;
+      case "input":
+        if (isFocused(n)) found = line;
+        line += fieldRows(n);
         break;
       case "spacer":
       case "bar":
@@ -427,6 +446,52 @@ export function createStage(renderer: CliRenderer): Stage {
     return [paint(line.slice(0, win.cursor)), caret, tail].filter((c) => c.text.length > 0);
   }
 
+  /**
+   * A textarea as rows of styled cells. The text wraps one column narrower than
+   * the field so the caret always has a cell to sit in past the last character,
+   * and the block keeps its full height even when empty — a field that grows and
+   * shrinks under your fingers is worse than one that reserves its space.
+   */
+  function inputLines(node: InputNode): TextChunk[][] {
+    const width = Math.max(2, node.width ?? 32);
+    const rows = fieldRows(node);
+    // Unfocused, the window starts at the top: you read a note from its first
+    // line, not from wherever the caret was left. Focused with nothing typed
+    // yet, the caret sits at the end — where the host's first keystroke will
+    // put it, so it never jumps as you start typing.
+    const live =
+      draft?.id === node.id && node.focus ? draft.edit : mkEdit(node.value, node.focus ? undefined : 0);
+    const trough = node.focus ? FIELD_FOCUS : FIELD;
+    const ink = node.color ?? FG;
+    const paint = (t: string) => fg(ink)(bg(trough)(t));
+    const blank = (): TextChunk[] => [paint(" ".repeat(width))];
+
+    // An empty field advertises what it wants — beside the caret when focused,
+    // in its place when not.
+    if (!live.value.length && node.placeholder) {
+      const room = node.focus ? width - 1 : width;
+      const ph = node.placeholder.slice(0, room).padEnd(room);
+      const first: TextChunk[] = node.focus
+        ? [fg(CARET_FG)(bg(CARET)(" ")), fg(DIM)(bg(trough)(ph))]
+        : [fg(DIM)(bg(trough)(ph))];
+      return [first, ...Array.from({ length: rows - 1 }, blank)];
+    }
+
+    const win = frameOf(live, width - 1, rows);
+    const out = win.lines.map((line, r): TextChunk[] => {
+      const padded = line.slice(0, width).padEnd(width);
+      if (!node.focus || r !== win.cursor.row) return [paint(padded)];
+      const c = win.cursor.col;
+      return [
+        paint(padded.slice(0, c)),
+        fg(CARET_FG)(bg(CARET)(padded.slice(c, c + 1) || " ")),
+        paint(padded.slice(c + 1)),
+      ].filter((chunk) => chunk.text.length > 0);
+    });
+    while (out.length < rows) out.push(blank());
+    return out;
+  }
+
   function setOverlay(overlay: Overlay | null, gen: number) {
     for (const child of [...overlayLayer.getChildren()]) {
       overlayLayer.remove(child);
@@ -484,13 +549,29 @@ export function createStage(renderer: CliRenderer): Stage {
         node.children.forEach((child, i) => box.add(nodeToRenderable(child, `${id}.${i}`)));
         return box;
       }
-      case "input":
-        return new TextRenderable(renderer, {
-          id,
-          content: new StyledText(inputChunks(node)),
-          wrapMode: "none",
-          flexShrink: 0,
-        });
+      case "input": {
+        if (!node.multiline)
+          return new TextRenderable(renderer, {
+            id,
+            content: new StyledText(inputChunks(node)),
+            wrapMode: "none",
+            flexShrink: 0,
+          });
+        // A textarea is a stack of one-line renderables: the wrapping is the
+        // editor's (it owns the caret's row and column), never OpenTUI's.
+        const area = new BoxRenderable(renderer, { id, flexDirection: "column", flexShrink: 0 });
+        inputLines(node).forEach((chunks, i) =>
+          area.add(
+            new TextRenderable(renderer, {
+              id: `${id}.l${i}`,
+              content: new StyledText(chunks),
+              wrapMode: "none",
+              flexShrink: 0,
+            }),
+          ),
+        );
+        return area;
+      }
       case "box": {
         const o = node.opts;
         // A titled box borders itself unless told otherwise — a floating title
@@ -543,10 +624,10 @@ export function createStage(renderer: CliRenderer): Stage {
       // are then the FIELD's, and the dialog keeps only its extra keys.
       if (overlay) {
         const hints: Hint[] = [];
-        if (focused) hints.push({ key: "enter", label: fieldSubmitLabel(focused) });
+        if (focused) hints.push(...fieldHints(focused));
         else if (overlay.confirm) hints.push({ key: "enter", label: overlay.confirmLabel ?? overlay.confirm });
         for (const [key, b] of Object.entries(overlay.keymap ?? {})) hints.push({ key: glyph(key), label: bindingLabel(b) });
-        if (focused) hints.push({ key: "←→", label: "move" });
+        if (focused) hints.push({ key: focused.multiline ? "↑↓←→" : "←→", label: "move" });
         hints.push({
           key: "esc",
           label: focused?.cancel
@@ -562,9 +643,9 @@ export function createStage(renderer: CliRenderer): Stage {
       // showing nav keys there would be a lie (← moves the caret, not the view).
       if (focused) {
         setFooter([
-          { key: "enter", label: fieldSubmitLabel(focused) },
+          ...fieldHints(focused),
           { key: "esc", label: focused.cancel ? (focused.cancelLabel ?? "cancel") : "back" },
-          { key: "←→", label: "move" },
+          { key: focused.multiline ? "↑↓←→" : "←→", label: "move" },
           { key: "ctrl+c", label: "quit" },
         ]);
         return;

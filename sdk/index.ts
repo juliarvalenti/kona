@@ -140,11 +140,19 @@ export interface InputNode {
   focus?: boolean;
   /** Field width in cells; longer text scrolls under the caret. */
   width?: number;
+  /**
+   * Make it a TEXTAREA: the value keeps its newlines, enter inserts one and
+   * `submit` moves to ctrl+d. Long lines word-wrap inside the field and it
+   * scrolls vertically under the caret, so a note body is edited in place.
+   */
+  multiline?: boolean;
+  /** Visible lines of a multiline field (default 6). Ignored otherwise. */
+  rows?: number;
   /** Render the value as dots (secrets). */
   mask?: boolean;
-  /** Verb fired on enter with `{ id, value }`. */
+  /** Verb fired on enter — ctrl+d in a multiline field — with `{ id, value }`. */
   submit?: string;
-  /** What enter does, for the hint bar ("send", "create"). Defaults to "save". */
+  /** What that key does, for the hint bar ("send", "create"). Defaults to "save". */
   submitLabel?: string;
   /** Verb fired on esc with `{ id }`. Without one, esc falls back to `back`. */
   cancel?: string;
@@ -205,6 +213,16 @@ export const input = (
   value: string,
   opts: Omit<InputNode, "kind" | "id" | "value"> = {},
 ): ViewNode => ({ kind: "input", id, value, ...opts });
+/**
+ * A multi-line text field — the same node with `multiline` set, named for what
+ * it is. Enter inserts a newline and ctrl+d fires `submit`, so a body that
+ * contains blank lines can still be typed and saved from the keyboard.
+ */
+export const textarea = (
+  id: string,
+  value: string,
+  opts: Omit<InputNode, "kind" | "id" | "value" | "multiline"> = {},
+): ViewNode => ({ kind: "input", id, value, multiline: true, ...opts });
 /** A fill bar; value is 0..1. */
 export const bar = (value: number, opts: { width?: number; color?: Color } = {}): ViewNode => ({
   kind: "bar",
