@@ -70,6 +70,9 @@ function bindingLabel(b: KeyBinding): string {
   return typeof b === "string" ? b : (b.label ?? b.verb);
 }
 
+/** What enter does in a focused field — the applet names it, else "save". */
+const fieldSubmitLabel = (f: InputNode): string => (f.submit ? (f.submitLabel ?? "save") : "done");
+
 /** Focusable leaves: a selected list row, or the text field with the keyboard. */
 const isFocused = (n: ViewNode): boolean =>
   typeof n === "object" && (n.kind === "text" || n.kind === "input") && !!n.focus;
@@ -149,7 +152,9 @@ function findFocusedInput(nodes: ViewNode[]): InputNode | null {
   for (const n of nodes) {
     if (typeof n === "string") continue;
     if (n.kind === "input" && n.focus) return n;
-    if (n.kind === "row" || n.kind === "col") {
+    // Descend containers AND boxes: a form inside a card or a modal is still a
+    // form, and the field in it still has the keyboard.
+    if (n.kind === "row" || n.kind === "col" || n.kind === "box") {
       const hit = findFocusedInput(n.children);
       if (hit) return hit;
     }
@@ -369,7 +374,9 @@ export function createStage(renderer: CliRenderer): Stage {
       scroll.content.remove(child);
       (child as { destroy?: () => void }).destroy?.();
     }
-    focused = findFocusedInput(nodes);
+    // An overlay owns the keyboard, so only ITS fields can be focused: a field
+    // in the body behind a dialog must not keep typing into it.
+    focused = overlay ? findFocusedInput([overlay.node]) : findFocusedInput(nodes);
     const gen = seq++;
     nodes.forEach((node, i) => scroll.content.add(nodeToRenderable(node, `n${gen}-${i}`)));
 
@@ -531,12 +538,21 @@ export function createStage(renderer: CliRenderer): Stage {
       setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
 
       // An overlay owns the keyboard, so it owns the hint bar too — showing the
-      // body's keybinds under a dialog would be a lie about what they do.
+      // body's keybinds under a dialog would be a lie about what they do. A
+      // field inside the dialog owns it one level further down: enter and esc
+      // are then the FIELD's, and the dialog keeps only its extra keys.
       if (overlay) {
         const hints: Hint[] = [];
-        if (overlay.confirm) hints.push({ key: "enter", label: overlay.confirmLabel ?? overlay.confirm });
-        for (const [key, b] of Object.entries(overlay.keymap ?? {})) hints.push({ key, label: bindingLabel(b) });
-        hints.push({ key: "esc", label: overlay.dismissLabel ?? (overlay.dismiss ? "cancel" : "back") });
+        if (focused) hints.push({ key: "enter", label: fieldSubmitLabel(focused) });
+        else if (overlay.confirm) hints.push({ key: "enter", label: overlay.confirmLabel ?? overlay.confirm });
+        for (const [key, b] of Object.entries(overlay.keymap ?? {})) hints.push({ key: glyph(key), label: bindingLabel(b) });
+        if (focused) hints.push({ key: "←→", label: "move" });
+        hints.push({
+          key: "esc",
+          label: focused?.cancel
+            ? (focused.cancelLabel ?? overlay.dismissLabel ?? "cancel")
+            : (overlay.dismissLabel ?? (overlay.dismiss ? "cancel" : "back")),
+        });
         hints.push({ key: "ctrl+c", label: "quit" });
         setFooter(hints);
         return;
@@ -546,8 +562,8 @@ export function createStage(renderer: CliRenderer): Stage {
       // showing nav keys there would be a lie (← moves the caret, not the view).
       if (focused) {
         setFooter([
-          { key: "enter", label: focused.submit ? "save" : "done" },
-          { key: "esc", label: focused.cancel ? "cancel" : "back" },
+          { key: "enter", label: fieldSubmitLabel(focused) },
+          { key: "esc", label: focused.cancel ? (focused.cancelLabel ?? "cancel") : "back" },
           { key: "←→", label: "move" },
           { key: "ctrl+c", label: "quit" },
         ]);

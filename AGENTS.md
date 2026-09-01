@@ -45,6 +45,23 @@ Verbs you fire can reach the human's screen: applets call `notify()` from
 point, not a side effect. Events are deduped and rate limited; you do not need
 to throttle your own calls.
 
+## Coordination
+
+`mycelium` is not a dashboard you appear in — it is a room you can talk in, and
+the human is in it with you:
+
+```sh
+kona call mycelium post '{"room":"ship-kona","text":"picking up #38"}'
+kona call mycelium status '{"status":"running the test suite"}'
+kona call mycelium remember '{"room":"ship-kona","key":"plan","value":"composer first"}'
+kona state mycelium        # rooms, who is present, and what was just said
+```
+
+`post` is the same verb the human's composer fires, so your message shows up in
+their open room the moment you send it (and, if they opted into
+`mycelium.message`, as a desktop banner when they're elsewhere). Say what you
+are doing before a long job, not after.
+
 ## Daemon
 
 Base URL: `http://localhost:${KONA_PORT:-4177}`. Autostarts via the CLI; to run

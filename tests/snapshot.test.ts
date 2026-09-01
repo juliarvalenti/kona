@@ -386,6 +386,67 @@ test("mycelium room view shows agents, messages, and shared memory", async () =>
   expect(frame).toContain("juliarvalenti/kona");
 });
 
+const SHIP = {
+  source: "fs",
+  room: { id: "ship-kona", name: "ship-kona", topic: "getting v0 out", agents: ["planner"], messages: 2, lastAt: 0 },
+  agents: [{ name: "planner", status: "thinking", lastSeen: 0 }],
+  messages: [
+    { id: "1", from: "planner", at: Date.now() - 60_000, text: "who is taking #38?" },
+    { id: "2", from: "kona", at: Date.now(), text: "me — the composer is the point" },
+  ],
+  memory: [],
+};
+
+test("mycelium puts a composer under the room and says how to reach it", async () => {
+  const frame = await snapshot("mycelium", { source: "fs", writable: true, me: "kona", open: SHIP }, 80, 20);
+  expect(frame).toContain("who is taking #38?");
+  expect(frame).toContain("enter to write"); // the composer, idle
+  expect(frame).toContain("mycelium.post"); // ...and how an agent says the same thing
+  expect(frame.replace(/\s+/g, " ")).toContain("enter write"); // the key that opens it
+});
+
+test("mycelium shows a sent message before the backend echoes it", async () => {
+  const frame = await snapshot(
+    "mycelium",
+    {
+      source: "fs",
+      writable: true,
+      me: "kona",
+      open: SHIP,
+      pending: [{ room: "ship-kona", from: "kona", text: "pushing now", at: Date.now() }],
+    },
+    80,
+    20,
+  );
+  expect(frame).toContain("pushing now");
+  expect(frame).toContain("⋯"); // ...marked as still in flight
+});
+
+test("mycelium stands the composer down when nothing can write", async () => {
+  const frame = await snapshot("mycelium", { source: "http", writable: false, me: "kona", open: SHIP }, 80, 20);
+  expect(frame).toContain("read-only");
+  expect(frame).toContain("MYCELIUM_URL"); // what to connect
+  expect(frame).not.toContain("enter to write"); // no composer that would eat your words
+});
+
+test("mycelium's new-room dialog is a real form over the room list", async () => {
+  const frame = await snapshot(
+    "mycelium",
+    {
+      source: "fs",
+      writable: true,
+      rooms: [{ id: "ship-kona", name: "ship-kona", topic: "", agents: [], messages: 1, lastAt: Date.now() }],
+      dialog: { kind: "room", field: "name", values: { name: "Lit Review", topic: "" } },
+    },
+    80,
+    20,
+  );
+  expect(frame).toContain("new room");
+  expect(frame).toContain("Lit Review");
+  expect(frame).toContain("lit-review"); // the id it will get, previewed live
+  expect(frame).not.toContain("ship-kona"); // the scrim covers the list behind it
+});
+
 test("mycelium explains how to connect when no backend answered", async () => {
   const frame = await snapshot("mycelium", {}, 76, 16);
   expect(frame).toContain("No coordination layer found");

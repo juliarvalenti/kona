@@ -225,9 +225,10 @@ default 30).
 
 ### Mycelium
 
-The `mycelium` applet is a read-only window onto your coordination layer —
-rooms, the agents in them, recent messages, and shared memory. It finds the
-data wherever it lives, in this order:
+The `mycelium` applet is a chat client for your coordination layer — rooms, the
+agents in them, what they're saying, and the memory they share. You are *in* the
+room, not watching it through glass: drill into a room, press `enter`, type, and
+`enter` sends. It finds the data wherever it lives, in this order:
 
 ```sh
 MYCELIUM_URL=http://127.0.0.1:8765   # the local daemon / OpenAPI backend
@@ -237,8 +238,35 @@ mycelium                             # the CLI, on PATH or ~/.local/bin/mycelium
 
 ```sh
 kona mycelium                        # browse rooms, → to drill in, ← back
-kona call mycelium open '{"room":"ship-kona"}'   # ← what an agent does
+kona mycelium ship-kona              # ...or open straight into one
+kona call mycelium post '{"room":"ship-kona","text":"picking up #38"}'
 ```
+
+Every action is a verb, so you and an agent are peers in the same room firing
+the same calls — `post` from the composer and `post` over HTTP are one code
+path, and the room can't tell you apart except by the name on the message:
+
+| key | verb | what it does |
+| --- | --- | --- |
+| `enter` | `compose` / `post` | write in the open room; enter sends |
+| `n` | `create` | open a new room (`{"name":"Lit Review","topic":"papers"}`) |
+| `s` | `status` | say what you're doing (`{"status":"shipping #38"}`) |
+| `m` | `remember` | write shared memory (`{"key":"plan","value":"…"}`) |
+| `r` | `refresh` | re-sync now (it also polls every 10s) |
+
+`n`, `s` and `m` with no arguments open a small form — a real `input` field in a
+floating dialog, `tab` between fields, `enter` commits. The form only fills in
+the arguments; the verb it commits through is the one an agent calls directly.
+
+Your message shows the moment you send it and is reconciled with the backend on
+the next poll, so a slow room never feels slow. Posting needs a backend that can
+take a write: the OpenAPI daemon, the CLI, or room files kona can append to. When
+none can, the composer is replaced by a read-only notice saying what to connect —
+never a text field that quietly eats what you type.
+
+kona posts as `kona`; set another name with `[applets.mycelium] agent = "…"` in
+`config.toml` or `MYCELIUM_AGENT`. Turn on `kona notify on mycelium.message` for
+a banner when a room gets busy while you're elsewhere.
 
 ### Ticker
 
@@ -321,6 +349,8 @@ default = "5m"        # `kona timer` with no argument
 work  = "25m"         # the cycle: see "Pomodoro" above
 [applets.email]
 page = 20             # threads per fetch
+[applets.mycelium]
+agent = "kona"        # the name your messages are posted under
 ```
 
 Ten roles retheme all of kona because no applet hardcodes a color: they call
@@ -362,6 +392,13 @@ kona call storybook save '{"value":"ada"}'
 
 Pass `change` instead of waiting for `enter` to get a verb per keystroke; see
 the `input` section of the storybook applet for a live one.
+
+A field works inside an `overlay` too, which is what makes a dialog a *form*:
+while one is up the host routes keys to the field (enter submits, esc cancels,
+`←`/`→` move the caret) and any other key the editor doesn't want falls through
+to the overlay's own keymap — bind `tab` there to move between fields. See the
+new-room dialog in `applets/mycelium/index.ts`. `submitLabel`/`cancelLabel` name
+what enter and esc do in the hint bar ("enter send" beats "enter save").
 
 ## Status
 

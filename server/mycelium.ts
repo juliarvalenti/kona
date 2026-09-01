@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join, extname, basename } from "node:path";
-import { existsSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { access, appendFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 
 /**
  * Mycelium — the multi-agent coordination layer — read into kona.
@@ -18,8 +18,14 @@ import { readdir, stat } from "node:fs/promises";
  * Each backend spells its fields slightly differently (`agents` vs `members`,
  * `ts` vs `created_at`), so nothing here trusts a shape: every payload goes
  * through the tolerant `normalize*` functions below, which are pure and unit
- * tested. Everything is READ-ONLY — kona observes coordination, it doesn't
- * join the swarm.
+ * tested.
+ *
+ * kona JOINS the swarm: as well as reading, a backend may post a message,
+ * create a room, set an agent's status and write shared memory. Writing is
+ * best-effort per transport — the HTTP daemon and the CLI each spell their
+ * write side differently, and a backend may not have one at all. That last case
+ * is a first-class answer, not a failure: `WriteUnsupported` means "this really
+ * is read-only", so the UI can say so instead of offering a dead composer.
  */
 
 export type Source = "http" | "cli" | "fs" | "none";
@@ -232,13 +238,56 @@ export function parseJsonl(textBody: string): Rec[] {
 
 // -------------------------------------------------------------------- sources
 
+/** What a room needs to exist. `id` is derived from the name when absent. */
+export interface NewRoom {
+  id?: string;
+  name: string;
+  topic?: string;
+}
+
+/**
+ * A transport. `rooms`/`detail` are the read half every backend has; the four
+ * write methods are optional — a backend that omits one cannot do it at all,
+ * and `write()` moves on to the next transport instead of failing.
+ */
 interface Backend {
   kind: Source;
   rooms: () => Promise<Room[]>;
   detail: (id: string, limit: number) => Promise<Omit<RoomDetail, "source">>;
+  /** True/false when the transport can know without writing; null = try and see. */
+  writable?: () => Promise<boolean | null>;
+  post?: (room: string, from: string, text: string) => Promise<Message>;
+  create?: (room: NewRoom) => Promise<Room>;
+  status?: (agent: string, status: string, room: string | null) => Promise<void>;
+  remember?: (room: string, key: string, value: string) => Promise<Memo>;
+}
+
+/**
+ * "This backend has no write side" — as opposed to "the write failed". The
+ * difference is the whole read-only story: on a WriteUnsupported the applet
+ * puts the composer away and says so, on any other error it keeps the composer
+ * and shows what went wrong.
+ */
+export class WriteUnsupported extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WriteUnsupported";
+  }
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** A room id from a human name: "Ship kona!" -> "ship-kona". */
+export function slug(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "room"
+  );
+}
 
 // --- HTTP (local daemon / OpenAPI backend)
 
@@ -254,6 +303,36 @@ async function getJson(base: string, paths: string[]): Promise<unknown> {
     }
   }
   throw new Error(last || "no response");
+}
+
+/**
+ * POST a body to the first path that answers. A 404/405/501 means "not that
+ * route" and we keep looking; anything else (a 400, a refused connection) is a
+ * real failure and is reported as one. Exhausting every route without a real
+ * failure is what WriteUnsupported means: this daemon only reads.
+ */
+async function postJson(base: string, paths: string[], body: Rec): Promise<unknown> {
+  let unsupported = true;
+  let last = "";
+  for (const p of paths) {
+    try {
+      const res = await fetch(`${base}${p}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      if (res.ok) return await res.json().catch(() => ({}));
+      if (![404, 405, 501].includes(res.status)) unsupported = false;
+      last = `${res.status} ${p}`;
+    } catch (e) {
+      unsupported = false;
+      last = msg(e);
+    }
+  }
+  throw unsupported
+    ? new WriteUnsupported(last ? `no write endpoint (${last})` : "no write endpoint")
+    : new Error(last || "write failed");
 }
 
 function httpBackend(base: string): Backend {
@@ -284,6 +363,36 @@ function httpBackend(base: string): Backend {
           .filter((a): a is Agent => a !== null),
         memory: normalizeMemory(memoryRaw),
       };
+    },
+
+    async post(id, from, text) {
+      const body = await postJson(base, [...room(id, "/messages"), ...room(id, "/post"), "/messages"], {
+        room: id,
+        from,
+        text,
+      });
+      const rec = isRec(body) ? (isRec(body.message) ? body.message : body) : {};
+      return normalizeMessage({ from, text, at: Date.now(), ...rec });
+    },
+
+    async create({ id, name, topic }) {
+      const rid = id ?? slug(name);
+      const body = await postJson(base, ["/rooms", "/api/rooms", "/v1/rooms"], { id: rid, name, topic: topic ?? "" });
+      const rec = isRec(body) ? (isRec(body.room) ? body.room : body) : {};
+      return normalizeRoom({ id: rid, name, topic: topic ?? "", ...rec }) ?? emptyRoom(rid);
+    },
+
+    async status(agent, status, id) {
+      await postJson(
+        base,
+        [...(id ? room(id, "/agents") : []), `/agents/${encodeURIComponent(agent)}/status`, "/agents", "/status"],
+        { ...(id ? { room: id } : {}), name: agent, agent, status },
+      );
+    },
+
+    async remember(id, key, value) {
+      await postJson(base, room(id, "/memory"), { room: id, key, value });
+      return { key, value, at: Date.now() };
     },
   };
 }
@@ -319,6 +428,32 @@ function runCli(bin: string, forms: string[][], slot: string): unknown {
     last = r.stderr.toString().trim().split("\n")[0] ?? `${argv.join(" ")} failed`;
   }
   throw new Error(last.slice(0, 120) || "mycelium CLI: no usable subcommand");
+}
+
+/**
+ * Run a WRITE subcommand. Unlike runCli this judges ONLY the exit code: a write
+ * that succeeded but printed prose (or nothing) must never be retried in
+ * another spelling, or one post becomes two. For the same reason the cache
+ * holds the winning FORM INDEX, not the argv — the argv carries the payload.
+ */
+const cliWriteWinner = new Map<string, number>();
+
+function runCliWrite(bin: string, forms: string[][], slot: string): void {
+  const won = cliWriteWinner.get(slot) ?? -1;
+  const idx = [...forms.keys()];
+  const order = won >= 0 && won < forms.length ? [won, ...idx.filter((i) => i !== won)] : idx;
+  let last = "";
+  for (const i of order) {
+    const argv = forms[i]!;
+    const r = Bun.spawnSync([bin, ...argv], { stderr: "pipe", stdout: "pipe" });
+    if (r.exitCode === 0) {
+      cliWriteWinner.set(slot, i);
+      return;
+    }
+    last = r.stderr.toString().trim().split("\n")[0] ?? "";
+  }
+  // Every spelling was rejected: as far as we can tell this CLI cannot do it.
+  throw new WriteUnsupported(last.slice(0, 120) || `mycelium CLI: no ${slot} subcommand`);
 }
 
 function cliBackend(bin: string): Backend {
@@ -357,6 +492,66 @@ function cliBackend(bin: string): Backend {
         lastAt: messages.at(-1)?.at ?? 0,
       });
       return { room: room ?? emptyRoom(id), messages, agents, memory };
+    },
+
+    async post(id, from, text) {
+      runCliWrite(
+        bin,
+        [
+          ["post", "--room", id, "--from", from, "--text", text],
+          ["post", "--room", id, "--text", text],
+          ["send", "--room", id, "--text", text],
+          ["message", "send", "--room", id, "--text", text],
+          ["post", id, text],
+          ["send", id, text],
+        ],
+        "post",
+      );
+      return { id: `sent-${Date.now()}`, from, at: Date.now(), text };
+    },
+
+    async create({ id, name, topic }) {
+      const rid = id ?? slug(name);
+      const withTopic = topic ? ["--topic", topic] : [];
+      runCliWrite(
+        bin,
+        [
+          ["rooms", "create", rid, ...withTopic],
+          ["room", "create", rid, ...withTopic],
+          ["rooms", "add", rid],
+          ["create", "room", rid],
+        ],
+        "create",
+      );
+      return { ...emptyRoom(rid), name: name || rid, topic: topic ?? "", lastAt: Date.now() };
+    },
+
+    async status(agent, status, id) {
+      const inRoom = id ? ["--room", id] : [];
+      runCliWrite(
+        bin,
+        [
+          ["status", "set", status, "--agent", agent, ...inRoom],
+          ["status", "set", status, ...inRoom],
+          ["agent", "status", status],
+          ["status", status],
+        ],
+        "status",
+      );
+    },
+
+    async remember(id, key, value) {
+      runCliWrite(
+        bin,
+        [
+          ["memory", "set", key, value, "--room", id],
+          ["memory", "put", "--room", id, key, value],
+          ["remember", "--room", id, key, value],
+          ["memory", "set", "--room", id, "--key", key, "--value", value],
+        ],
+        "remember",
+      );
+      return { key, value, at: Date.now() };
     },
   };
 }
@@ -474,7 +669,113 @@ function fsBackend(root: string): Backend {
       });
       return { room: room ?? emptyRoom(id), messages, agents, memory };
     },
+
+    // Room files are not a read-only mirror of somewhere else — they ARE the
+    // room, so kona writes them in exactly the shape it reads them back in.
+    async writable() {
+      return access(dir, constants.W_OK).then(
+        () => true,
+        () => false,
+      );
+    },
+
+    async post(id, from, text) {
+      const at = Date.now();
+      const record = { id: `m-${at}`, from, text, at: new Date(at).toISOString() };
+      await appendRecord(await entryFor(id), MSG_FILES, "messages.jsonl", record);
+      return { id: record.id, from, at, text };
+    },
+
+    async create({ id, name, topic }) {
+      const rid = id ?? slug(name);
+      const target = join(dir, rid);
+      for (const p of [target, `${target}.jsonl`, `${target}.json`]) {
+        if (existsSync(p)) throw new Error(`room exists: ${rid}`);
+      }
+      await mkdir(target, { recursive: true });
+      await writeJson(join(target, "room.json"), {
+        id: rid,
+        name: name || rid,
+        topic: topic ?? "",
+        created_at: new Date().toISOString(),
+      });
+      await appendFile(join(target, "messages.jsonl"), "");
+      return { ...emptyRoom(rid), name: name || rid, topic: topic ?? "", lastAt: Date.now() };
+    },
+
+    async status(agent, status, id) {
+      if (!id) throw new WriteUnsupported("room files hold status per room — open a room first");
+      const entry = await roomDir(await entryFor(id), "status");
+      const file = join(entry, AGENT_FILES.find((f) => existsSync(join(entry, f))) ?? "agents.json");
+      const rest = pickList((await readJson(file)) ?? []).filter(
+        (r) => str(r, ["name", "id", "agent", "handle"]) !== agent,
+      );
+      await writeJson(file, [...rest, { name: agent, status, last_seen: new Date().toISOString() }]);
+    },
+
+    async remember(id, key, value) {
+      const entry = await roomDir(await entryFor(id), "shared memory");
+      const file = join(entry, MEM_FILES.find((f) => existsSync(join(entry, f))) ?? "memory.json");
+      const at = Date.now();
+      const stamped = { key, value, at: new Date(at).toISOString() };
+      if (file.endsWith(".jsonl")) {
+        await appendLine(file, JSON.stringify(stamped));
+        return { key, value, at };
+      }
+      const current = await readJson(file);
+      if (Array.isArray(current)) {
+        const rest = current.filter((r) => !(isRec(r) && str(r, ["key", "name", "title", "id"]) === key));
+        await writeJson(file, [...rest, stamped]);
+      } else {
+        // A plain {key: value} map — including the {memory: {...}} nesting the
+        // reader understands, which must stay nested or it reads back wrong.
+        const map = isRec(current) ? { ...current } : {};
+        if (isRec(map.memory)) map.memory = { ...map.memory, [key]: value };
+        else map[key] = value;
+        await writeJson(file, map);
+      }
+      return { key, value, at };
+    },
   };
+}
+
+/** A room's directory, or a clear "this shape can't hold that" for a bare log. */
+async function roomDir(entry: string, what: string): Promise<string> {
+  if ((await stat(entry)).isDirectory()) return entry;
+  throw new WriteUnsupported(`${what} needs a room directory, not a bare log file`);
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await writeFile(path, JSON.stringify(value, null, 2) + "\n");
+}
+
+/**
+ * Append one JSONL record, healing a log that was left without a trailing
+ * newline — otherwise the append lands on the end of the last line and takes a
+ * message down with it.
+ */
+async function appendLine(path: string, line: string): Promise<void> {
+  const file = Bun.file(path);
+  const size = (await file.exists()) ? file.size : 0;
+  const needsBreak = size > 0 && (await file.slice(size - 1).text()) !== "\n";
+  await appendFile(path, (needsBreak ? "\n" : "") + line + "\n");
+}
+
+/**
+ * Append one record to a room, whatever shape the room is: a directory keeps
+ * its existing log (or gets `fallback`), a bare `.jsonl` is appended to, and a
+ * `.json` array is rewritten with the record on the end.
+ */
+async function appendRecord(entry: string, candidates: string[], fallback: string, record: Rec): Promise<void> {
+  const isDir = (await stat(entry)).isDirectory();
+  const target = isDir ? join(entry, candidates.find((f) => existsSync(join(entry, f))) ?? fallback) : entry;
+  if (target.endsWith(".jsonl")) {
+    await appendLine(target, JSON.stringify(record));
+    return;
+  }
+  const current = await readJson(target);
+  const list = Array.isArray(current) ? current : pickList(current);
+  await writeJson(target, [...list, record]);
 }
 
 function emptyRoom(id: string): Room {
@@ -508,18 +809,24 @@ export const SETUP_HINT = [
 
 // ------------------------------------------------------------------ public API
 
-/** Active rooms, newest activity first, plus which backend answered. */
-export async function listRooms(): Promise<{ rooms: Room[]; source: Source }> {
+/**
+ * Active rooms, newest activity first, which backend answered, and whether it
+ * can be written to (`null` when the transport can't know without trying — the
+ * composer stays open and a WriteUnsupported later settles it).
+ */
+export async function listRooms(): Promise<{ rooms: Room[]; source: Source; writable: boolean | null }> {
   const errors: string[] = [];
   for (const b of backends()) {
     try {
-      return { rooms: await b.rooms(), source: b.kind };
+      const rooms = await b.rooms();
+      const writable = b.writable ? await b.writable() : b.post ? null : false;
+      return { rooms, source: b.kind, writable };
     } catch (e) {
       errors.push(`${b.kind}: ${msg(e)}`);
     }
   }
   if (errors.length) throw new Error(errors.join(" · ").slice(0, 200));
-  return { rooms: [], source: "none" };
+  return { rooms: [], source: "none", writable: false };
 }
 
 /** One room drilled into: recent messages, agents present, shared memory. */
@@ -533,4 +840,83 @@ export async function roomDetail(id: string, limit = 50): Promise<RoomDetail> {
     }
   }
   throw new Error(errors.join(" · ").slice(0, 200) || "no mycelium backend");
+}
+
+// -------------------------------------------------------------------- writing
+
+/**
+ * Run a write against the first backend that can do it. A backend without the
+ * method, or one that answers WriteUnsupported, is skipped — the next transport
+ * gets a go. Only if NOBODY could is the whole thing unsupported, which is what
+ * lets the applet say "read-only" with confidence instead of guessing.
+ */
+async function write<T>(op: (b: Backend) => Promise<T> | undefined, what: string): Promise<{ value: T; source: Source }> {
+  const errors: string[] = [];
+  let real = false; // did any backend fail for a reason other than "can't"?
+  for (const b of backends()) {
+    const run = op(b);
+    if (!run) {
+      errors.push(`${b.kind}: cannot ${what}`);
+      continue;
+    }
+    try {
+      return { value: await run, source: b.kind };
+    } catch (e) {
+      if (!(e instanceof WriteUnsupported)) real = true;
+      errors.push(`${b.kind}: ${msg(e)}`);
+    }
+  }
+  const detail = errors.join(" · ").slice(0, 200) || `no mycelium backend can ${what}`;
+  throw real ? new Error(detail) : new WriteUnsupported(detail);
+}
+
+/** Say something in a room. The message comes back as the backend stored it. */
+export async function postMessage(room: string, from: string, text: string): Promise<{ message: Message; source: Source }> {
+  const { value, source } = await write((b) => b.post?.(room, from, text), "post");
+  return { message: value, source };
+}
+
+/** Open a new room. */
+export async function createRoom(room: NewRoom): Promise<{ room: Room; source: Source }> {
+  const { value, source } = await write((b) => b.create?.(room), "create a room");
+  return { room: value, source };
+}
+
+/** Announce what this agent is doing ("thinking", "shipping #38", "afk"). */
+export async function setStatus(agent: string, status: string, room: string | null = null): Promise<{ source: Source }> {
+  const { source } = await write((b) => b.status?.(agent, status, room), "set a status");
+  return { source };
+}
+
+/** Write one entry into a room's shared memory. */
+export async function remember(room: string, key: string, value: string): Promise<{ memo: Memo; source: Source }> {
+  const { value: memo, source } = await write((b) => b.remember?.(room, key, value), "write shared memory");
+  return { memo, source };
+}
+
+// ------------------------------------------------------------------- optimism
+
+/** A message posted from here that the backend hasn't echoed back yet. */
+export interface Pending {
+  room: string;
+  from: string;
+  text: string;
+  at: number;
+}
+
+/** How long an unechoed message keeps showing before we stop claiming it. */
+export const PENDING_TTL_MS = 20_000;
+
+/**
+ * The sends still waiting to appear. Your message shows the instant you press
+ * enter; the next refresh brings the room back from the backend, and any
+ * pending copy it now contains (same author, same text) is dropped so the room
+ * never shows it twice. Anything older than PENDING_TTL_MS is dropped anyway —
+ * a write we can't see land is not something to keep asserting.
+ */
+export function unconfirmed(pending: Pending[], messages: Message[], room: string, now = Date.now()): Pending[] {
+  const seen = new Set(messages.map((m) => `${m.from}\u0000${m.text}`));
+  return pending.filter(
+    (p) => now - p.at < PENDING_TTL_MS && !(p.room === room && seen.has(`${p.from}\u0000${p.text}`)),
+  );
 }

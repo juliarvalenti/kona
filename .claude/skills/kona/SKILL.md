@@ -93,11 +93,22 @@ Searchable: `email.search` takes `{"q": "..."}`.
 
 ### mycelium — Mycelium
 
-The coordination layer — rooms, agents, and what they share.
+The coordination layer — rooms, agents, and what you say to them.
 
 - `mycelium.refresh` — Re-read the room list (and the open room) from the backend.  ·  `kona call mycelium refresh`, key `r`
 - `mycelium.open` — Drill into a room by `room` id — agents, recent messages, shared memory.  ·  `kona call mycelium open '{"room":"ship-kona"}'`
 - `mycelium.search` — Filter rooms by name, topic, or a member agent.  ·  `kona call mycelium search '{"q":"kona"}'`
+- `mycelium.compose`  ·  `kona call mycelium compose`, key `return`
+- `mycelium.draft`  ·  `kona call mycelium draft`
+- `mycelium.blur`  ·  `kona call mycelium blur`
+- `mycelium.post`  ·  `kona call mycelium post`
+- `mycelium.create`  ·  `kona call mycelium create`, key `n`
+- `mycelium.status`  ·  `kona call mycelium status`, key `s`
+- `mycelium.remember`  ·  `kona call mycelium remember`, key `m`
+- `mycelium.field`  ·  `kona call mycelium field`
+- `mycelium.next`  ·  `kona call mycelium next`
+- `mycelium.form`  ·  `kona call mycelium form`
+- `mycelium.dismiss`  ·  `kona call mycelium dismiss`
 
 Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `up`, `down`.
 
