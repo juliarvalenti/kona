@@ -253,3 +253,59 @@ test("mycelium explains how to connect when no backend answered", async () => {
   expect(frame).toContain("MYCELIUM_URL");
   expect(frame).toContain(".mycelium/rooms");
 });
+
+test("sys draws a labeled gauge per metric with a cpu history line", async () => {
+  const frame = await snapshot(
+    "sys",
+    {
+      host: "laptop",
+      platform: "darwin",
+      uptime: 268200,
+      cpu: 0.42,
+      cores: 8,
+      load: [1.24, 0.98, 0.81],
+      history: [0.1, 0.3, 0.7, 0.42],
+      mem: { used: 10_500_000_000, total: 17_179_869_184 },
+      disk: { used: 198_000_000_000, total: 494_384_795_648, mount: "/" },
+      battery: { level: 0.87, charging: false, plugged: false, remaining: "3:12" },
+      mount: "/",
+      sampledAt: 1,
+    },
+    76,
+    24,
+  );
+  expect(frame).toContain("laptop  ·  darwin  ·  up 3d 2h");
+  for (const label of ["CPU", "MEM", "DISK", "BATT"]) expect(frame).toContain(label);
+  expect(frame).toContain(" 42%"); // cpu, self-labeled by the meter
+  expect(frame).toContain(" 61%"); // memory
+  expect(frame).toContain("9.8G / 16.0G");
+  expect(frame).toContain("on battery · 3:12 left");
+  expect(frame).toContain("█"); // bars have fill
+  expect(frame).toContain("░"); // ...and an empty remainder
+  expect(frame).toContain("▆"); // the cpu sparkline
+});
+
+test("sys dims metrics the machine doesn't have instead of showing an empty gauge", async () => {
+  const frame = await snapshot(
+    "sys",
+    {
+      host: "vm",
+      platform: "linux",
+      uptime: 5400,
+      cpu: 0.94,
+      cores: 4,
+      load: [3.9, 2.1, 1.4],
+      history: [0.9, 0.94],
+      mem: { used: 15_000_000_000, total: 16_856_133_632 },
+      disk: null,
+      battery: null,
+      mount: "/",
+      sampledAt: 1,
+    },
+    60,
+    22,
+  );
+  expect(frame).toContain("BATT  no battery");
+  expect(frame).toContain("DISK  unavailable");
+  expect(frame).toContain(" 94%");
+});
