@@ -77,10 +77,10 @@ export async function listInbox(query = "in:inbox", max = 20): Promise<MailThrea
   const stubs = (list.threads ?? []) as Array<{ id: string; snippet?: string }>;
   const out: MailThread[] = [];
   for (const t of stubs) {
-    const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, {
-      format: "metadata",
-      metadataHeaders: "From,Subject,Date",
-    });
+    // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
+    // passing a comma string silently returns zero headers. Just fetch all
+    // metadata headers and pick the three we want.
+    const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
     const messages = (full.messages ?? []) as GMessage[];
     const last = messages[messages.length - 1];
     const h = last?.payload?.headers;

@@ -25,6 +25,15 @@ switch (cmd) {
     break;
   }
 
+  case "dev": {
+    // Foreground, auto-reloading daemon with logs. Edit an applet/server file
+    // and it restarts; the TUI reconnects on its own.
+    const konad = new URL("./konad.ts", import.meta.url).pathname;
+    const proc = Bun.spawn(["bun", "--watch", konad], { stdio: ["inherit", "inherit", "inherit"] });
+    await proc.exited;
+    break;
+  }
+
   case "login": {
     const { login } = await import("../server/google.ts");
     try {

@@ -17,10 +17,15 @@ async function healthy(): Promise<boolean> {
   }
 }
 
-/** Make sure konad is up; if not, spawn it detached and wait for health. */
+/**
+ * Make sure konad is up; if not, spawn it detached and wait for health.
+ * Spawned with `--watch` so editing an applet or server file auto-restarts the
+ * daemon — the host auto-reconnects and state is persisted, so it's seamless.
+ * (A brand-new applet file is picked up on the next restart, which re-scans.)
+ */
 export async function ensureDaemon(): Promise<void> {
   if (await healthy()) return;
-  const child = spawn("bun", ["run", KONAD], {
+  const child = spawn("bun", ["--watch", KONAD], {
     detached: true,
     stdio: "ignore",
   });
