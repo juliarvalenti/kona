@@ -74,6 +74,38 @@ export function spinner(frame: number, color?: Color): ViewNode {
   return text(SPINNER_FRAMES[i]!, { color });
 }
 
+const SPARK_TICKS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/**
+ * A series as one line of block characters: "▁▃▂▅▇█". Longer series are bucketed
+ * (mean per bucket) down to `width`; a flat series draws a flat mid-line rather
+ * than a misleading full or empty bar. Returns the raw string so it can also sit
+ * inside a recordRow cell — see sparkline() for the ViewNode.
+ */
+export function sparkText(values: number[], width = 12): string {
+  const nums = values.filter((n) => Number.isFinite(n));
+  if (!nums.length || width < 1) return "";
+
+  // Bucket down to width (mean of each bucket); shorter series stay as-is.
+  const points: number[] =
+    nums.length <= width
+      ? nums
+      : Array.from({ length: width }, (_, i) => {
+          const start = Math.floor((i * nums.length) / width);
+          const end = Math.max(start + 1, Math.floor(((i + 1) * nums.length) / width));
+          const slice = nums.slice(start, end);
+          return slice.reduce((a, b) => a + b, 0) / slice.length;
+        });
+
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min;
+  const mid = Math.floor(SPARK_TICKS.length / 2) - 1;
+  return points
+    .map((n) => (span === 0 ? SPARK_TICKS[mid]! : SPARK_TICKS[Math.min(SPARK_TICKS.length - 1, Math.floor(((n - min) / span) * SPARK_TICKS.length))]!))
+    .join("");
+}
+
 export interface RecordCol {
   text: string;
   /** Fixed column width in chars. Omit + grow:true to fill remaining space. */
