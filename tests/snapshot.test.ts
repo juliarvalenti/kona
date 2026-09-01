@@ -104,3 +104,35 @@ test("spotify shows now-playing with track, times, and state", async () => {
   expect(frame).toContain("3:34"); // duration
   expect(frame).toContain("▶"); // playing indicator
 });
+
+test("clock renders a hero time plus a row per zone", async () => {
+  // Day-delta chips are relative to the machine's own day — pin it.
+  const tz = process.env.TZ;
+  process.env.TZ = "UTC";
+  try {
+    const frame = await snapshot(
+      "clock",
+      { now: Date.parse("2026-09-01T16:00:45Z"), cursor: 4 },
+      72,
+      26,
+    );
+    expect(frame).toContain("San Francisco");
+    expect(frame).toContain("UTC-7");
+    expect(frame).toContain("Tokyo");
+    expect(frame).toContain("UTC+9");
+    expect(frame).toContain("+1d"); // Tokyo is already tomorrow
+    expect(frame).toContain("Wed 2 Sep"); // hero date line
+    expect(frame).toContain("█"); // the block-font hero + seconds bar
+  } finally {
+    process.env.TZ = tz;
+  }
+});
+
+test("clock's picker lists matching cities to add", async () => {
+  const frame = await snapshot("clock", { now: Date.parse("2026-09-01T16:00:45Z"), picker: true, query: "india" }, 72, 20);
+  expect(frame).toContain("add a city");
+  expect(frame).toContain("Bengaluru");
+  expect(frame).toContain("Mumbai");
+  expect(frame).toContain("UTC+5:30");
+  expect(frame).not.toContain("Berlin"); // filtered out
+});
