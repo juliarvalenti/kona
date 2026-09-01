@@ -1,4 +1,4 @@
-import { defineApplet, big, text, spacer, col, theme, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer, col, theme, appletConfig, type ViewNode } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
 
@@ -11,6 +11,11 @@ import { notify } from "../../server/notify.ts";
  *     window open — and address any timer by id or label afterwards,
  * and both drive the exact same state. If an agent-started countdown can be
  * paused by your keypress, the bimodal platform works.
+ *
+ * On top of that sits POMODORO MODE: one cycling countdown (work -> short break
+ * -> ... -> long break) that advances itself and banners the desktop at every
+ * phase boundary. It is a mode, not a replacement — the plain countdowns keep
+ * running underneath it, and `p` / `timer.pomodoro.start` reach the same session.
  */
 
 interface Timer {
@@ -22,9 +27,42 @@ interface Timer {
   running: boolean;
 }
 
+/** Where a pomodoro session currently is in its cycle. */
+type Phase = "work" | "short" | "long";
+
+/** Phase lengths and cadence: the shape of one cycle. */
+interface Plan {
+  work: number; // seconds
+  short: number; // seconds
+  long: number; // seconds
+  /** A long break after every Nth work phase. */
+  every: number;
+  /** Roll into the next phase on its own, or park it until you say go. */
+  auto: boolean;
+}
+
+interface Pomodoro {
+  /** Is a session on? The plain countdowns run either way. */
+  active: boolean;
+  phase: Phase;
+  /** Which work round of this cycle we're on, 1..plan.every. */
+  round: number;
+  remaining: number; // seconds
+  total: number; // seconds this phase started at
+  running: boolean;
+  /** Auto-advance off: the next phase is loaded but paused, waiting for you. */
+  awaiting: boolean;
+  /** Work phases that reached zero on `day` — the "3 done today" count. */
+  completed: number;
+  day: string; // YYYY-MM-DD the count belongs to
+  /** The plan this session started under; config supplies it, a verb may override. */
+  plan: Plan;
+}
+
 interface TimerState {
   timers: Timer[];
   cursor: number; // index of the selected timer
+  pomodoro: Pomodoro;
 }
 
 /** The quick presets, in keymap order (1/2/3). */
@@ -33,6 +71,15 @@ const PRESETS = [
   { key: "2", seconds: 900, label: "15m" },
   { key: "3", seconds: 1500, label: "25m" },
 ] as const;
+
+/** The classic cycle, and what you get with no config file at all. */
+const DEFAULT_PLAN: Plan = { work: 1500, short: 300, long: 900, every: 4, auto: true };
+
+const PHASE_LABEL: Record<Phase, string> = {
+  work: "work",
+  short: "short break",
+  long: "long break",
+};
 
 // Accept "5m", "90s", "1h30m", or a bare number of seconds.
 function parseDuration(input: unknown): number {
@@ -74,6 +121,213 @@ function tintOf(t: Timer | undefined): string {
 function statusOf(t: Timer): string {
   return t.running ? "running" : t.remaining > 0 ? "paused" : isDone(t) ? "done" : "idle";
 }
+
+// --- pomodoro ---------------------------------------------------------------
+
+/** Local calendar day, so "done today" rolls over at midnight where you are. */
+function today(d = new Date()): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * A phase length. A duration string is read as written ("25m", "90s"); a bare
+ * number is MINUTES, because nobody configures a 25-second work phase.
+ */
+function phaseLength(v: unknown, fallback: number): number {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return Math.floor(v * 60);
+  if (typeof v === "string") {
+    const s = parseDuration(v);
+    if (s > 0) return s;
+  }
+  return fallback;
+}
+
+function positiveInt(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.floor(v) : fallback;
+}
+
+/**
+ * The plan from `~/.config/kona/config.toml`:
+ *
+ *   [applets.timer.pomodoro]
+ *   work  = "25m"   # duration string, or a bare number of MINUTES
+ *   short = "5m"
+ *   long  = "15m"
+ *   every = 4       # long break after every 4th work phase
+ *   auto  = false   # wait for `p` at each boundary instead of rolling on
+ *
+ * Every key is optional; a missing or malformed one falls back to DEFAULT_PLAN,
+ * exactly like the rest of kona's config.
+ */
+function configPlan(): Plan {
+  const raw = appletConfig("timer").pomodoro;
+  const cfg = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    work: phaseLength(cfg.work, DEFAULT_PLAN.work),
+    short: phaseLength(cfg.short, DEFAULT_PLAN.short),
+    long: phaseLength(cfg.long, DEFAULT_PLAN.long),
+    every: positiveInt(cfg.every, DEFAULT_PLAN.every),
+    auto: typeof cfg.auto === "boolean" ? cfg.auto : DEFAULT_PLAN.auto,
+  };
+}
+
+/** Config first, then whatever the caller of `pomodoro.start` asked for. */
+function planFrom(args: Record<string, unknown>, base: Plan): Plan {
+  return {
+    work: phaseLength(args.work ?? args.seconds ?? args.duration, base.work),
+    short: phaseLength(args.short ?? args.break, base.short),
+    long: phaseLength(args.long ?? args.longBreak, base.long),
+    every: positiveInt(args.every ?? args.rounds, base.every),
+    auto: typeof args.auto === "boolean" ? args.auto : base.auto,
+  };
+}
+
+function freshPomodoro(): Pomodoro {
+  return {
+    active: false,
+    phase: "work",
+    round: 1,
+    remaining: 0,
+    total: 0,
+    running: false,
+    awaiting: false,
+    completed: 0,
+    day: "",
+    plan: configPlan(),
+  };
+}
+
+/** The tally belongs to a day; crossing midnight starts a new one. */
+function rollDay(p: Pomodoro) {
+  const d = today();
+  if (p.day !== d) {
+    p.day = d;
+    p.completed = 0;
+  }
+}
+
+function lengthOf(p: Pomodoro, phase: Phase): number {
+  return phase === "work" ? p.plan.work : phase === "short" ? p.plan.short : p.plan.long;
+}
+
+/** Work, then a break; every `every`th break is the long one. */
+function nextPhase(p: Pomodoro): Phase {
+  if (p.phase !== "work") return "work";
+  return p.round % p.plan.every === 0 ? "long" : "short";
+}
+
+function pomoStatus(p: Pomodoro): string {
+  if (!p.active) return "off";
+  if (p.running) return "running";
+  return p.awaiting ? "waiting" : "paused";
+}
+
+/**
+ * A phase boundary is the whole point of the mode, so it reaches the desktop:
+ * a distinct `timer.pomodoro` event (toggleable on its own in `kona notify`),
+ * keyed per transition so two boundaries never dedupe into one.
+ */
+function notifyPhase(p: Pomodoro, from: Phase) {
+  const onBreak = p.phase !== "work";
+  void notify({
+    event: "timer.pomodoro",
+    title: onBreak ? "Time for a break" : "Break's over, back to it",
+    body: onBreak
+      ? `${fmt(p.total)} ${PHASE_LABEL[p.phase]} — ${p.completed} done today.`
+      : `${fmt(p.total)} of work · round ${p.round}/${p.plan.every}.`,
+    key: `timer.pomodoro:${from}->${p.phase}:${p.round}:${p.completed}`,
+  });
+}
+
+/**
+ * Move onto the next phase. `ran` marks a phase that reached zero on its own —
+ * that is what counts a pomodoro and what earns a banner. A manual skip travels
+ * the same path quietly: you are already at the keyboard.
+ */
+function advance(p: Pomodoro, ran: boolean) {
+  const from = p.phase;
+  const next = nextPhase(p);
+  if (from === "work") {
+    if (ran) {
+      rollDay(p);
+      p.completed += 1;
+    }
+  } else {
+    // A finished break opens the next round — or the next cycle after a long one.
+    p.round = from === "long" ? 1 : p.round + 1;
+  }
+  p.phase = next;
+  p.total = lengthOf(p, next);
+  p.remaining = p.total;
+  p.running = p.plan.auto;
+  p.awaiting = !p.plan.auto;
+  if (ran) notifyPhase(p, from);
+}
+
+/** Begin (or restart) a session at work round 1. */
+function startSession(p: Pomodoro, args: Record<string, unknown>) {
+  p.plan = planFrom(args, configPlan());
+  rollDay(p);
+  p.active = true;
+  p.phase = "work";
+  p.round = 1;
+  p.total = p.plan.work;
+  p.remaining = p.total;
+  p.running = true;
+  p.awaiting = false;
+}
+
+/** What a pomodoro verb hands back — enough for an agent to decide what next. */
+const pomoSummary = (p: Pomodoro) => ({
+  active: p.active,
+  phase: p.phase,
+  phaseLabel: PHASE_LABEL[p.phase],
+  round: p.round,
+  rounds: p.plan.every,
+  remaining: p.remaining,
+  running: p.running,
+  awaiting: p.awaiting,
+  completed: p.completed,
+  status: pomoStatus(p),
+});
+
+/**
+ * state -> theme role, per phase: work wears the accent, a break wears `ok`,
+ * and anything not counting down is `warn` (paused) or `muted` (off).
+ */
+function pomoTint(p: Pomodoro | undefined): string {
+  const th = theme();
+  if (!p || !p.active) return th.muted;
+  if (!p.running) return th.warn;
+  return p.phase === "work" ? th.accent : th.ok;
+}
+
+/** "● ● ◐ ○" — rounds done this cycle, the current one half-filled. */
+function roundDots(p: Pomodoro): string {
+  const done = p.phase === "work" ? p.round - 1 : p.round;
+  return Array.from({ length: p.plan.every }, (_, i) =>
+    i < done ? "●" : i === done && p.phase === "work" ? "◐" : "○",
+  ).join(" ");
+}
+
+/**
+ * Fill in — or repair — the pomodoro slice. A `state.json` written before this
+ * mode existed has no `pomodoro` key at all, and the daemon's shallow merge
+ * would otherwise hand us the shared `initialState` object to mutate.
+ */
+function normalize(state: TimerState) {
+  const saved = state.pomodoro as Partial<Pomodoro> | undefined;
+  const base = freshPomodoro();
+  const p: Pomodoro = { ...base, ...(saved && typeof saved === "object" ? saved : {}) };
+  const plan = saved?.plan;
+  // A live session keeps the plan it started under; an idle one re-reads config.
+  p.plan = p.active && plan && typeof plan === "object" ? { ...base.plan, ...plan } : base.plan;
+  rollDay(p);
+  state.pomodoro = p;
+}
+
+// --- countdowns --------------------------------------------------------------
 
 let seq = 0;
 /** Ids are unique within a daemon run and readable in an agent's transcript. */
@@ -131,11 +385,67 @@ function miniBar(value: number, width: number): string {
   return "█".repeat(filled).padEnd(width, "░");
 }
 
+/** Every countdown as a mini-bar row, selection highlighted. */
+function roster(state: TimerState, width: number): ViewNode[] {
+  const barW = Math.min(14, Math.max(6, Math.floor(width * 0.2)));
+  return state.timers.map((t, i) => {
+    const tint = tintOf(t);
+    return recordRow(
+      [
+        { text: t.running ? "▶" : isDone(t) ? "✓" : "⏸", width: 1 },
+        { text: t.label || t.id, grow: true },
+        { text: miniBar(t.total > 0 ? t.remaining / t.total : 0, barW), width: barW },
+        { text: fmt(t.remaining), width: 8, align: "right" },
+      ],
+      { width, selected: i === state.cursor, accent: tint, color: tint },
+    );
+  });
+}
+
+/** The session, big: which phase, which round, and how many you have banked. */
+function pomodoroHero(p: Pomodoro): ViewNode {
+  const color = pomoTint(p);
+  const status = p.awaiting
+    ? `press p to start the ${PHASE_LABEL[p.phase]}`
+    : p.running
+      ? `${PHASE_LABEL[p.phase]} · n skips`
+      : `paused · p resumes`;
+  return col(
+    [
+      text(`pomodoro  ·  ${PHASE_LABEL[p.phase]}`, { color }),
+      big(fmt(p.remaining), color, "block"),
+      spacer(),
+      progress(p.total > 0 ? p.remaining / p.total : 0, { color, width: 28 }),
+      spacer(),
+      text(`${roundDots(p)}   round ${p.round}/${p.plan.every}`, { color }),
+      text(status, { dim: true }),
+      text(`${p.completed} done today`, { dim: true }),
+    ],
+    { align: "center" },
+  );
+}
+
 export default defineApplet<TimerState>({
   id: "timer",
   title: "Timer",
-  summary: "Several countdowns at once. Presets 1/2/3; space pauses the selected.",
-  initialState: { timers: [], cursor: 0 },
+  summary: "Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.",
+  initialState: {
+    timers: [],
+    cursor: 0,
+    // Config is read when a session starts, so the shipped defaults are enough here.
+    pomodoro: {
+      active: false,
+      phase: "work",
+      round: 1,
+      remaining: 0,
+      total: 0,
+      running: false,
+      awaiting: false,
+      completed: 0,
+      day: "",
+      plan: { ...DEFAULT_PLAN },
+    },
+  },
 
   verbs: {
     // Starts a NEW countdown and selects it — unless `id`/`label` names one
@@ -230,6 +540,71 @@ export default defineApplet<TimerState>({
       emit();
       return t ? summary(t) : {};
     },
+    /**
+     * Pomodoro. Dotted names so the mode reads as one family in the manifest
+     * (`timer.pomodoro.start`, `.skip`, ...) and never collides with the plain
+     * countdown verbs above. Every one of them is a keypress here and an HTTP
+     * call there — "start a pomodoro" and `p` land in the same place.
+     *
+     * Args (all optional, all overriding `[applets.timer.pomodoro]`):
+     * `work`, `short`, `long` (duration string, or a number of minutes),
+     * `every` (long break cadence), `auto` (advance on its own).
+     */
+    "pomodoro.start"(args, { state, emit }) {
+      const p = state.pomodoro;
+      startSession(p, args);
+      emit();
+      return pomoSummary(p);
+    },
+    "pomodoro.pause"(_args, { state, emit }) {
+      const p = state.pomodoro;
+      p.running = false;
+      emit();
+      return pomoSummary(p);
+    },
+    /** Also the "go" at a boundary when auto-advance is off. */
+    "pomodoro.resume"(_args, { state, emit }) {
+      const p = state.pomodoro;
+      if (p.active && p.remaining > 0) {
+        p.running = true;
+        p.awaiting = false;
+      }
+      emit();
+      return pomoSummary(p);
+    },
+    /** The whole life cycle on one key: off -> start, running -> pause, else go. */
+    "pomodoro.toggle"(args, { state, emit }) {
+      const p = state.pomodoro;
+      if (!p.active) startSession(p, args);
+      else if (p.running) p.running = false;
+      else {
+        p.running = p.remaining > 0;
+        p.awaiting = false;
+      }
+      emit();
+      return pomoSummary(p);
+    },
+    /** "skip this break" — next phase, now. A skipped work phase does not count. */
+    "pomodoro.skip"(_args, { state, emit }) {
+      const p = state.pomodoro;
+      if (!p.active) return pomoSummary(p);
+      advance(p, false);
+      p.running = p.remaining > 0;
+      p.awaiting = false;
+      emit();
+      return pomoSummary(p);
+    },
+    /** End the session. Today's tally survives — you did do those. */
+    "pomodoro.stop"(_args, { state, emit }) {
+      const p = state.pomodoro;
+      p.active = false;
+      p.running = false;
+      p.awaiting = false;
+      p.remaining = 0;
+      p.total = 0;
+      emit();
+      return pomoSummary(p);
+    },
     up(_args, { state, emit }) {
       state.cursor = Math.max(0, state.cursor - 1);
       emit();
@@ -246,18 +621,21 @@ export default defineApplet<TimerState>({
    * disk file) doesn't strand.
    */
   init({ state, emit }) {
+    // Also where a state.json from before pomodoro mode grows its slice.
+    normalize(state);
     const legacy = state as unknown as Partial<{ remaining: number; total: number; running: boolean; label: string }>;
-    if (typeof legacy.remaining !== "number") return;
-    if (legacy.remaining > 0 || legacy.running) {
-      state.timers.push({
-        id: nextId(state),
-        label: legacy.label ?? "",
-        remaining: legacy.remaining,
-        total: legacy.total ?? legacy.remaining,
-        running: !!legacy.running,
-      });
+    if (typeof legacy.remaining === "number") {
+      if (legacy.remaining > 0 || legacy.running) {
+        state.timers.push({
+          id: nextId(state),
+          label: legacy.label ?? "",
+          remaining: legacy.remaining,
+          total: legacy.total ?? legacy.remaining,
+          running: !!legacy.running,
+        });
+      }
+      for (const k of ["remaining", "total", "running", "label"]) delete (legacy as Record<string, unknown>)[k];
     }
-    for (const k of ["remaining", "total", "running", "label"]) delete (legacy as Record<string, unknown>)[k];
     clampCursor(state);
     emit();
   },
@@ -265,6 +643,14 @@ export default defineApplet<TimerState>({
   tickMs: 1000,
   tick({ state, emit }) {
     let moved = false;
+    // The pomodoro counts down in the daemon like any other countdown — and
+    // hands itself to the next phase (and to the desktop) when it hits zero.
+    const p = state.pomodoro;
+    if (p?.active && p.running && p.remaining > 0) {
+      p.remaining -= 1;
+      if (p.remaining <= 0) advance(p, true);
+      moved = true;
+    }
     for (const t of state.timers) {
       if (!t.running || t.remaining <= 0) continue;
       t.remaining -= 1;
@@ -288,6 +674,9 @@ export default defineApplet<TimerState>({
 
   keymap: {
     space: { verb: "toggle", label: "pause/resume" },
+    p: { verb: "pomodoro.toggle", label: "pomodoro" },
+    n: { verb: "pomodoro.skip", label: "skip phase", when: (s) => s.pomodoro?.active === true },
+    x: { verb: "pomodoro.stop", label: "end pomodoro", when: (s) => s.pomodoro?.active === true },
     a: { verb: "add", args: { seconds: 60 }, label: "+1m" },
     s: { verb: "stop", label: "stop" },
     c: { verb: "clear", label: "clear" },
@@ -298,11 +687,29 @@ export default defineApplet<TimerState>({
 
   nav: { up: "up", down: "down" },
 
-  accent: (state) => tintOf(selected(state)),
+  // The pomodoro is the hero while it runs, so the frame follows its phase.
+  accent: (state) =>
+    state.pomodoro?.active ? pomoTint(state.pomodoro) : tintOf(selected(state)),
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 62);
     const sel = selected(state);
+    const pomo = state.pomodoro;
+
+    // Pomodoro mode owns the hero while a session is on; the plain countdowns
+    // keep their roster underneath it.
+    if (pomo?.active) {
+      const body: ViewNode[] = [pomodoroHero(pomo)];
+      if (state.timers.length) {
+        body.push(
+          spacer(),
+          divider(W - 1),
+          text(`${state.timers.length} ${state.timers.length === 1 ? "timer" : "timers"}`, { dim: true }),
+          ...roster(state, W),
+        );
+      }
+      return [col(body)];
+    }
 
     if (!sel) {
       return [
@@ -311,6 +718,7 @@ export default defineApplet<TimerState>({
             text("no timers", { color: theme().muted }),
             spacer(),
             text(`press ${PRESETS.map((p) => `${p.key} ${p.label}`).join("  ·  ")}`, { dim: true }),
+            text("p starts a pomodoro", { dim: true }),
             text("or:  kona call timer start '{\"seconds\":300}'", { dim: true }),
           ],
           { align: "center", justify: "center", grow: true },
@@ -334,27 +742,13 @@ export default defineApplet<TimerState>({
     if (state.timers.length === 1) return [hero];
 
     // ...and the whole roster below it, mini bar each, selection highlighted.
-    const barW = Math.min(14, Math.max(6, Math.floor(W * 0.2)));
-    const rows: ViewNode[] = state.timers.map((t, i) => {
-      const tint = tintOf(t);
-      return recordRow(
-        [
-          { text: t.running ? "▶" : isDone(t) ? "✓" : "⏸", width: 1 },
-          { text: t.label || t.id, grow: true },
-          { text: miniBar(t.total > 0 ? t.remaining / t.total : 0, barW), width: barW },
-          { text: fmt(t.remaining), width: 8, align: "right" },
-        ],
-        { width: W, selected: i === state.cursor, accent: tint, color: tint },
-      );
-    });
-
     return [
       col([
         hero,
         spacer(),
         divider(W - 1),
         text(`${state.timers.length} timers`, { dim: true }),
-        ...rows,
+        ...roster(state, W),
       ]),
     ];
   },

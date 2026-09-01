@@ -277,3 +277,173 @@ test("init folds a persisted v0 countdown into the list", () => {
   expect(h2.state.timers).toEqual([]);
   expect(h2.state).not.toHaveProperty("running");
 });
+
+// --- pomodoro mode -----------------------------------------------------------
+//
+// The cycle is the same reducer discipline as the countdowns: verbs and tick
+// move one state slice, and the view reads it. These drive short phases so a
+// whole cycle fits in a handful of ticks.
+
+/** A session with tiny phases: work 2s, short 1s, long 3s, long every 2nd. */
+function pomo(h: ReturnType<typeof harness>, over: Record<string, unknown> = {}) {
+  return h.call("pomodoro.start", { work: "2s", short: "1s", long: "3s", every: 2, ...over });
+}
+
+test("pomodoro.start opens a work phase on the default plan", () => {
+  const h = harness();
+  const res = h.call("pomodoro.start") as { phase: string; remaining: number; rounds: number };
+  expect(res).toMatchObject({ active: true, phase: "work", round: 1, running: true });
+  expect(h.state.pomodoro).toMatchObject({ remaining: 1500, total: 1500 }); // 25m
+  expect(res.rounds).toBe(4); // long break every 4th
+  expect(h.state.timers).toEqual([]); // the plain countdowns are untouched
+});
+
+test("a work phase that runs out banks a pomodoro and rolls into the break", () => {
+  const h = harness();
+  pomo(h);
+  h.tick();
+  expect(h.state.pomodoro).toMatchObject({ phase: "work", remaining: 1 });
+  h.tick();
+  expect(h.state.pomodoro).toMatchObject({
+    phase: "short",
+    remaining: 1,
+    total: 1,
+    running: true, // auto-advance is the default
+    completed: 1,
+  });
+});
+
+test("the cycle runs work → short → work → long → work", () => {
+  const h = harness();
+  pomo(h); // long break every 2nd work phase
+  const phases: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    h.tick();
+    const p = h.state.pomodoro;
+    if (p.remaining === p.total) phases.push(`${p.phase}${p.round}`);
+  }
+  expect(phases.slice(0, 4)).toEqual(["short1", "work2", "long2", "work1"]);
+  expect(h.state.pomodoro.completed).toBe(3); // three work phases ran to zero in 12s
+});
+
+test("auto:false parks the next phase until you say go", () => {
+  const h = harness();
+  pomo(h, { auto: false });
+  h.tick();
+  h.tick(); // work hits zero
+  expect(h.state.pomodoro).toMatchObject({ phase: "short", running: false, awaiting: true });
+
+  const before = h.state.pomodoro.remaining;
+  h.tick();
+  expect(h.state.pomodoro.remaining).toBe(before); // parked, not counting
+
+  h.call("pomodoro.resume");
+  expect(h.state.pomodoro).toMatchObject({ running: true, awaiting: false });
+  h.tick();
+  expect(h.state.pomodoro.phase).toBe("work"); // and on it goes
+});
+
+test("skip moves to the next phase without banking a pomodoro", () => {
+  const h = harness();
+  pomo(h);
+  h.call("pomodoro.skip");
+  expect(h.state.pomodoro).toMatchObject({ phase: "short", running: true, completed: 0 });
+  h.call("pomodoro.skip"); // "skip this break"
+  expect(h.state.pomodoro).toMatchObject({ phase: "work", round: 2, completed: 0 });
+});
+
+test("pause/resume and toggle drive one session", () => {
+  const h = harness();
+  pomo(h);
+  h.call("pomodoro.pause");
+  expect(h.state.pomodoro.running).toBe(false);
+  h.tick();
+  expect(h.state.pomodoro.remaining).toBe(2); // frozen
+  h.call("pomodoro.resume");
+  expect(h.state.pomodoro.running).toBe(true);
+
+  h.call("pomodoro.toggle");
+  expect(h.state.pomodoro.running).toBe(false); // toggle pauses a running session
+  h.call("pomodoro.toggle");
+  expect(h.state.pomodoro.running).toBe(true); // ...and resumes a paused one
+});
+
+test("toggle starts a session when none is on; stop ends it but keeps the tally", () => {
+  const h = harness();
+  h.call("pomodoro.toggle");
+  expect(h.state.pomodoro).toMatchObject({ active: true, phase: "work", running: true });
+
+  pomo(h);
+  h.tick();
+  h.tick(); // one banked
+  expect(h.call("pomodoro.stop")).toMatchObject({ active: false, status: "off", completed: 1 });
+  h.tick();
+  expect(h.state.pomodoro.remaining).toBe(0); // nothing left counting
+  expect(h.state.pomodoro.completed).toBe(1); // you did do that one
+});
+
+test("a pomodoro and the plain countdowns tick side by side", () => {
+  const h = harness();
+  h.call("start", { seconds: 10, label: "tea" });
+  pomo(h);
+  h.tick();
+  expect(h.at(0).remaining).toBe(9);
+  expect(h.state.pomodoro.remaining).toBe(1);
+});
+
+test("keymap binds the pomodoro keys, with skip/stop gated on a live session", () => {
+  const h = harness();
+  const bind = (k: string) => timer.keymap![k] as { verb: string; when?: (s: TimerState) => boolean };
+  expect(bind("p").verb).toBe("pomodoro.toggle");
+  expect(bind("n").verb).toBe("pomodoro.skip");
+  expect(bind("n").when!(h.state)).toBe(false); // nothing to skip yet
+  pomo(h);
+  expect(bind("n").when!(h.state)).toBe(true);
+  expect(bind("x").when!(h.state)).toBe(true);
+});
+
+test("the view leads with the session: phase, round, and today's count", () => {
+  const h = harness();
+  pomo(h);
+  h.call("start", { seconds: 60, label: "tea" });
+  const all = flatten(timer.view(h.state, { width: 62, height: 30 }));
+  expect(all.find((n) => n.kind === "big")).toMatchObject({ text: "00:02" }); // the pomodoro, not the timer
+  const lines = all.filter((n) => n.kind === "text").map((n) => n.text);
+  expect(lines.some((t) => t.includes("pomodoro") && t.includes("work"))).toBe(true);
+  expect(lines.some((t) => t.includes("round 1/2"))).toBe(true);
+  expect(lines.some((t) => t.includes("0 done today"))).toBe(true);
+  expect(lines.some((t) => t.includes("tea"))).toBe(true); // ...and the roster below it
+});
+
+test("accent follows the phase: work accent, break ok, paused warn", () => {
+  const t = theme();
+  const h = harness();
+  pomo(h);
+  expect(timer.accent!(h.state)).toBe(t.accent); // work
+  h.call("pomodoro.skip");
+  expect(timer.accent!(h.state)).toBe(t.ok); // break
+  h.call("pomodoro.pause");
+  expect(timer.accent!(h.state)).toBe(t.warn);
+  h.call("pomodoro.stop");
+  h.call("start", { seconds: 30 });
+  expect(timer.accent!(h.state)).toBe(t.ok); // back to the selected countdown
+});
+
+test("init grows a pomodoro slice onto state persisted before the mode existed", () => {
+  const h = harness();
+  delete (h.state as Partial<TimerState>).pomodoro;
+  h.init();
+  expect(h.state.pomodoro).toMatchObject({ active: false, phase: "work", round: 1 });
+  expect(h.state.pomodoro.plan.work).toBe(1500);
+});
+
+test("today's tally resets when the day turns over", () => {
+  const h = harness();
+  pomo(h);
+  h.tick();
+  h.tick();
+  expect(h.state.pomodoro.completed).toBe(1);
+  h.state.pomodoro.day = "1999-12-31"; // as if the daemon ran through midnight
+  h.init();
+  expect(h.state.pomodoro.completed).toBe(0);
+});
