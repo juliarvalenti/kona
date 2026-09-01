@@ -596,8 +596,14 @@ switch (cmd) {
     }
     console.log(`${cfg.path}${cfg.exists ? "" : "  (absent — using defaults)"}\n`);
     console.log(`default   ${cfg.defaultApplet ?? "(launcher)"}`);
-    console.log("\ntheme");
-    for (const [role, hex] of Object.entries(cfg.theme)) console.log(`  ${role.padEnd(8)} ${hex}`);
+    console.log(`theme     ${cfg.preset}   (kona theme — the picker previews the rest)`);
+    // Mark the roles the file pins by hand: those are the ones a new preset
+    // will NOT change, which is the only surprising thing about presets.
+    console.log("\ntheme roles");
+    for (const [role, hex] of Object.entries(cfg.theme)) {
+      const pinned = role in cfg.themeOverrides ? "  (yours)" : "";
+      console.log(`  ${role.padEnd(10)} ${hex}${pinned}`);
+    }
     const blocks = Object.entries(cfg.applets);
     if (blocks.length) {
       console.log("\napplets");

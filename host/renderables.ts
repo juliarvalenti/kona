@@ -24,7 +24,8 @@ export interface NodeColors {
 }
 
 export interface NodeRendererOpts {
-  colors: NodeColors;
+  /** Read per node, not captured: the palette can change between frames. */
+  colors: () => NodeColors;
   /** A field as styled cells; the stage owns the in-flight draft. */
   inputChunks: (node: InputNode) => TextChunk[];
   /** A textarea as a stack of one-line cell rows (the editor owns the wrap). */
@@ -45,9 +46,8 @@ export function createNodeRenderer(
   renderer: CliRenderer,
   { colors, inputChunks, inputLines, claim }: NodeRendererOpts,
 ): (node: ViewNode, id: string) => Renderable {
-  const { fg: FG, dim: DIM, accent: ACCENT } = colors;
-
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
+    const { fg: FG, dim: DIM, accent: ACCENT } = colors();
     // flexShrink:0 everywhere — leaves must keep their height so they never
     // collapse on top of each other when content exceeds the viewport.
     if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG, wrapMode: "word", flexShrink: 0 });

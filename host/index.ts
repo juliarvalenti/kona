@@ -8,7 +8,7 @@ import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
 import { resolveKey, keyName, isUp, isDown, isSelect, isBack, type InputContext } from "./input.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { clipboardHelpers, copyToClipboard } from "../core/clipboard.ts";
-import { theme } from "../core/config.ts";
+import { refreshConfig, setThemeOverride, theme } from "../core/config.ts";
 
 /**
  * The host is a THIN client. It never owns state — it loads applet modules only
@@ -232,7 +232,15 @@ export async function runHost(startAppletId: string | null) {
   function render() {
     if (!alive) return; // never touch renderables after teardown
     const def = current ? byId.get(current) : null;
-    if (!def) {
+    // Theming is live, from both ends. The file may have changed under us (the
+    // picker's `set`, or an editor), and the applet on screen may be standing a
+    // palette in front of it (the picker's preview) — so both are settled
+    // before anything is drawn, and leaving the applet drops the preview by
+    // simply not asking for it again.
+    refreshConfig();
+    const state = def ? ((states[def.id] ?? def.initialState) as AppletState) : null;
+    setThemeOverride(def && state ? (def.theme?.(state) ?? null) : null);
+    if (!def || !state) {
       current = null;
       search = null; // no applet, no applet-level line editor
       const list = shown();
@@ -248,7 +256,6 @@ export async function runHost(startAppletId: string | null) {
         });
       }
     } else {
-      const state = (states[def.id] ?? def.initialState) as AppletState;
       stage.renderApplet(def, state);
 
       // If a search is open, keep the footer showing it — otherwise a background
