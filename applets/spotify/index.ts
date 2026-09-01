@@ -6,6 +6,7 @@ import {
   pause,
   next,
   previous,
+  setShuffle,
   search,
   searchMoreTracks,
   artistDetail,
@@ -34,6 +35,7 @@ interface SpotifyState {
   device: string;
   context: string;
   upNext: QueueItem[];
+  shuffle: boolean;
   authed: boolean;
   loading: boolean;
   error: string | null;
@@ -107,6 +109,7 @@ export default defineApplet<SpotifyState>({
     device: "",
     context: "",
     upNext: [],
+    shuffle: false,
     authed: false,
     loading: false,
     error: null,
@@ -148,6 +151,18 @@ export default defineApplet<SpotifyState>({
       }
       await Bun.sleep(400);
       await loadNow(state, emit);
+    },
+    async shuffle(_a, { state, emit }) {
+      state.shuffle = !state.shuffle; // optimistic
+      emit();
+      try {
+        await setShuffle(state.shuffle);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      }
+      await Bun.sleep(300);
+      await loadNow(state, emit);
+      return { shuffle: state.shuffle };
     },
     async search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "");
@@ -289,6 +304,7 @@ export default defineApplet<SpotifyState>({
     space: { verb: "playPause", label: "play/pause" },
     n: { verb: "next", label: "next" },
     p: { verb: "previous", label: "prev" },
+    s: { verb: "shuffle", label: "shuffle" },
     b: { verb: "home", label: "home" },
   },
 
@@ -392,7 +408,13 @@ export default defineApplet<SpotifyState>({
       spacer(),
       row([text(fmt(state.positionMs), { dim: true }), progress(frac, { width: barW, color: GREEN }), text(fmt(state.durationMs), { dim: true })], { align: "center", gap: 1 }),
       spacer(),
-      text(`${state.device ? `♪ ${state.device}` : ""}`, { dim: true }),
+      row(
+        [
+          text(`${state.device ? `♪ ${state.device}` : ""}`, { dim: true }),
+          text(state.shuffle ? "   ⤮ shuffle" : "", { color: GREEN }),
+        ],
+        { align: "center" },
+      ),
     ];
 
     if (state.upNext.length) {
