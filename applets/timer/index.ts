@@ -16,6 +16,12 @@ import { notify } from "../../server/notify.ts";
  * -> ... -> long break) that advances itself and banners the desktop at every
  * phase boundary. It is a mode, not a replacement — the plain countdowns keep
  * running underneath it, and `p` / `timer.pomodoro.start` reach the same session.
+ *
+ * The session is not a second applet bolted on, though: it is the FIRST ROW of
+ * the same list. A live session and the countdowns share one selection
+ * (`state.focus` + `state.cursor`), so `up`/`down` walk across all of them, the
+ * selected one is the hero, and `space` pauses whichever it is — you never have
+ * to know which of two pause keys the screen is currently listening to.
  */
 
 interface Timer {
@@ -59,9 +65,17 @@ interface Pomodoro {
   plan: Plan;
 }
 
+/**
+ * Which slot the cursor is on: the pomodoro session (when one is live) or the
+ * countdowns, where `cursor` picks which. One selection over both, so there is
+ * one thing "the selected timer" can mean.
+ */
+type Focus = "pomodoro" | "timers";
+
 interface TimerState {
   timers: Timer[];
   cursor: number; // index of the selected timer
+  focus: Focus; // which slot the cursor is on
   pomodoro: Pomodoro;
 }
 
@@ -278,8 +292,48 @@ function startSession(p: Pomodoro, args: Record<string, unknown>) {
   p.awaiting = false;
 }
 
+/**
+ * The session's half of pause/resume/toggle/stop, as plain functions rather
+ * than verb bodies: `pomodoro.pause` and a `space` that landed on the session
+ * must do the SAME thing, so they call the same code.
+ */
+function pomoPause(p: Pomodoro) {
+  p.running = false;
+}
+
+/** Also the "go" at a boundary when auto-advance is off. */
+function pomoResume(p: Pomodoro) {
+  if (p.active && p.remaining > 0) {
+    p.running = true;
+    p.awaiting = false;
+  }
+}
+
+/** The whole life cycle on one key: off -> start, running -> pause, else go. */
+function pomoToggle(p: Pomodoro, args: Record<string, unknown>) {
+  if (!p.active) startSession(p, args);
+  else if (p.running) pomoPause(p);
+  else pomoResume(p);
+}
+
+/** End the session. Today's tally survives — you did do those. */
+function pomoStop(p: Pomodoro) {
+  p.active = false;
+  p.running = false;
+  p.awaiting = false;
+  p.remaining = 0;
+  p.total = 0;
+}
+
+/** "one more minute" on the phase you are in. */
+function pomoAdd(p: Pomodoro, delta: number) {
+  p.remaining += delta;
+  p.total += delta;
+}
+
 /** What a pomodoro verb hands back — enough for an agent to decide what next. */
 const pomoSummary = (p: Pomodoro) => ({
+  kind: "pomodoro" as const,
   active: p.active,
   phase: p.phase,
   phaseLabel: PHASE_LABEL[p.phase],
@@ -325,6 +379,9 @@ function normalize(state: TimerState) {
   p.plan = p.active && plan && typeof plan === "object" ? { ...base.plan, ...plan } : base.plan;
   rollDay(p);
   state.pomodoro = p;
+  // State written before the two halves shared a selection has no `focus`; a
+  // live session is what you were looking at, so that is where it lands.
+  state.focus = state.focus === "timers" ? "timers" : "pomodoro";
 }
 
 // --- countdowns --------------------------------------------------------------
@@ -350,6 +407,42 @@ function selected(state: TimerState): Timer | undefined {
 }
 
 /**
+ * Is the pomodoro the selected slot — the thing `space` acts on and the hero
+ * shows? Only a live session can hold the selection, and it holds it by default
+ * (starting one is a choice to look at it). With no countdowns left there is
+ * nothing else the cursor could be on, so it comes back regardless.
+ */
+function pomoFocused(state: TimerState): boolean {
+  if (!state.pomodoro?.active) return false;
+  return state.focus === "pomodoro" || state.timers.length === 0;
+}
+
+/** How many rows the one list has: the session, if live, plus the countdowns. */
+function slotCount(state: TimerState): number {
+  return (state.pomodoro?.active ? 1 : 0) + state.timers.length;
+}
+
+/** Does this call name a countdown outright? Then it means that one, always. */
+function namesTimer(args: Record<string, unknown>): boolean {
+  if (typeof args.index === "number") return true;
+  return ["id", "timer", "label", "name"].some(
+    (k) => typeof args[k] === "string" && (args[k] as string).trim() !== "",
+  );
+}
+
+/**
+ * Does a bare `pause`/`resume`/`toggle`/`add`/`stop` mean the session?
+ *
+ * "Pause what I'm looking at" is the whole point of one pause key: with a
+ * session selected, `space` (and an agent's argument-less call) reaches it
+ * instead of silently doing nothing to a countdown behind it. Naming a
+ * countdown — by `id`, `label` or `index` — always wins over the selection.
+ */
+function meansPomodoro(state: TimerState, args: Record<string, unknown>): boolean {
+  return pomoFocused(state) && !namesTimer(args);
+}
+
+/**
  * Which timer a verb acts on. YOU get the selected one; an AGENT can name any
  * of them by `id`, by `label`, or by `index` — same verb either way.
  */
@@ -370,8 +463,13 @@ function target(
   return selected(state);
 }
 
-/** What a verb hands back to its caller — enough for an agent to act again. */
+/**
+ * What a verb hands back to its caller — enough for an agent to act again.
+ * `kind` says WHICH of the two a shared verb acted on, since `pause` with no
+ * argument may well have reached the pomodoro.
+ */
 const summary = (t: Timer) => ({
+  kind: "timer" as const,
   id: t.id,
   label: t.label,
   remaining: t.remaining,
@@ -385,31 +483,91 @@ function miniBar(value: number, width: number): string {
   return "█".repeat(filled).padEnd(width, "░");
 }
 
-/** Every countdown as a mini-bar row, selection highlighted. */
+/**
+ * The one list: a live session on top, then every countdown, each a mini-bar
+ * row with the selection highlighted. The session is a row like any other so
+ * that walking the list with `up`/`down` crosses it — the alternative is two
+ * lists and a hidden rule about which one the keyboard is talking to.
+ */
 function roster(state: TimerState, width: number): ViewNode[] {
   const barW = Math.min(14, Math.max(6, Math.floor(width * 0.2)));
-  return state.timers.map((t, i) => {
-    const tint = tintOf(t);
-    return recordRow(
+  interface Row {
+    mark: string;
+    label: string;
+    remaining: number;
+    total: number;
+    tint: string;
+    selected: boolean;
+  }
+  const render = (r: Row) =>
+    recordRow(
       [
-        { text: t.running ? "▶" : isDone(t) ? "✓" : "⏸", width: 1 },
-        { text: t.label || t.id, grow: true },
-        { text: miniBar(t.total > 0 ? t.remaining / t.total : 0, barW), width: barW },
-        { text: fmt(t.remaining), width: 8, align: "right" },
+        { text: r.mark, width: 1 },
+        { text: r.label, grow: true },
+        { text: miniBar(r.total > 0 ? r.remaining / r.total : 0, barW), width: barW },
+        { text: fmt(r.remaining), width: 8, align: "right" },
       ],
-      { width, selected: i === state.cursor, accent: tint, color: tint },
+      { width, selected: r.selected, accent: r.tint, color: r.tint },
     );
-  });
+
+  const onPomo = pomoFocused(state);
+  const rows: Row[] = [];
+  const p = state.pomodoro;
+  if (p?.active) {
+    rows.push({
+      mark: p.running ? "▶" : "⏸",
+      label: `pomodoro · ${PHASE_LABEL[p.phase]}`,
+      remaining: p.remaining,
+      total: p.total,
+      tint: pomoTint(p),
+      selected: onPomo,
+    });
+  }
+  for (const [i, t] of state.timers.entries()) {
+    rows.push({
+      mark: t.running ? "▶" : isDone(t) ? "✓" : "⏸",
+      label: t.label || t.id,
+      remaining: t.remaining,
+      total: t.total,
+      tint: tintOf(t),
+      selected: !onPomo && i === state.cursor,
+    });
+  }
+  return rows.map(render);
+}
+
+/** "pomodoro · 2 timers" — what the list below the hero is holding. */
+function rosterLabel(state: TimerState): string {
+  const n = state.timers.length;
+  const parts: string[] = [];
+  if (state.pomodoro?.active) parts.push("pomodoro");
+  if (n) parts.push(`${n} ${n === 1 ? "timer" : "timers"}`);
+  return parts.join("  ·  ");
+}
+
+/** One countdown, big: what is left, how far through, and what it is called. */
+function timerHero(t: Timer): ViewNode {
+  const color = tintOf(t);
+  return col(
+    [
+      big(fmt(t.remaining), color, "block"),
+      spacer(),
+      progress(t.total > 0 ? t.remaining / t.total : 0, { color, width: 28 }),
+      spacer(),
+      text(`${statusOf(t)}${t.label ? `  ·  ${t.label}` : ""}`, { color }),
+    ],
+    { align: "center" },
+  );
 }
 
 /** The session, big: which phase, which round, and how many you have banked. */
 function pomodoroHero(p: Pomodoro): ViewNode {
   const color = pomoTint(p);
   const status = p.awaiting
-    ? `press p to start the ${PHASE_LABEL[p.phase]}`
+    ? `press space to start the ${PHASE_LABEL[p.phase]}`
     : p.running
-      ? `${PHASE_LABEL[p.phase]} · n skips`
-      : `paused · p resumes`;
+      ? `${PHASE_LABEL[p.phase]} · space pauses · n skips`
+      : `paused · space resumes`;
   return col(
     [
       text(`pomodoro  ·  ${PHASE_LABEL[p.phase]}`, { color }),
@@ -465,6 +623,8 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
   initialState: {
     timers: [],
     cursor: 0,
+    // A session, once started, is what you are looking at until you move off it.
+    focus: "pomodoro" as Focus,
     // Config is read when a session starts, so the shipped defaults are enough here.
     pomodoro: {
       active: false,
@@ -486,14 +646,26 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       doc: "Start a countdown. `seconds` takes 300, \"5m\" or \"1h30m\"; `label` names it. Naming an existing `id` restarts that one.",
       args: { seconds: 300, label: "tea" },
     },
-    pause: { doc: "Pause a countdown — by `id`, `label`, `index`, else the selected one.", args: { id: "t1" } },
-    resume: { doc: "Resume a paused countdown.", args: { id: "t1" } },
-    toggle: { doc: "Pause or resume, whichever applies (the `space` key).", args: { id: "t1" } },
-    add: { doc: "Add time to a running countdown.", args: { id: "t1", seconds: 60 } },
-    stop: { doc: "Remove a countdown; `{\"all\":true}` clears every one.", args: { id: "t1" } },
+    pause: {
+      doc: "Pause a countdown — by `id`, `label`, `index`, else the selection, which may be a live pomodoro (`kind` in the reply says which it was).",
+      args: { id: "t1" },
+    },
+    resume: { doc: "Resume whatever `pause` paused — the named countdown, else the selection.", args: { id: "t1" } },
+    toggle: {
+      doc: "Pause or resume, whichever applies (the `space` key). With a pomodoro selected and no countdown named, it drives the session.",
+      args: { id: "t1" },
+    },
+    add: { doc: "Add time to a running countdown, or to the current pomodoro phase.", args: { id: "t1", seconds: 60 } },
+    stop: {
+      doc: "Remove a countdown; `{\"all\":true}` clears every one. With a pomodoro selected and none named, it ends the session.",
+      args: { id: "t1" },
+    },
     clear: "Drop the countdowns that already finished.",
     label: { doc: "Rename a countdown.", args: { id: "t1", to: "steep" } },
-    select: { doc: "Move the human's selection to a countdown.", args: { id: "t1" } },
+    select: {
+      doc: "Move the human's selection to a countdown, or onto a live session with `{\"pomodoro\":true}`.",
+      args: { id: "t1" },
+    },
   },
 
   recipes: [
@@ -505,6 +677,14 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
         `kona call timer add '{"id":"t1","seconds":300}'             # +5m, without touching the cursor`,
       ],
       note: "Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon posts a desktop banner (`kona notify on timer.done`).",
+    },
+    {
+      title: "Pause whatever the human is looking at",
+      steps: [
+        `kona call timer toggle '{}'                                 # -> { kind: "pomodoro", status: "paused" }`,
+        `kona call timer toggle '{"id":"t1"}'                        # ...or that countdown, whatever is selected`,
+      ],
+      note: "A live pomodoro and the countdowns share one selection, so an argument-less `pause`/`resume`/`toggle`/`add`/`stop` reaches whichever the human has on screen — `kind` in the reply says which it was. Name a countdown to reach it regardless.",
     },
   ],
 
@@ -529,10 +709,16 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       t.running = seconds > 0;
       if (!existing) state.timers.push(t);
       state.cursor = state.timers.indexOf(t);
+      state.focus = "timers"; // starting a countdown selects it, session or no
       emit();
       return summary(t);
     },
     pause(args, { state, emit }) {
+      if (meansPomodoro(state, args)) {
+        pomoPause(state.pomodoro);
+        emit();
+        return pomoSummary(state.pomodoro);
+      }
       const t = target(state, args);
       if (!t) return {};
       t.running = false;
@@ -540,13 +726,25 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       return summary(t);
     },
     resume(args, { state, emit }) {
+      if (meansPomodoro(state, args)) {
+        pomoResume(state.pomodoro);
+        emit();
+        return pomoSummary(state.pomodoro);
+      }
       const t = target(state, args);
       if (!t) return {};
       if (t.remaining > 0) t.running = true;
       emit();
       return summary(t);
     },
+    // The `space` key. It follows the selection, so it reaches a live pomodoro
+    // instead of quietly doing nothing while the session owns the screen.
     toggle(args, { state, emit }) {
+      if (meansPomodoro(state, args)) {
+        pomoToggle(state.pomodoro, args);
+        emit();
+        return pomoSummary(state.pomodoro);
+      }
       const t = target(state, args);
       if (!t) return {};
       t.running = t.remaining > 0 ? !t.running : false;
@@ -554,15 +752,21 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       return summary(t);
     },
     add(args, { state, emit }) {
+      const delta = parseDuration(args.seconds ?? args.duration ?? 60);
+      if (meansPomodoro(state, args)) {
+        pomoAdd(state.pomodoro, delta);
+        emit();
+        return pomoSummary(state.pomodoro);
+      }
       const t = target(state, args);
       if (!t) return {};
-      const delta = parseDuration(args.seconds ?? args.duration ?? 60);
       t.remaining += delta;
       t.total += delta;
       emit();
       return summary(t);
     },
-    // Stop removes the countdown from the list; `all` clears every one.
+    // Stop removes the countdown from the list; `all` clears every one. On the
+    // session it is `x`: end it, and fall back to the countdowns underneath.
     stop(args, { state, emit }) {
       if (args.all) {
         const removed = state.timers.length;
@@ -570,6 +774,12 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
         clampCursor(state);
         emit();
         return { removed };
+      }
+      if (meansPomodoro(state, args)) {
+        pomoStop(state.pomodoro);
+        state.focus = "timers";
+        emit();
+        return { removed: 1, ...pomoSummary(state.pomodoro) };
       }
       const t = target(state, args);
       if (!t) return { removed: 0 };
@@ -595,9 +805,24 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       emit();
       return summary(t);
     },
+    /** Move the selection — onto a countdown, or onto the session itself. */
     select(args, { state, emit }) {
-      const t = target(state, args);
-      if (t) state.cursor = state.timers.indexOf(t);
+      const named = [args.id, args.timer, args.label, args.name].find((v) => typeof v === "string");
+      const asksPomodoro =
+        args.pomodoro === true ||
+        (typeof named === "string" && named.trim().toLowerCase() === "pomodoro");
+      // A countdown that answers to the name given wins — one may well be
+      // labelled "pomodoro"; `{"pomodoro":true}` always means the session.
+      const t = args.pomodoro === true ? undefined : target(state, args);
+      if (!t && asksPomodoro && state.pomodoro.active) {
+        state.focus = "pomodoro";
+        emit();
+        return pomoSummary(state.pomodoro);
+      }
+      if (t) {
+        state.cursor = state.timers.indexOf(t);
+        state.focus = "timers";
+      }
       emit();
       return t ? summary(t) : {};
     },
@@ -614,34 +839,26 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
     "pomodoro.start"(args, { state, emit }) {
       const p = state.pomodoro;
       startSession(p, args);
+      state.focus = "pomodoro"; // a session you just started is what you're on
       emit();
       return pomoSummary(p);
     },
     "pomodoro.pause"(_args, { state, emit }) {
-      const p = state.pomodoro;
-      p.running = false;
+      pomoPause(state.pomodoro);
       emit();
-      return pomoSummary(p);
+      return pomoSummary(state.pomodoro);
     },
     /** Also the "go" at a boundary when auto-advance is off. */
     "pomodoro.resume"(_args, { state, emit }) {
-      const p = state.pomodoro;
-      if (p.active && p.remaining > 0) {
-        p.running = true;
-        p.awaiting = false;
-      }
+      pomoResume(state.pomodoro);
       emit();
-      return pomoSummary(p);
+      return pomoSummary(state.pomodoro);
     },
     /** The whole life cycle on one key: off -> start, running -> pause, else go. */
     "pomodoro.toggle"(args, { state, emit }) {
       const p = state.pomodoro;
-      if (!p.active) startSession(p, args);
-      else if (p.running) p.running = false;
-      else {
-        p.running = p.remaining > 0;
-        p.awaiting = false;
-      }
+      pomoToggle(p, args);
+      if (p.active) state.focus = "pomodoro";
       emit();
       return pomoSummary(p);
     },
@@ -657,21 +874,27 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
     },
     /** End the session. Today's tally survives — you did do those. */
     "pomodoro.stop"(_args, { state, emit }) {
-      const p = state.pomodoro;
-      p.active = false;
-      p.running = false;
-      p.awaiting = false;
-      p.remaining = 0;
-      p.total = 0;
+      pomoStop(state.pomodoro);
+      state.focus = "timers"; // the countdowns underneath take the selection back
       emit();
-      return pomoSummary(p);
+      return pomoSummary(state.pomodoro);
     },
+    // The cursor walks ONE list: a live session sits above the countdowns, so
+    // `up` off the first countdown lands on it and `down` steps back off it.
     up(_args, { state, emit }) {
-      state.cursor = Math.max(0, state.cursor - 1);
+      if (pomoFocused(state)) return;
+      if (state.cursor === 0 && state.pomodoro.active) state.focus = "pomodoro";
+      else state.cursor = Math.max(0, state.cursor - 1);
       emit();
     },
     down(_args, { state, emit }) {
-      state.cursor = Math.min(Math.max(0, state.timers.length - 1), state.cursor + 1);
+      if (pomoFocused(state)) {
+        if (!state.timers.length) return;
+        state.focus = "timers";
+        state.cursor = 0;
+      } else {
+        state.cursor = Math.min(Math.max(0, state.timers.length - 1), state.cursor + 1);
+      }
       emit();
     },
   },
@@ -734,6 +957,8 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
   },
 
   keymap: {
+    // One pause key for both: `toggle` follows the selection, so this is the
+    // session while it is the hero and the countdown once you move off it.
     space: { verb: "toggle", label: "pause/resume" },
     p: { verb: "pomodoro.toggle", label: "pomodoro" },
     n: { verb: "pomodoro.skip", label: "skip phase", when: (s) => s.pomodoro?.active === true },
@@ -748,31 +973,17 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
 
   nav: { up: "up", down: "down" },
 
-  // The pomodoro is the hero while it runs, so the frame follows its phase.
+  // The frame follows the selection — the session's phase while it is the hero,
+  // the selected countdown's state once you move onto one.
   accent: (state) =>
-    state.pomodoro?.active ? pomoTint(state.pomodoro) : tintOf(selected(state)),
+    pomoFocused(state) ? pomoTint(state.pomodoro) : tintOf(selected(state)),
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 62);
     const sel = selected(state);
     const pomo = state.pomodoro;
 
-    // Pomodoro mode owns the hero while a session is on; the plain countdowns
-    // keep their roster underneath it.
-    if (pomo?.active) {
-      const body: ViewNode[] = [pomodoroHero(pomo)];
-      if (state.timers.length) {
-        body.push(
-          spacer(),
-          divider(W - 1),
-          text(`${state.timers.length} ${state.timers.length === 1 ? "timer" : "timers"}`, { dim: true }),
-          ...roster(state, W),
-        );
-      }
-      return [col(body)];
-    }
-
-    if (!sel) {
+    if (!slotCount(state)) {
       return [
         col(
           [
@@ -787,28 +998,17 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
       ];
     }
 
-    // The selected countdown, big.
-    const color = tintOf(sel);
-    const hero = col(
-      [
-        big(fmt(sel.remaining), color, "block"),
-        spacer(),
-        progress(sel.total > 0 ? sel.remaining / sel.total : 0, { color, width: 28 }),
-        spacer(),
-        text(`${statusOf(sel)}${sel.label ? `  ·  ${sel.label}` : ""}`, { color }),
-      ],
-      { align: "center" },
-    );
+    // The selection, big — the session or a countdown, whichever the cursor is
+    // on. The other rows live in one list underneath, session included.
+    const hero = pomoFocused(state) || !sel ? pomodoroHero(pomo) : timerHero(sel);
+    if (slotCount(state) === 1) return [hero];
 
-    if (state.timers.length === 1) return [hero];
-
-    // ...and the whole roster below it, mini bar each, selection highlighted.
     return [
       col([
         hero,
         spacer(),
         divider(W - 1),
-        text(`${state.timers.length} timers`, { dim: true }),
+        text(rosterLabel(state), { dim: true }),
         ...roster(state, W),
       ]),
     ];

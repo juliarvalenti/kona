@@ -12,7 +12,7 @@ kona state timer
 ```
 
 Several countdowns run at once; `1`/`2`/`3` start the presets, `space` pauses
-the selected one, `x` stops it and `c` clears the finished ones.
+the selected one, `s` stops it and `c` clears the finished ones.
 
 ## Pomodoro
 
@@ -22,15 +22,26 @@ hands itself to the next one, and banners the desktop on the way past
 (`timer.pomodoro`, toggleable on its own). The view shows the phase, the round
 you're on and how many you've banked today.
 
+A live session is not a second screen with its own keys, though: it is the top
+row of the same list. `↑`/`↓` walk across the session and the countdowns, the
+selected one is the hero, and `space` pauses whichever it is — so you never have
+to know which of two pause keys the screen is currently listening to. The same
+goes for an agent: `timer.pause`, `resume`, `toggle`, `add` and `stop` with no
+argument act on the selection (the reply's `kind` says which they reached), and
+naming a countdown by `id`, `label` or `index` always reaches that countdown.
+
 ```sh
 kona timer pomodoro                                  # or `p` in the TUI
 kona call timer pomodoro.start '{"work":"50m","short":"10m"}'
 kona call timer pomodoro.skip '{}'                   # "skip this break"
 kona call timer pomodoro.pause '{}'                  # ...and .resume/.toggle/.stop
+kona call timer toggle '{}'                          # ...or just "pause what's selected"
+kona call timer select '{"pomodoro":true}'           # put the selection back on the session
 ```
 
-In the TUI: `p` starts a session and pauses/resumes it, `n` skips the current
-phase, `x` ends the session.
+In the TUI: `p` starts a session and pauses/resumes it wherever the cursor is,
+`space` pauses it while it holds the selection, `n` skips the current phase and
+`x` ends the session.
 
 ## Config
 

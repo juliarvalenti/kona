@@ -404,8 +404,8 @@ test("keymap binds the pomodoro keys, with skip/stop gated on a live session", (
 
 test("the view leads with the session: phase, round, and today's count", () => {
   const h = harness();
-  pomo(h);
   h.call("start", { seconds: 60, label: "tea" });
+  pomo(h); // starting a session selects it, so it takes the hero
   const all = flatten(timer.view(h.state, { width: 62, height: 30 }));
   expect(all.find((n) => n.kind === "big")).toMatchObject({ text: "00:02" }); // the pomodoro, not the timer
   const lines = all.filter((n) => n.kind === "text").map((n) => n.text);
@@ -446,4 +446,155 @@ test("today's tally resets when the day turns over", () => {
   h.state.pomodoro.day = "1999-12-31"; // as if the daemon ran through midnight
   h.init();
   expect(h.state.pomodoro.completed).toBe(0);
+});
+
+// --- one selection over both --------------------------------------------------
+//
+// The session and the countdowns are one list with one cursor: `space` acts on
+// whichever slot is selected, so there is never a live key you have to know
+// about. These pin the routing, the walk across the list, and the fallbacks.
+
+test("space drives the session while it holds the selection", () => {
+  const h = harness();
+  pomo(h);
+  expect(h.call("toggle")).toMatchObject({ kind: "pomodoro", running: false });
+  h.tick();
+  expect(h.state.pomodoro.remaining).toBe(2); // frozen, not ignored
+  expect(h.call("toggle")).toMatchObject({ kind: "pomodoro", running: true });
+  expect(h.call("pause")).toMatchObject({ kind: "pomodoro", running: false });
+  expect(h.call("resume")).toMatchObject({ kind: "pomodoro", running: true });
+});
+
+test("bare toggle starts a session only through p — never out of nowhere", () => {
+  const h = harness();
+  h.call("start", { seconds: 30 });
+  h.call("toggle"); // no session is on: this is still the countdown's key
+  expect(h.at(0).running).toBe(false);
+  expect(h.state.pomodoro.active).toBe(false);
+});
+
+test("naming a countdown reaches it even while the session is selected", () => {
+  const h = harness();
+  const tea = h.call("start", { seconds: 30, label: "tea" }) as { id: string };
+  pomo(h); // the session takes the selection
+  expect(h.call("pause", { id: tea.id })).toMatchObject({ kind: "timer", running: false });
+  expect(h.state.pomodoro.running).toBe(true); // ...and left the session alone
+  h.call("resume", { label: "tea" });
+  expect(h.at(0).running).toBe(true);
+  h.call("add", { index: 0, seconds: 5 });
+  expect(h.at(0).remaining).toBe(35);
+  expect(h.state.pomodoro.remaining).toBe(2);
+});
+
+test("starting a countdown moves the selection off the session", () => {
+  const h = harness();
+  pomo(h);
+  h.call("start", { seconds: 30, label: "tea" });
+  h.call("toggle"); // the countdown is what you're looking at now
+  expect(h.at(0).running).toBe(false);
+  expect(h.state.pomodoro.running).toBe(true);
+
+  // ...and the session is still on screen, as a row above the countdown
+  const all = flatten(timer.view(h.state, { width: 62, height: 30 }));
+  expect(all.find((n) => n.kind === "big")).toMatchObject({ text: "00:30" });
+  const rows = all.filter((n) => n.kind === "text" && /█|░/.test(n.text));
+  expect(rows.some((n) => n.kind === "text" && n.text.includes("pomodoro"))).toBe(true);
+  expect(rows.filter((n) => n.kind === "text" && n.focus)).toHaveLength(1); // one selection
+});
+
+test("up/down walk one list across the session and the countdowns", () => {
+  const h = harness();
+  pomo(h);
+  h.call("start", { seconds: 10, label: "a" });
+  h.call("start", { seconds: 20, label: "b" }); // cursor: b
+
+  h.call("up"); // b -> a
+  expect(h.state.cursor).toBe(0);
+  h.call("up"); // a -> the session
+  h.call("toggle");
+  expect(h.state.pomodoro.running).toBe(false);
+  h.call("up"); // the top of the list: nowhere further to go
+  h.call("toggle");
+  expect(h.state.pomodoro.running).toBe(true);
+
+  h.call("down"); // the session -> a
+  expect(h.state.cursor).toBe(0);
+  h.call("toggle");
+  expect(h.at(0).running).toBe(false);
+  expect(h.state.pomodoro.running).toBe(true);
+});
+
+test("select moves onto the session by name, and off it by countdown", () => {
+  const h = harness();
+  const tea = h.call("start", { seconds: 30, label: "tea" }) as { id: string };
+  pomo(h);
+  expect(h.call("select", { id: tea.id })).toMatchObject({ kind: "timer", label: "tea" });
+  h.call("toggle");
+  expect(h.at(0).running).toBe(false);
+
+  expect(h.call("select", { pomodoro: true })).toMatchObject({ kind: "pomodoro", active: true });
+  h.call("toggle");
+  expect(h.state.pomodoro.running).toBe(false);
+});
+
+test("a countdown named pomodoro is still a countdown", () => {
+  const h = harness();
+  h.call("start", { seconds: 30, label: "pomodoro" });
+  pomo(h);
+  expect(h.call("select", { label: "pomodoro" })).toMatchObject({ kind: "timer", id: h.at(0).id });
+});
+
+test("add extends the phase the session is in", () => {
+  const h = harness();
+  pomo(h);
+  h.call("add", { seconds: 60 });
+  expect(h.state.pomodoro).toMatchObject({ remaining: 62, total: 62 });
+});
+
+test("stop ends the selected session and hands the selection back", () => {
+  const h = harness();
+  h.call("start", { seconds: 30, label: "tea" });
+  pomo(h);
+  h.tick();
+  h.tick(); // one banked
+  expect(h.call("stop")).toMatchObject({ removed: 1, active: false, completed: 1 });
+  expect(h.state.timers).toHaveLength(1); // the countdown underneath survives
+  h.call("toggle");
+  expect(h.at(0).running).toBe(false); // ...and holds the selection now
+});
+
+test("the session keeps the selection when there is no countdown to hold it", () => {
+  const h = harness();
+  const tea = h.call("start", { seconds: 30, label: "tea" }) as { id: string };
+  pomo(h);
+  h.call("select", { id: tea.id });
+  h.call("stop", { id: tea.id }); // the list empties under the cursor
+  h.call("toggle");
+  expect(h.state.pomodoro.running).toBe(false); // space still has something to pause
+  expect(timer.accent!(h.state)).toBe(theme().warn); // and the frame follows it
+});
+
+test("the hero and accent follow the selection across the two", () => {
+  const t = theme();
+  const h = harness();
+  pomo(h);
+  h.call("start", { seconds: 30, label: "tea" }); // selects the countdown
+  expect(timer.accent!(h.state)).toBe(t.ok); // a running countdown
+  h.call("select", { pomodoro: true });
+  expect(timer.accent!(h.state)).toBe(t.accent); // ...back to the work phase
+  const all = flatten(timer.view(h.state, { width: 62, height: 30 }));
+  expect(all.find((n) => n.kind === "big")).toMatchObject({ text: "00:02" });
+});
+
+test("state persisted before the two shared a cursor selects the session", () => {
+  const h = harness();
+  delete (h.state as Partial<TimerState>).focus;
+  h.state.pomodoro = { ...h.state.pomodoro, active: true, remaining: 60, total: 1500, running: true };
+  h.call("start", { seconds: 30, label: "tea" });
+  h.state.cursor = 0;
+  delete (h.state as Partial<TimerState>).focus; // as it came off disk
+  h.init();
+  expect(h.state.focus).toBe("pomodoro");
+  h.call("toggle");
+  expect(h.state.pomodoro.running).toBe(false);
 });
