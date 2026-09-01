@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { Color } from "../sdk/index.ts";
+import { BIG_FONTS, isBigFont, type BigFont } from "./fonts.ts";
 import { DEFAULT_PRESET, themePreset, presetIds } from "./themes.ts";
 
 /**
@@ -19,6 +20,7 @@ import { DEFAULT_PRESET, themePreset, presetIds } from "./themes.ts";
  *   preset = "catppuccin-mocha"   # a named palette (core/themes.ts)
  *   accent = "#7aa2f7"            # ...and a role that wins over it
  *   ok     = "#00d488"
+ *   font   = "huge"               # ...including the figlet heroes are set in
  *
  *   [applets.spotify]
  *   accent = "#1db954"        # per-applet frame tint
@@ -68,6 +70,12 @@ export interface Theme {
   caretFg: Color;
   /** Opaque fill for chrome that must hide what's behind it (scrim, panels). */
   panel: Color;
+  /**
+   * The figlet hero displays are lettered in — kona's display TYPEFACE, and
+   * the one role here that isn't a color. A `big` node with no font of its own
+   * gets this one, so a theme reskins AND re-letters (core/fonts.ts).
+   */
+  font: BigFont;
 }
 
 /**
@@ -79,6 +87,8 @@ export interface Theme {
 export const DEFAULT_THEME: Theme = themePreset(DEFAULT_PRESET)!.theme;
 
 const THEME_ROLES = Object.keys(DEFAULT_THEME) as (keyof Theme)[];
+/** Every role but `font` — the ones a hex color is the right answer for. */
+export const COLOR_ROLES = THEME_ROLES.filter((r) => r !== "font") as Exclude<keyof Theme, "font">[];
 
 export interface KonaConfig {
   /** Applet a bare `kona` opens. null = show the launcher. */
@@ -153,11 +163,21 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
         errors.push(`theme.${role}: unknown role (have: ${THEME_ROLES.join(", ")})`);
         continue;
       }
+      // `font` is a role like any other — it just takes a figlet's name where
+      // the rest take a hex.
+      if (role === "font") {
+        if (!isBigFont(value)) {
+          errors.push(`theme.font: unknown figlet ${JSON.stringify(value)} (have: ${BIG_FONTS.join(", ")})`);
+          continue;
+        }
+        themeOverrides.font = value;
+        continue;
+      }
       if (typeof value !== "string" || !HEX.test(value)) {
         errors.push(`theme.${role}: not a hex color (got ${JSON.stringify(value)})`);
         continue;
       }
-      themeOverrides[role as keyof Theme] = value;
+      themeOverrides[role as Exclude<keyof Theme, "font">] = value;
     }
   }
   const theme: Theme = { ...themePreset(preset)!.theme, ...themeOverrides };
@@ -425,11 +445,13 @@ ${blocks.join("\n\n")}
 # or a dir full of them. \`~/.config/kona/plugins/*\` is always scanned.
 # plugins = ["~/src/my-kona-applet"]
 
-# The palette. \`preset\` picks a named one (\`kona theme\` lists them, and the
-# \`theme\` applet previews them live); the roles below are kona's own defaults,
-# and uncommenting one makes it win over whatever preset is in force.
+# The palette AND the display typeface. \`preset\` picks a named one (\`kona
+# theme\` lists them, and the \`theme\` applet previews them live); the roles
+# below are kona's own defaults, and uncommenting one makes it win over
+# whatever preset is in force.
 [theme]
 # preset = "catppuccin-mocha"
+# font   = "${DEFAULT_THEME.font}"  # figlet for hero displays: ${BIG_FONTS.join(", ")}
 # accent = "${DEFAULT_THEME.accent}"  # frames, selection, links
 # alt    = "${DEFAULT_THEME.alt}"  # secondary tint
 # fg     = "${DEFAULT_THEME.fg}"  # body text

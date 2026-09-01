@@ -480,7 +480,7 @@ export default defineApplet<ClockState>({
     const nodes: ViewNode[] = [
       col(
         [
-          big(hero.time, color, "block"),
+          big(hero.time, color),
           progress(hero.seconds / 60, { color, width: Math.min(28, W - 4) }),
           spacer(),
           text(

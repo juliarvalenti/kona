@@ -51,7 +51,7 @@ Everything below is stable — target it. Everything else (the daemon's internal
 | `sdk/components.ts` | composed widgets: lists, meters, sparklines, cards, modals |
 | `sdk/markdown.ts` | `renderMarkdown(md)` — a markdown document as view nodes |
 | `AppletCtx` | `state`, `emit()`, `peek(id)`, `applets()` — what a verb and a tick get |
-| `theme()` / `appletConfig(id)` | the palette and your own settings block |
+| `theme()` / `appletConfig(id)` | the palette (and its figlet) plus your own settings block |
 | `theme(state)` on the definition | retint the whole UI while your applet is open |
 | `sdk/testing.ts` | `renderApplet`, `defineSnapshots`, `testSnapshots` |
 | `sdk/fake.ts` | `fakeProviders(routes)` — answer an applet's provider calls from fixtures |

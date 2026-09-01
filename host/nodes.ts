@@ -1,4 +1,6 @@
-import type { BigFont, InputNode, LayoutOpts, ViewNode } from "../sdk/index.ts";
+import type { InputNode, LayoutOpts, ViewNode } from "../sdk/index.ts";
+import { theme } from "../core/config.ts";
+import { fitBigFont, fontLines, type BigFont } from "../core/fonts.ts";
 
 /**
  * Reading the view tree.
@@ -38,26 +40,25 @@ export const isFocused = (n: ViewNode): boolean =>
 export const fieldRows = (f: InputNode): number => (f.multiline ? Math.max(1, f.rows ?? 6) : 1);
 
 /**
- * How many lines each ASCII font draws. The focus math below counts lines, so a
- * hero header has to be counted at its real height — a `tiny` wordmark billed
- * as six lines would push every row below it off by four.
+ * How many lines a hero draws — its own figlet, the theme's when it names none,
+ * and the narrower one the host falls back to when `width` says it wouldn't
+ * fit. The focus math below counts lines, so a hero has to be counted at the
+ * height it is ACTUALLY drawn at: a `tiny` wordmark billed as six lines would
+ * push every row below it off by four.
  */
-const FONT_LINES: Record<BigFont, number> = {
-  block: 6,
-  tiny: 2,
-  slick: 6,
-  shade: 8,
-  huge: 11,
-  grid: 6,
-  pallet: 6,
-};
+export function bigLines(node: { text: string; font?: BigFont }, width?: number): number {
+  const want = node.font ?? theme().font;
+  return fontLines(width === undefined ? want : fitBigFont(node.text, want, { width }));
+}
 
 /**
  * Line offset of the focused node (the selected list row), so the host can
  * scroll it into view. Approximate heights in lines — good enough because focus
- * only lives on single-line rows in a column.
+ * only lives on single-line rows in a column. `width` is the pane's, and only
+ * matters above a hero: it is what tells a `big` node which figlet it will be
+ * drawn in, and so how many lines it pushes the rows below it down by.
  */
-export function focusLineOf(nodes: ViewNode[]): number | null {
+export function focusLineOf(nodes: ViewNode[], width?: number): number | null {
   let line = 0;
   let found: number | null = null;
   const visit = (n: ViewNode) => {
@@ -80,7 +81,7 @@ export function focusLineOf(nodes: ViewNode[]): number | null {
         line += 1;
         break;
       case "big":
-        line += FONT_LINES[n.font ?? "block"];
+        line += bigLines(n, width);
         break;
       case "row":
         for (const c of n.children) if (isFocused(c)) found = line;

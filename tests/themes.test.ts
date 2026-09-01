@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage } from "../host/stage.ts";
 import {
+  COLOR_ROLES,
   DEFAULT_THEME,
   loadConfig,
   refreshConfig,
@@ -13,7 +14,6 @@ import {
   theme,
   themeOverride,
   writeThemePreset,
-  type Theme,
 } from "../core/config.ts";
 import { DEFAULT_PRESET, THEME_PRESETS, presetIds, resolvePreset, themePreset } from "../core/themes.ts";
 import { defineApplet, text, type AppletDef, type AppletState } from "../sdk/index.ts";
@@ -43,7 +43,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-const ROLES = Object.keys(DEFAULT_THEME) as (keyof Theme)[];
+const ROLES = COLOR_ROLES;
 const HEX = /^#[0-9a-f]{6}$/;
 
 test("every preset fills every role with a real color", () => {

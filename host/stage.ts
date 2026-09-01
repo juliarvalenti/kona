@@ -2,6 +2,7 @@ import { fg, StyledText, type CliRenderer } from "@opentui/core";
 import { type AppletDef, type AppletState, type Overlay, type ViewNode, type InputNode } from "../sdk/index.ts";
 import type { Edit } from "./editor.ts";
 import { theme, appletAccent, appletString, type Theme } from "../core/config.ts";
+import { fitBigFont } from "../core/fonts.ts";
 import { createChrome, clearChildren } from "./chrome.ts";
 import { inputChunks, inputLines, searchChunks, type Draft } from "./field.ts";
 import { appletHints, fitHints, hintChunks, launcherHints, linesFor, overlayHints, fieldHints, FOOTER_MAX_LINES, type Hint } from "./hints.ts";
@@ -98,6 +99,7 @@ export function createStage(renderer: CliRenderer): Stage {
 
   const nodeToRenderable = createNodeRenderer(renderer, {
     colors: () => colors,
+    width: () => innerWidth(),
     inputChunks: (node) => inputChunks(node, draft, colors),
     inputLines: (node) => inputLines(node, draft, colors),
     claim: (index, node) => clickTargets.push({ index, node }),
@@ -151,7 +153,7 @@ export function createStage(renderer: CliRenderer): Stage {
     // Scroll-to-follow-selection: only move the viewport when the focused row
     // would be off-screen — a list that fits never scrolls. `peek` keeps the
     // launcher's summary line on screen with the title it belongs to.
-    const focusLine = focusLineOf(nodes);
+    const focusLine = focusLineOf(nodes, innerWidth());
     hasFocus = focusLine !== null;
     let top = prevScroll;
     if (focusLine !== null) {
@@ -190,11 +192,19 @@ export function createStage(renderer: CliRenderer): Stage {
       const q = opts.query ?? "";
       const clip = (s: string) => (s.length > W ? s.slice(0, W - 1) + "…" : s).padEnd(W);
 
-      // The wordmark. A tall terminal gets the full block letters; a short one
-      // gets the two-line cut, because a header must never eat the list it
-      // introduces. Either way it scrolls away with the content above the fold.
+      // The wordmark, lettered in the theme's figlet like every other hero —
+      // switching theme re-letters it, not just recolors it. What the launcher
+      // keeps is its own rule about SIZE: a header must never eat the list it
+      // introduces, so a short terminal gets the two-line cut and a tall one
+      // gives the wordmark at most a third of the pane. Either way it scrolls
+      // away with the content above the fold.
+      const room = innerHeight();
+      const wordmark = fitBigFont("kona", colors.font, {
+        width: W,
+        height: room >= 24 ? Math.max(6, Math.floor(room / 3)) : 2,
+      });
       const nodes: ViewNode[] = [
-        { kind: "big", text: "kona", color: colors.accent, font: innerHeight() >= 24 ? "block" : "tiny" },
+        { kind: "big", text: "kona", color: colors.accent, font: wordmark },
         {
           kind: "text",
           text: q

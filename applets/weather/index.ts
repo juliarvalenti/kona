@@ -507,7 +507,7 @@ export default defineApplet<WeatherState>({
     const wind = `${windArrow(cur.windDir)} ${Math.round(cur.windSpeed)} ${state.windUnit}`;
     const hero = row(
       [
-        big(String(Math.round(cur.temp)), tint, "block"),
+        big(String(Math.round(cur.temp)), tint),
         col([
           text(`${state.tempUnit}`, { dim: true }),
           spacer(),

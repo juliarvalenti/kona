@@ -1,12 +1,30 @@
-import { defineApplet, col, row, spacer, text, theme, type Color, type Theme, type ViewNode } from "../../sdk/index.ts";
+import {
+  big,
+  bigFits,
+  col,
+  defineApplet,
+  fitBigFont,
+  row,
+  spacer,
+  text,
+  theme,
+  type Color,
+  type Theme,
+  type ViewNode,
+} from "../../sdk/index.ts";
 import { divider } from "../../sdk/components.ts";
 import { loadConfig, refreshConfig, writeThemePreset } from "../../core/config.ts";
 import { THEME_PRESETS, resolvePreset, themePreset } from "../../core/themes.ts";
 
 /**
  * theme — the palette picker. Arrow through the presets and the WHOLE UI
- * recolors under the cursor; enter writes the one it lands on to
- * `~/.config/kona/config.toml`, esc puts back what you had.
+ * recolors AND re-letters under the cursor; enter writes the one it lands on
+ * to `~/.config/kona/config.toml`, esc puts back what you had.
+ *
+ * A theme is colors and a display face: every preset ships a figlet
+ * (`theme().font`), so the `kona` wordmark at the top of this screen is drawn
+ * in the one under the cursor — the same font every hero in kona would then be
+ * lettered in.
  *
  * The preview is not a trick of this applet's view: `theme(state)` (see the
  * applet ABI) hands the host a palette that stands in for the configured one
@@ -57,6 +75,14 @@ function pinned(): (keyof Theme)[] {
   return Object.keys(loadConfig().themeOverrides) as (keyof Theme)[];
 }
 
+/**
+ * The palette the cursor is previewing: the preset under it, with the roles the
+ * config pins laid back on top — so what is on screen is exactly what `set`
+ * would leave you with. Both the applet's `theme` hook (which hands it to the
+ * host) and the view below read this one function.
+ */
+const preview = (s: ThemeState): Theme => ({ ...at(s).theme, ...loadConfig().themeOverrides });
+
 export default defineApplet<ThemeState>({
   id: "theme",
   title: "Theme",
@@ -67,9 +93,9 @@ export default defineApplet<ThemeState>({
   initialState: { cursor: 0, applied: "kona-aloha", note: null },
 
   docs: {
-    list: "Every preset, and which one is applied. Reads nothing else.",
+    list: "Every preset, its figlet, and which one is applied. Reads nothing else.",
     preview: {
-      doc: "Show a preset in the running TUI without saving it — the same thing ↑↓ do. `theme.reset` (esc) puts the saved one back.",
+      doc: "Show a preset in the running TUI — colors and figlet — without saving it. The same thing ↑↓ do; `theme.reset` (esc) puts the saved one back.",
       args: { preset: "nord" },
     },
     set: {
@@ -99,7 +125,7 @@ export default defineApplet<ThemeState>({
         applied: state.applied,
         previewing: at(state).id,
         pinnedRoles: pinned(),
-        presets: THEME_PRESETS.map((p) => ({ id: p.id, label: p.label, dark: p.dark })),
+        presets: THEME_PRESETS.map((p) => ({ id: p.id, label: p.label, dark: p.dark, font: p.theme.font })),
       };
     },
 
@@ -116,7 +142,7 @@ export default defineApplet<ThemeState>({
       state.cursor = indexOf(id);
       state.note = null;
       emit();
-      return { previewing: id, saved: false };
+      return { previewing: id, font: preview(state).font, saved: false };
     },
 
     /** enter: keep what you are looking at. Writes the config file. */
@@ -144,7 +170,7 @@ export default defineApplet<ThemeState>({
         ? `saved ${labelOf(id)} — ${also.join(", ")} still come from your config`
         : `saved ${labelOf(id)} to ${tilde(path)}`;
       emit();
-      return { applied: id, path, saved: true };
+      return { applied: id, font: preview(state).font, path, saved: true };
     },
 
     /** esc: throw the preview away and go back to what is saved. */
@@ -200,28 +226,45 @@ export default defineApplet<ThemeState>({
   // The frame tint follows the cursor, like everything else on screen.
   accent: (s) => at(s).theme.accent,
 
-  /**
-   * The live preview. Role overrides from the config are laid back on top, so
-   * what you see under the cursor is exactly what `set` would leave you with.
-   */
-  theme: (s) => ({ ...at(s).theme, ...loadConfig().themeOverrides }),
+  /** The live preview — colors and figlet both. */
+  theme: preview,
 
   view(state, ctx): ViewNode[] {
-    const W = Math.max(40, ctx?.width ?? 80);
+    // Two widths: the pane as the HOST sees it (what a hero is clamped
+    // against) and the floor the list's own columns are laid out on.
+    const pane = ctx?.width ?? 80;
+    const W = Math.max(40, pane);
     const t = theme();
     const cur = at(state);
+    const shown = preview(state);
     const dirty = cur.id !== state.applied;
+
+    // The wordmark, drawn in the previewed preset's OWN figlet — the half of a
+    // theme that colors can't show. It is also the honest sizing test: figlets
+    // differ enough in size that one can overflow the pane, and what happens
+    // here (fall back to the biggest that fits) is what happens to every hero
+    // in kona, so the picker says so rather than letting you save a face that
+    // gets quietly swapped out.
+    const drawn = fitBigFont("kona", shown.font, { width: pane });
+    const fits = bigFits("kona", shown.font, { width: pane });
     // The name column takes whatever the swatches and the sample don't: those
     // are fixed-width (10 cells of color, then Aa/code/dark), so a narrow
     // terminal clips the label rather than dropping the preview.
     const nameW = Math.min(30, Math.max(14, W - 34));
 
     const nodes: ViewNode[] = [
+      big("kona", shown.accent, drawn),
       text(
         dirty
           ? `previewing ${cur.label} — enter keeps it, esc goes back to ${labelOf(state.applied)}`
           : `${cur.label} — every applet is drawn in it`,
         { color: dirty ? t.warn : t.fg },
+      ),
+      text(
+        fits
+          ? `${shown.font} — the figlet every hero is lettered in`
+          : `${shown.font} — doesn't fit this pane; drawn in ${drawn}, as heroes would be`,
+        fits ? { dim: true } : { color: t.warn },
       ),
       text(`${THEME_PRESETS.length} presets · ↑↓ previews live · enter saves · esc reverts`, { dim: true }),
     ];
