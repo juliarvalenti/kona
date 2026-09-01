@@ -116,7 +116,9 @@ export async function runHost(startAppletId: string | null) {
   // the renderer's buffers but leaves our async loops (SSE subscribe, pending
   // renders) running — they then write to a destroyed buffer ("TextBuffer is
   // destroyed") and the process lingers until a second ctrl+c.
-  const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: false });
+  // useMouse: the terminal reports clicks and the wheel; the stage resolves them
+  // to rows and the handler below turns them into the same intents as the keys.
+  const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true });
   const stage = createStage(renderer);
 
   let alive = true;
@@ -210,6 +212,45 @@ export async function runHost(startAppletId: string | null) {
     if (def.nav?.back && def.nav.canBack?.(state)) await callVerb(def.id, def.nav.back).catch(() => {});
     else current = null;
   }
+
+  /**
+   * The select intent: fire the applet's select verb and follow a hyperlink if
+   * the verb returns one. Shared by → / enter / l and by a mouse click, which
+   * passes the clicked row's `{ index }` so the applet moves its cursor there.
+   */
+  async function select(def: AppletDef, args: Record<string, unknown> = {}) {
+    if (!def.nav?.select) return;
+    stage.resetScroll();
+    const res = (await callVerb(def.id, def.nav.select, args).catch(() => null)) as
+      | { result?: { navigate?: string } }
+      | null;
+    const target = res?.result?.navigate;
+    if (typeof target === "string" && byId.has(target)) {
+      current = target;
+      render();
+    }
+  }
+
+  // The mouse rides the same intents as the keyboard: a click on a row is that
+  // row's "select" (cursor moves there, then the verb fires); the wheel scrolls.
+  stage.onMouse((e) => {
+    if (!alive) return;
+    if (e.kind === "wheel") return stage.scrollBy(e.lines);
+    if (e.index === null) return; // clicked the chrome or a non-selectable line
+    if (search) {
+      search = null; // reaching for the mouse abandons the search line
+      render();
+    }
+    if (current === null) {
+      cursor = e.index;
+      current = applets[cursor]?.id ?? null;
+      stage.resetScroll();
+      render();
+      return;
+    }
+    const def = byId.get(current);
+    if (def) void select(def, { index: e.index });
+  });
 
   renderer.keyInput.on(
     "keypress",
@@ -350,13 +391,7 @@ export async function runHost(startAppletId: string | null) {
     // Select drills in (e.g. open an email); start it at the top. A verb may
     // return {navigate:"<appletId>"} to hyperlink into another applet.
     if (isSelect(n) && nav?.select) {
-      stage.resetScroll();
-      const res = (await callVerb(def.id, nav.select).catch(() => null)) as { result?: { navigate?: string } } | null;
-      const target = res?.result?.navigate;
-      if (typeof target === "string" && byId.has(target)) {
-        current = target;
-        render();
-      }
+      await select(def);
       return;
     }
   });

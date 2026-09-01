@@ -92,8 +92,13 @@ export default defineApplet<DashState>({
       emit();
     },
     // open the selected target: now-playing jumps to the Spotify applet;
-    // a GitHub row opens the PR/issue in the browser.
-    open(_a, { state }) {
+    // a GitHub row opens the PR/issue in the browser. A mouse click passes the
+    // clicked row's index — select it first, then open it.
+    open(a, { state, emit }) {
+      if (typeof a.index === "number") {
+        state.cursor = Math.max(0, Math.min(targets(state).length - 1, a.index));
+        emit();
+      }
       const t = targets(state)[state.cursor];
       if (!t) return {};
       if (t.kind === "spotify") return { navigate: "spotify" };
@@ -144,7 +149,7 @@ export default defineApplet<DashState>({
             { text: `♪ ${state.np.track} — ${state.np.artist}`, grow: true },
             { text: flags, width: 6, align: "right" },
           ],
-          { width: W, selected: state.cursor === 0, accent: GREEN, color: FG },
+          { width: W, selected: state.cursor === 0, accent: GREEN, color: FG, index: 0 },
         ),
       );
     } else {
@@ -179,7 +184,7 @@ export default defineApplet<DashState>({
               { text: n.repo.split("/").pop() ?? n.repo, width: Math.min(18, Math.floor(W * 0.2)) },
               { text: n.age, width: 5, align: "right" },
             ],
-            { width: W, selected: state.cursor === base + i, accent: GREEN, color: FG },
+            { width: W, selected: state.cursor === base + i, accent: GREEN, color: FG, index: base + i },
           ),
         );
       });

@@ -402,8 +402,19 @@ export default defineApplet<SpotifyState>({
     },
     // enter: acts on the selection. On the now-playing screen the cursor moves
     // over artist / context / up-next; in browse it's the current screen's rows.
-    async enter(_a, { state, emit }) {
+    // An index (a mouse click on a row, or an agent's call) selects first, in
+    // whichever cursor space the current screen uses.
+    async enter(a, { state, emit }) {
       try {
+        if (typeof a.index === "number") {
+          if (state.mode === "now") {
+            state.nowCursor = Math.max(0, Math.min(nowTargets(state).length - 1, a.index));
+          } else {
+            const scr = state.stack[state.stack.length - 1];
+            if (scr) scr.cursor = Math.max(0, Math.min(scr.rows.length - 1, a.index));
+          }
+          emit();
+        }
         if (state.mode === "now") {
           const t = nowTargets(state)[state.nowCursor];
           if (!t) return {};
@@ -596,6 +607,7 @@ export default defineApplet<SpotifyState>({
             selected: i === (scr?.cursor ?? -1),
             accent: GREEN,
             color: r.kind === "play" || (r.kind === "device" && r.active) ? GREEN : FG,
+            index: i,
           },
         );
       });
@@ -632,14 +644,16 @@ export default defineApplet<SpotifyState>({
     const nodes: ViewNode[] = [text(`${state.playing ? "▶" : "⏸"} ${state.track}`, { color })];
 
     if (state.artistId) {
-      nodes.push(recordRow([{ text: `by ${state.artistName}`, grow: true }, { text: "artist", width: 8, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }));
+      const i = ti++;
+      nodes.push(recordRow([{ text: `by ${state.artistName}`, grow: true }, { text: "artist", width: 8, align: "right" }], { width: W, selected: cur === i, accent: GREEN, color: FG, index: i }));
     } else {
       nodes.push(text(`by ${state.artist}`, { dim: true }));
     }
 
     nodes.push(text(state.album, { dim: true }));
     if (state.contextUri && ["playlist", "album", "artist"].includes(state.contextType)) {
-      nodes.push(recordRow([{ text: `from ${state.context}`, grow: true }, { text: state.contextType, width: 8, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }));
+      const i = ti++;
+      nodes.push(recordRow([{ text: `from ${state.context}`, grow: true }, { text: state.contextType, width: 8, align: "right" }], { width: W, selected: cur === i, accent: GREEN, color: FG, index: i }));
     }
 
     nodes.push(
@@ -662,8 +676,9 @@ export default defineApplet<SpotifyState>({
     if (state.upNext.length) {
       nodes.push(spacer(), divider(W - 1), text("up next", { dim: true }));
       for (const q of state.upNext) {
+        const i = ti++;
         nodes.push(
-          recordRow([{ text: q.track, grow: true }, { text: q.artist, width: subW, align: "right" }], { width: W, selected: cur === ti++, accent: GREEN, color: FG }),
+          recordRow([{ text: q.track, grow: true }, { text: q.artist, width: subW, align: "right" }], { width: W, selected: cur === i, accent: GREEN, color: FG, index: i }),
         );
       }
     }

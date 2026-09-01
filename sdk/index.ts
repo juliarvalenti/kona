@@ -76,6 +76,11 @@ export type BigFont = "block" | "tiny" | "slick" | "shade" | "huge" | "grid" | "
  * The view vocabulary — deliberately tiny. An applet's `view` returns these and
  * the host maps them to terminal widgets. Plain strings are lines; richer nodes
  * opt into a hero display or color. Grow this set only when an applet needs it.
+ *
+ * A `text` node carries two selection hints: `focus` marks the row the cursor is
+ * on (the host scrolls to keep it visible) and `index` marks the row as a
+ * SELECTABLE TARGET — clicking it fires `nav.select` with that `{ index }`. Both
+ * are set for you by the list components in ./components.ts.
  */
 /** Cross-axis alignment (align-items). */
 export type Align = "start" | "center" | "end" | "stretch";
@@ -138,7 +143,7 @@ export interface BoxOpts extends LayoutOpts {
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
-  | { kind: "text"; text: string; color?: Color; dim?: boolean; bg?: Color; focus?: boolean }
+  | { kind: "text"; text: string; color?: Color; dim?: boolean; bg?: Color; focus?: boolean; index?: number }
   | { kind: "spacer" }
   | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
@@ -160,7 +165,7 @@ export interface ViewCtx {
  * composes these — see sdk/components.ts. The host only understands primitives.
  */
 export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
-export const text = (t: string, opts: { color?: Color; dim?: boolean; bg?: Color; focus?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
+export const text = (t: string, opts: { color?: Color; dim?: boolean; bg?: Color; focus?: boolean; index?: number } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
 export const spacer = (): ViewNode => ({ kind: "spacer" });
 /** Lay children out horizontally. */
 export const row = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "row", children, opts });
@@ -193,10 +198,19 @@ export const box = (children: ViewNode[], opts: BoxOpts = {}): ViewNode => ({ ki
  * `back` is browser-like: if `canBack(state)` is true the host fires the back
  * verb (pop an internal view, e.g. close an open email); otherwise it returns
  * to the launcher. Each field names a verb to fire.
+ *
+ * The mouse rides the same intents: a click on a selectable row fires `select`
+ * with the row's `{ index }`, and the wheel scrolls the viewport.
  */
 export interface Nav<S extends object = AppletState> {
   up?: string;
   down?: string;
+  /**
+   * Acts on the selection. Fired bare by → / enter / l; fired with
+   * `{ index }` when the mouse clicks a row (a click means "select THAT row,
+   * then act"). A select verb should honour `index` by moving its cursor there
+   * first, and fall back to the current cursor when it is absent.
+   */
   select?: string;
   selectLabel?: string;
   back?: string;
