@@ -96,6 +96,21 @@ kona mycelium                        # browse rooms, → to drill in, ← back
 kona call mycelium open '{"room":"ship-kona"}'   # ← what an agent does
 ```
 
+### Ticker
+
+The `ticker` applet needs no account — quotes come from a keyless public
+endpoint that covers stocks, ETFs, indices and crypto alike. Set the watchlist
+once and it stays warm in the daemon:
+
+```jsonc
+// ~/.config/kona/ticker.json
+{ "watchlist": ["AAPL", "NVDA", "SPY", "BTC-USD", "ETH-USD"] }
+```
+
+or `KONA_TICKER_SYMBOLS="AAPL,BTC-USD"`. In the applet, `/` adds a symbol and
+`x` drops the selected one; an agent does the same with
+`kona call ticker add '{"symbol":"NVDA"}'`.
+
 ## Writing an applet
 
 Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its

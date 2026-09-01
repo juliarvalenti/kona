@@ -8,7 +8,8 @@ import { snapshot } from "../bin/snapshot.ts";
  */
 
 test("launcher lists applets with a cursor and title", async () => {
-  const frame = await snapshot("--launcher", undefined, 62, 20);
+  // Tall enough to show the whole launcher list as the applet count grows.
+  const frame = await snapshot("--launcher", undefined, 62, 40);
   expect(frame).toContain("kona");
   expect(frame).toContain("Timer");
   expect(frame).toContain("Storybook");
@@ -308,4 +309,57 @@ test("sys dims metrics the machine doesn't have instead of showing an empty gaug
   expect(frame).toContain("BATT  no battery");
   expect(frame).toContain("DISK  unavailable");
   expect(frame).toContain(" 94%");
+});
+
+const TICKER_QUOTES = [
+  {
+    symbol: "AAPL", name: "Apple Inc.", kind: "equity", currency: "USD",
+    price: 316.85, prevClose: 319.7, change: -2.85, changePct: -0.891,
+    dayHigh: 321.24, dayLow: 312.8, yearHigh: 344.57, yearLow: 225.95,
+    volume: 40667429, open: true, spark: [319, 318, 317.5, 318.2, 316, 315.4, 316.85],
+  },
+  {
+    symbol: "BTC-USD", name: "Bitcoin USD", kind: "crypto", currency: "USD",
+    price: 77859.73, prevClose: 78559.11, change: -699.38, changePct: -0.765,
+    dayHigh: 79159.34, dayLow: 77932, yearHigh: 126198.07, yearLow: 57747.76,
+    volume: 29379194880, open: true, spark: [78732, 78844, 78680, 78377, 78191, 77859.73],
+  },
+];
+
+test("ticker board lists symbols with price, %chg, and a sparkline", async () => {
+  const frame = await snapshot(
+    "ticker",
+    { symbols: ["AAPL", "BTC-USD", "ETH-USD"], quotes: TICKER_QUOTES, cursor: 0, updatedAt: Date.now() },
+    90,
+    16,
+  );
+  expect(frame).toContain("MARKETS");
+  expect(frame).toContain("AAPL");
+  expect(frame).toContain("Bitcoin USD");
+  expect(frame).toContain("77,859.73"); // grouped price
+  expect(frame).toContain("-0.89%"); // signed percent change
+  expect(frame).toContain("█▆▅▇▂▁▄"); // AAPL's intraday shape, as a sparkline
+  expect(frame).toContain("ETH-USD"); // a symbol without a quote yet still gets a row
+});
+
+test("ticker detail shows the day's numbers and a wide sparkline", async () => {
+  const frame = await snapshot(
+    "ticker",
+    { symbols: ["BTC-USD"], quotes: TICKER_QUOTES, open: "BTC-USD", updatedAt: Date.now() },
+    76,
+    22,
+  );
+  expect(frame).toContain("BTC-USD");
+  expect(frame).toContain("crypto");
+  expect(frame).toContain("▼"); // down arrow
+  expect(frame).toContain("prev close");
+  expect(frame).toContain("78,559.11");
+  expect(frame).toContain("77,932.00 – 79,159.34"); // day range
+  expect(frame).toContain("29B"); // compact volume
+});
+
+test("ticker with an empty watchlist explains how to fill it", async () => {
+  const frame = await snapshot("ticker", { symbols: [] }, 72, 14);
+  expect(frame).toContain("Watchlist empty");
+  expect(frame).toContain("ticker.json");
 });
