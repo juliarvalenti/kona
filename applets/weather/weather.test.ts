@@ -3,12 +3,14 @@ import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
 import weather, { sparkline } from "./index.ts";
 import { describeCode, iconForCode, isWet, parseForecast, placeLabel, windArrow } from "../../server/weather.ts";
 import { renderApplet } from "../../sdk/testing.ts";
+import { fakeProviders, type FakeProviders } from "../../sdk/fake.ts";
 
 /**
  * The weather applet has two halves worth testing without a network: the pure
  * transform of open-meteo's column-oriented payload into rows, and the verb
- * reducer. The verbs DO fetch, so we stub `fetch` with a canned payload — which
- * also proves the applet never reaches past `server/weather.ts` for its data.
+ * reducer. The verbs DO fetch, so a fake transport answers them with a canned
+ * payload (#41) — no stubbing of `globalThis.fetch`, and nothing to leak into
+ * the next file if an assertion throws.
  */
 
 const DAYS = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07"];
@@ -78,26 +80,31 @@ function loadedState() {
 
 type WeatherState = typeof weather.initialState;
 
-const realFetch = globalThis.fetch;
+let fake: FakeProviders | null = null;
 afterEach(() => {
-  globalThis.fetch = realFetch;
+  fake?.restore();
+  fake = null;
 });
 
-/** Drive the applet exactly like the daemon does, over a stubbed network. */
+/**
+ * Drive the applet exactly like the daemon does, against a fake open-meteo.
+ * The fake is installed at the transport (sdk/fake.ts), so this also proves the
+ * applet never reaches past `server/weather.ts` for its data — and, since the
+ * transport blocks anything unfaked, that no test here can reach the network.
+ */
 function harness(state: WeatherState = structuredClone(weather.initialState)) {
-  const urls: string[] = [];
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = String(input);
-    urls.push(url);
-    const body = url.includes("geocoding") ? geocodePayload : forecastPayload();
-    return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
-  }) as typeof fetch;
+  fake = fakeProviders({
+    "GET /v1/search": geocodePayload, // geocoding-api.open-meteo.com
+    "GET /v1/forecast": () => forecastPayload(),
+  });
 
   let emits = 0;
   const ctx: AppletCtx<WeatherState> = { state, emit: () => void emits++ };
   return {
     state,
-    urls,
+    get urls() {
+      return fake!.calls.map((c) => c.url);
+    },
     emits: () => emits,
     call: (verb: string, args: Record<string, unknown> = {}) => weather.verbs[verb]!(args, ctx),
     tick: () => weather.tick!(ctx),
@@ -190,7 +197,7 @@ test("refresh reports the reading an agent asked for", async () => {
 
 test("a failed fetch surfaces as an error, not a crash", async () => {
   const h = harness(loadedState() as WeatherState);
-  globalThis.fetch = (async () => new Response(JSON.stringify({ reason: "Latitude must be in range" }), { status: 400 })) as unknown as typeof fetch;
+  fake!.route({ "GET /v1/forecast": () => Response.json({ reason: "Latitude must be in range" }, { status: 400 }) });
   await h.call("refresh");
   expect(h.state.error).toBe("Latitude must be in range");
   expect(h.state.loading).toBe(false);

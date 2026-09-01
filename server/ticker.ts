@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { providerFetch } from "./transport.ts";
 
 /**
  * Market quotes via Yahoo Finance's public chart endpoint — keyless, no account,
@@ -121,7 +122,7 @@ interface ChartMeta {
 /** One symbol. Throws on transport/rate-limit failures; the caller decides. */
 export async function quote(symbol: string): Promise<Quote> {
   const url = `${chartUrl()}/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
-  const res = await fetch(url, {
+  const res = await providerFetch("ticker", url, {
     headers: { "user-agent": UA, accept: "application/json" },
     signal: AbortSignal.timeout(8000),
   });

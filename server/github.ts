@@ -1,3 +1,5 @@
+import { offline } from "./transport.ts";
+
 /**
  * GitHub via the `gh` CLI — no OAuth, piggybacks your existing `gh` auth. The
  * dashboard uses this to surface open PRs/issues that involve you (authored,
@@ -21,17 +23,45 @@ function ago(iso: string): string {
   return `${Math.round(h / 24)}d`;
 }
 
+/**
+ * How a `gh` invocation is run. This is the CLI equivalent of the HTTP
+ * transport in `transport.ts`: a test injects one instead of shelling out to a
+ * `gh` that is signed in as a real human (see #41).
+ */
+export type GhRunner = (args: string[]) => { exitCode: number; stdout: string; stderr: string };
+
+let runner: GhRunner | null = null;
+
+/** Install a fake `gh` (or null to go back to the real CLI). Returns the old one. */
+export function setGhRunner(r: GhRunner | null): GhRunner | null {
+  const prev = runner;
+  runner = r;
+  return prev;
+}
+
+function run(args: string[]): { exitCode: number; stdout: string; stderr: string } {
+  if (runner) return runner(args);
+  if (offline()) {
+    throw new Error(
+      `github: blocked a live \`gh ${args.join(" ")}\` — tests never touch a real account. ` +
+        `Inject a fake with setGhRunner(), or run the opt-in live suite with KONA_LIVE=1.`,
+    );
+  }
+  const r = Bun.spawnSync(["gh", ...args]);
+  return { exitCode: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+}
+
 function search(kind: "prs" | "issues"): Array<{ title: string; number: number; updatedAt: string; url: string; repository: { nameWithOwner: string }; isPullRequest?: boolean }> {
-  const r = Bun.spawnSync([
-    "gh", "search", kind,
+  const r = run([
+    "search", kind,
     "--involves=@me", "--state=open", "--sort=updated", "--limit", "20",
     "--json", "title,number,updatedAt,url,repository,isPullRequest",
   ]);
   if (r.exitCode !== 0) {
-    const err = r.stderr.toString().trim();
+    const err = r.stderr.trim();
     throw new Error(/not found|no such file/i.test(err) ? "gh CLI not installed" : err.slice(0, 120) || "gh failed");
   }
-  return JSON.parse(r.stdout.toString() || "[]");
+  return JSON.parse(r.stdout || "[]");
 }
 
 /** Open PRs and issues involving you, most-recently-updated first. */

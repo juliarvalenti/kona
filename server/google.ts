@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
 import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount, LEGACY_ACCOUNT } from "./mail.ts";
+import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
@@ -103,7 +104,7 @@ function pkce() {
 /** Ask Gmail who a freshly minted access token belongs to. */
 async function whoami(accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch(`${apiBase()}/gmail/v1/users/me/profile`, {
+    const res = await providerFetch("gmail", `${apiBase()}/gmail/v1/users/me/profile`, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -187,7 +188,7 @@ export async function login(): Promise<string> {
   await Bun.sleep(400);
   server.stop(true);
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await providerFetch("gmail", TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -217,6 +218,7 @@ const cached = new Map<string, { token: string; exp: number }>();
 async function accessToken(account: string): Promise<string> {
   // A token straight from the environment (tests, scripts against a fixture).
   if (process.env.KONA_GOOGLE_TOKEN) return process.env.KONA_GOOGLE_TOKEN;
+  if (faked()) return FAKE_TOKEN; // a fake transport authenticates nothing
   const hit = cached.get(account);
   if (hit && hit.exp > Date.now() + 30_000) return hit.token;
   const creds = await clientCreds();
@@ -224,7 +226,7 @@ async function accessToken(account: string): Promise<string> {
   const refreshToken = refreshTokenFor(account);
   if (!refreshToken) throw new Error("Not signed in — run `kona login`");
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await providerFetch("gmail", TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -248,7 +250,7 @@ export async function gapi(
 ): Promise<Record<string, unknown> & any> {
   const token = await accessToken(account);
   const url = `${apiBase()}${path}` + (params ? `?${new URLSearchParams(params)}` : "");
-  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const res = await providerFetch("gmail", url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`gmail ${res.status}: ${await res.text()}`);
   return res.json();
 }
@@ -267,7 +269,7 @@ export async function gapiWrite(
 ): Promise<Record<string, unknown> & any> {
   const token = await accessToken(account);
   const url = `${apiBase()}${path}` + (params ? `?${new URLSearchParams(params)}` : "");
-  const res = await fetch(url, {
+  const res = await providerFetch("gmail", url, {
     method,
     headers: {
       authorization: `Bearer ${token}`,

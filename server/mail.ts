@@ -236,6 +236,8 @@ export function setProviders(list: MailProvider[] | null): void {
 
 export async function providers(): Promise<MailProvider[]> {
   if (injected) return injected;
+  // No mailbox at all under test unless one was injected: the accounts on this
+  // machine are a real human's (see server/transport.ts and #41).
   if (process.env.KONA_FAKE_PROVIDERS) return [];
   const accounts = listAccounts();
   if (!accounts.length) return [];

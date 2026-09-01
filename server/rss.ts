@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { convert as htmlToText } from "html-to-text";
+import { providerFetch } from "./transport.ts";
 
 /**
  * RSS/Atom for kona — no auth, no API, just HTTP + a small parser. Feeds are
@@ -224,7 +225,7 @@ export interface River {
 }
 
 async function fetchOne(source: FeedSource, perFeed: number): Promise<FeedItem[]> {
-  const res = await fetch(source.url, {
+  const res = await providerFetch("rss", source.url, {
     headers: { accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8", "user-agent": "kona-rss/0.1" },
     signal: AbortSignal.timeout(15_000),
     redirect: "follow",

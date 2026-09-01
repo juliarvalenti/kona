@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
 import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount } from "./mail.ts";
+import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 
 /**
  * Microsoft identity platform OAuth for kona — auth code + PKCE against a
@@ -104,7 +105,7 @@ interface TokenResponse {
 /** Ask Graph which mailbox a fresh access token belongs to. */
 async function whoami(accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch(`${graphBase()}/me?$select=mail,userPrincipalName`, {
+    const res = await providerFetch("outlook", `${graphBase()}/me?$select=mail,userPrincipalName`, {
       headers: { authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
@@ -194,7 +195,7 @@ export async function login(): Promise<string> {
   await Bun.sleep(400); // let the browser get the success page first
   server.stop(true);
 
-  const res = await fetch(tokenUrlFor(tenant()), {
+  const res = await providerFetch("outlook", tokenUrlFor(tenant()), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -225,6 +226,7 @@ const cached = new Map<string, { token: string; exp: number }>();
 async function accessToken(account: string): Promise<string> {
   // A token straight from the environment (tests, scripts against a fixture).
   if (process.env.KONA_MICROSOFT_TOKEN) return process.env.KONA_MICROSOFT_TOKEN;
+  if (faked()) return FAKE_TOKEN; // a fake transport authenticates nothing
   const hit = cached.get(account);
   if (hit && hit.exp > Date.now() + 30_000) return hit.token;
   const id = await clientId();
@@ -232,7 +234,7 @@ async function accessToken(account: string): Promise<string> {
   const refreshToken = kcGet(SERVICE, kcAccountName(account));
   if (!refreshToken) throw new Error("Not signed in — run `kona login outlook`");
 
-  const res = await fetch(tokenUrlFor(tenant()), {
+  const res = await providerFetch("outlook", tokenUrlFor(tenant()), {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -270,7 +272,7 @@ export async function graph(
   const token = await accessToken(account);
   const base = path.startsWith("http") ? path : `${graphBase()}${path}`;
   const url = params ? `${base}${base.includes("?") ? "&" : "?"}${new URLSearchParams(params)}` : base;
-  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const res = await providerFetch("outlook", url, { headers: { authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`graph ${res.status}: ${await res.text()}`);
   return res.json();
 }
@@ -288,7 +290,7 @@ export async function graphWrite(
 ): Promise<Record<string, unknown> & any> {
   const token = await accessToken(account);
   const url = path.startsWith("http") ? path : `${graphBase()}${path}`;
-  const res = await fetch(url, {
+  const res = await providerFetch("outlook", url, {
     method,
     headers: {
       authorization: `Bearer ${token}`,

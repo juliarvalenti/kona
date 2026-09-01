@@ -477,7 +477,14 @@ That directory is everything kona knows about it:
 | `index.ts` | the loader — `defineApplet(...)` as the default export |
 | `snapshots.ts` | `tests/snapshot.test.ts`, which discovers fixtures per package |
 | `<id>.test.ts` | `bun test`, which finds tests wherever they live |
+| `<id>.live.test.ts` | you, on purpose — the opt-in run against the real provider |
 | `README.md` | `kona docs <id>` and the generated catalog |
+
+`bun test` never touches a real account: every provider call goes through one
+transport (`server/transport.ts`) that refuses to leave the machine under test,
+and an applet whose verbs fetch installs a fake instead — `fakeProviders()` from
+`sdk/fake.ts`, answering from `tests/fixtures/`, recording the writes it would
+have sent rather than sending them.
 
 The definition is also the manifest: `docs`/`recipes` feed the agent skill,
 `notifications` register the applet's desktop banners, `auth` adds a
