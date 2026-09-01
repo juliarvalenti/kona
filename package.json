@@ -9,12 +9,15 @@
   },
   "scripts": {
     "daemon": "bun run bin/konad.ts",
-    "dev": "bun run bin/konad.ts"
+    "dev": "bun run bin/konad.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@opentui/core": "latest"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^7.0.2"
   }
 }

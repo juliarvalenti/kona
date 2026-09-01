@@ -6,8 +6,9 @@ import { toolsForApplet } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
-const STATE_DIR = join(homedir(), ".local", "state", "kona");
-const STATE_FILE = join(STATE_DIR, "state.json");
+
+// Overridable so tests can point at a throwaway dir instead of the real state.
+const stateDir = () => process.env.KONA_STATE_DIR ?? join(homedir(), ".local", "state", "kona");
 
 type StateMap = Record<string, AppletState>;
 
@@ -17,6 +18,12 @@ type StateMap = Record<string, AppletState>;
  * through the same verbs against the same state.
  */
 export async function startDaemon(port = DEFAULT_PORT) {
+  const STATE_DIR = stateDir();
+  const STATE_FILE = join(STATE_DIR, "state.json");
+  // SSE keepalive knobs. Bun caps idleTimeout at 255s; heartbeat must be well
+  // under it. Both env-tunable so tests can force an idle timeout in ~1s.
+  const IDLE_TIMEOUT = Math.min(255, Number(process.env.KONA_IDLE_TIMEOUT ?? 120));
+  const HEARTBEAT_MS = Number(process.env.KONA_HEARTBEAT_MS ?? 15_000);
   const applets = await loadApplets();
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
 
@@ -60,13 +67,15 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // --- the tick: internal caller, same state, same emit
   for (const a of applets) {
     if (a.tick && a.tickMs) {
-      setInterval(() => {
+      const iv = setInterval(() => {
         try {
           a.tick!(ctxFor(a.id));
         } catch (e) {
           console.error(`[tick:${a.id}]`, e);
         }
       }, a.tickMs);
+      // the server keeps the daemon alive; ticks shouldn't pin the event loop
+      iv.unref?.();
     }
   }
 
@@ -86,6 +95,7 @@ export async function startDaemon(port = DEFAULT_PORT) {
 
   const server = Bun.serve({
     port,
+    idleTimeout: IDLE_TIMEOUT,
     async fetch(req) {
       const url = new URL(req.url);
       const path = url.pathname;
@@ -135,6 +145,7 @@ export async function startDaemon(port = DEFAULT_PORT) {
       // Live state stream. The TUI subscribes; so can an agent that wants to watch.
       if (path === "/events") {
         let push!: (chunk: string) => void;
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
         const stream = new ReadableStream({
           start(controller) {
             const enc = new TextEncoder();
@@ -146,9 +157,17 @@ export async function startDaemon(port = DEFAULT_PORT) {
             subscribers.add(push);
             // greet with a full snapshot so a fresh client paints immediately
             push(`event: snapshot\ndata: ${JSON.stringify(states)}\n\n`);
+            // Heartbeat: an idle applet (paused/stopped timer) emits no state for
+            // a while; without traffic Bun's idleTimeout closes the socket and the
+            // client sees "socket was closed unexpectedly". A comment line keeps
+            // the connection warm without waking the applet. It must fire more
+            // often than idleTimeout.
+            heartbeat = setInterval(() => push(":hb\n\n"), HEARTBEAT_MS);
+            heartbeat.unref?.();
           },
           cancel() {
             subscribers.delete(push);
+            if (heartbeat) clearInterval(heartbeat);
           },
         });
         return new Response(stream, {

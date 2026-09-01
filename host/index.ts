@@ -10,9 +10,10 @@ import { base, callVerb } from "../core/client.ts";
  * makes). Two consumers, one truth.
  */
 
-const DIM = "\x1b[2m";
-const RST = "\x1b[0m";
-const BOLD = "\x1b[1m";
+// NOTE: do NOT put raw ANSI escapes (\x1b[..m) in TextRenderable content —
+// OpenTUI renders through its own cell buffer and miscounts their width, which
+// corrupts layout when line counts change (e.g. switching launcher<->applet).
+// Style via OpenTUI's API instead; here we keep it plain and use glyphs/markers.
 
 type States = Record<string, AppletState>;
 
@@ -62,17 +63,19 @@ export async function runHost(startAppletId: string | null) {
   let current: string | null = startAppletId;
   let cursor = 0; // launcher selection
 
-  function renderLauncher() {
-    const lines: string[] = [`${BOLD}kona${RST}  ${DIM}pick an app${RST}`, ""];
-    applets.forEach((a, i) => {
-      const sel = i === cursor;
-      const mark = sel ? "▸" : " ";
-      const title = sel ? `${BOLD}${a.title}${RST}` : a.title;
-      lines.push(`  ${mark} ${title.padEnd(sel ? 16 + BOLD.length + RST.length : 16)} ${DIM}${a.summary ?? ""}${RST}`);
-    });
-    lines.push("", `${DIM}  ↑/↓ move · enter open · ctrl+c quit${RST}`);
+  function paint(lines: string[]) {
     screen.content = lines.join("\n");
     renderer.requestRender();
+  }
+
+  function renderLauncher() {
+    const lines: string[] = ["kona — pick an app", ""];
+    applets.forEach((a, i) => {
+      const mark = i === cursor ? "▸" : " ";
+      lines.push(`  ${mark} ${a.title.padEnd(14)} ${a.summary ?? ""}`);
+    });
+    lines.push("", "  ↑/↓ move · enter open · ctrl+c quit");
+    paint(lines);
   }
 
   function renderApplet() {
@@ -82,14 +85,8 @@ export async function runHost(startAppletId: string | null) {
     const body = def.view(state as AppletState);
     const lines = Array.isArray(body) ? body : [body];
     const keys = Object.keys(def.keymap ?? {});
-    const help = keys.length ? keys.join(" · ") : "";
-    screen.content = [
-      `${BOLD}${def.title}${RST}  ${DIM}(${def.id})${RST}`,
-      ...lines,
-      "",
-      `${DIM}  ${help}${help ? "  ·  " : ""}esc back · ctrl+c quit${RST}`,
-    ].join("\n");
-    renderer.requestRender();
+    const help = keys.length ? `${keys.join(" · ")}  ·  ` : "";
+    paint([`${def.title}  (${def.id})`, ...lines, "", `  ${help}esc back · ctrl+c quit`]);
   }
 
   function render() {
@@ -112,7 +109,7 @@ export async function runHost(startAppletId: string | null) {
     renderer.requestRender();
   });
 
-  renderer.keyInput().on("keypress", async (k: { name: string; ctrl: boolean }) => {
+  renderer.keyInput.on("keypress", async (k: { name: string; ctrl: boolean }) => {
     // ctrl+c is handled by exitOnCtrlC.
     if (current === null) {
       // launcher navigation

@@ -33,7 +33,7 @@ export type Verb<S = AppletState> = (
 /** A key can fire a verb by name, or a verb with fixed args. */
 export type KeyBinding = string | { verb: string; args: Record<string, unknown> };
 
-export interface AppletDef<S extends AppletState = AppletState> {
+export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
   /** Human title shown in the launcher. */
@@ -54,9 +54,12 @@ export interface AppletDef<S extends AppletState = AppletState> {
 }
 
 /** Identity helper — gives you types and a stable shape. */
-export function defineApplet<S extends AppletState>(def: AppletDef<S>): AppletDef<S> {
+export function defineApplet<S extends object>(def: AppletDef<S>): AppletDef<S> {
   return def;
 }
+
+/** Type-erased applet, as the daemon/host/loader handle them generically. */
+export type AnyApplet = AppletDef<AppletState>;
 
 /** The tool manifest entry an agent reads to learn what it can call. */
 export interface ToolSpec {
@@ -65,7 +68,7 @@ export interface ToolSpec {
   verb: string;
 }
 
-export function toolsForApplet(def: AppletDef): ToolSpec[] {
+export function toolsForApplet(def: AnyApplet): ToolSpec[] {
   return Object.keys(def.verbs).map((verb) => ({
     name: `${def.id}.${verb}`,
     applet: def.id,
