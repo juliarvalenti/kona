@@ -159,6 +159,25 @@ test("an open filter takes the letters — but ↑↓ still move and enter still
   expect(launcherKey(open, { name: "return" })).toEqual({ kind: "open", index: 1 });
 });
 
+test("ctrl+y copies a prompt for the whole set, filter open or not (#62)", () => {
+  // The launcher can't spare a bare letter (every printable key starts a
+  // filter), so the whole-set copy-prompt is the ctrl chord of the applets' own
+  // `y`. It has to survive the two states a bare key can't: an open filter,
+  // which eats letters, and a filter that matches nothing.
+  const ctrlY = { name: "y", ctrl: true, sequence: "\x19" };
+  expect(launcherKey({ count: 4, cursor: 2, filter: null }, ctrlY)).toEqual({ kind: "prompt" });
+  expect(launcherKey({ count: 3, cursor: 1, filter: edit("ma") }, ctrlY)).toEqual({ kind: "prompt" });
+  // Nothing matches the filter, but "what is installed" is still copyable.
+  expect(launcherKey({ count: 0, cursor: 0, filter: edit("zzz") }, ctrlY)).toEqual({ kind: "prompt" });
+  // A bare `y` is still text, and never the prompt key.
+  expect(launcherKey({ count: 4, cursor: 0, filter: null }, { name: "y", sequence: "y" })).toEqual({
+    kind: "filter",
+    edit: edit("y"),
+    cursor: 0,
+  });
+  expect(startsFilter(ctrlY)).toBe(false);
+});
+
 test("esc clears the filter, and so does backspacing out of an empty one", () => {
   expect(launcherKey({ count: 3, cursor: 0, filter: edit("ma") }, { name: "escape" })).toEqual({
     kind: "filter",

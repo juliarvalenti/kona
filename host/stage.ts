@@ -34,7 +34,7 @@ export type { StageMouse } from "./mouse.ts";
 export type { Draft } from "./field.ts";
 // The platform's own copy-prompt keybind lives with the hint legend that
 // advertises it; the host imports it from here as the stage's public surface.
-export { COPY_PROMPT_KEY } from "./hints.ts";
+export { COPY_PROMPT_KEY, LAUNCHER_COPY_PROMPT_KEY } from "./hints.ts";
 
 /**
  * What the launcher is showing beyond the list itself. `applets` is already

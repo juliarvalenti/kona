@@ -1,6 +1,6 @@
 ---
 name: kona
-description: Drive kona applets as an agent: discover what is installed from the live tool manifest, read applet state, fire verbs, and watch the event stream. Use when asked to act on a kona applet from the command line — clock (world clock), dash (dashboard), email, mycelium, notes, rss, spotify, storybook, sys (system), ticker, timer, weather, webex, workflows.
+description: Drive kona applets as an agent: discover what is installed from the live tool manifest, read applet state, fire verbs, and watch the event stream. Use when asked to act on a kona applet from the command line — clock (world clock), dash (dashboard), email, mycelium, notes, rss, spotify, storybook, sys (system), theme, ticker, timer, weather, webex, workflows.
 ---
 
 # Driving kona
@@ -47,7 +47,7 @@ state after the call — so you rarely need a follow-up read.
 
 ## Applets on this machine
 
-Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `ticker`, `timer`, `weather`, `webex`, `workflows`.
+Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `theme`, `ticker`, `timer`, `weather`, `webex`, `workflows`.
 
 ### clock — World Clock
 
@@ -68,10 +68,10 @@ Searchable: `clock.find` takes `{"q": "..."}`.
 
 ### dash — Dashboard
 
-Live cockpit — now playing, timer, mail, GitHub. Leave it open.
+Live cockpit — whatever your applets say is happening right now.
 
-- `dash.refresh` — Re-aggregate the dashboard from the other applets' live state, and refetch GitHub.  ·  `kona call dash refresh`, key `r`
-- `dash.open` — Open a row: a GitHub PR/issue in the browser, or jump to the Spotify applet.  ·  `kona call dash open '{"index":0}'`
+- `dash.refresh` — Rebuild the board from every applet's live state, and refetch GitHub.  ·  `kona call dash refresh`, key `r`
+- `dash.open` — Open a row: a GitHub PR/issue in the browser, or jump into the applet that contributed the card.  ·  `kona call dash open '{"index":0}'`
 
 Cursor verbs (the keyboard's business — address a row by id or index instead): `up`, `down`.
 
@@ -134,17 +134,24 @@ Searchable: `mycelium.search` takes `{"q": "..."}`.
 
 ### notes — Notes
 
-A scratchpad that survives restarts. Agents jot lines too.
+A notepad: titled, multi-line notes that survive restarts.
 
-- `notes.add` — Jot a line. Newest first.  ·  `kona call notes add '{"text":"ship the skill generator"}'`
-- `notes.edit` — Replace a note's text, by `id` or `index`.  ·  `kona call notes edit '{"id":"a1b2c3d4","text":"ship it tomorrow"}'`
+- `notes.add` — Write a note. `{title, body}`, or `{text}` whose first line titles it. Newest first.  ·  `kona call notes add '{"title":"release plan","body":"cut rc1 friday\nfreeze monday"}'`
+- `notes.edit` — Rewrite a note, by `id` or `index`. Pass `title`/`body` to change it; pass neither to open the composer on it.  ·  `kona call notes edit '{"id":"a1b2c3d4","body":"cut rc1 friday\nfreeze tuesday"}'`, key `e`
+- `notes.compose` — Open the composer on a blank note (what `n` does).  ·  `kona call notes compose`, key `n`
+- `notes.field`  ·  `kona call notes field`
+- `notes.next`  ·  `kona call notes next`
+- `notes.save` — Commit the open composer. `{value}` sets the field being edited first.  ·  `kona call notes save`
+- `notes.dismiss`  ·  `kona call notes dismiss`
+- `notes.open` — Read a note in full, by `id` or `index`.  ·  `kona call notes open '{"id":"a1b2c3d4"}'`
+- `notes.search` — Filter the list over titles and bodies. Empty `q` clears it.  ·  `kona call notes search '{"q":"release"}'`
 - `notes.remove` — Delete a note, by `id` or `index`. Undoable.  ·  `kona call notes remove '{"id":"a1b2c3d4"}'`, key `d`
 - `notes.clear` — Wipe the pad. Undoable.  ·  `kona call notes clear`
 - `notes.undo` — Step back one mutation (add, edit, remove, clear).  ·  `kona call notes undo`, key `u`
 
-Cursor verbs (the keyboard's business — address a row by id or index instead): `up`, `down`.
+Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `up`, `down`.
 
-Searchable: `notes.add` takes `{"q": "..."}`.
+Searchable: `notes.search` takes `{"q": "..."}`.
 
 ### rss — RSS
 
@@ -201,6 +208,16 @@ Live CPU, memory, disk, and battery gauges.
 - `sys.refresh` — Take a full reading now — load, memory, disk, battery, network. This is the one you want.  ·  `kona call sys refresh`, key `r`
 - `sys.mount` — Point the disk gauge at another filesystem.  ·  `kona call sys mount '{"path":"/Volumes/ext"}'`
 
+### theme — Theme
+
+Catppuccin, Nord, Dracula and friends — previewed live, saved on enter.
+
+- `theme.list` — Every preset, and which one is applied. Reads nothing else.  ·  `kona call theme list`
+- `theme.preview` — Show a preset in the running TUI without saving it — the same thing ↑↓ do. `theme.reset` (esc) puts the saved one back.  ·  `kona call theme preview '{"preset":"nord"}'`
+- `theme.set` — Apply a preset and write it to ~/.config/kona/config.toml. Omit `preset` to keep the previewed one.  ·  `kona call theme set '{"preset":"catppuccin-mocha"}'`
+
+Cursor verbs (the keyboard's business — address a row by id or index instead): `reset`, `up`, `down`.
+
 ### ticker — Ticker
 
 Watchlist board — stocks and crypto, price, %chg, sparkline.
@@ -221,14 +238,14 @@ Searchable: `ticker.add` takes `{"q": "..."}`.
 Countdowns and a pomodoro. Presets 1/2/3; space pauses; p pomodoro.
 
 - `timer.start` — Start a countdown. `seconds` takes 300, "5m" or "1h30m"; `label` names it. Naming an existing `id` restarts that one.  ·  `kona call timer start '{"seconds":300,"label":"tea"}'`, key `1`
-- `timer.pause` — Pause a countdown — by `id`, `label`, `index`, else the selected one.  ·  `kona call timer pause '{"id":"t1"}'`
-- `timer.resume` — Resume a paused countdown.  ·  `kona call timer resume '{"id":"t1"}'`
-- `timer.toggle` — Pause or resume, whichever applies (the `space` key).  ·  `kona call timer toggle '{"id":"t1"}'`, key `space`
-- `timer.add` — Add time to a running countdown.  ·  `kona call timer add '{"id":"t1","seconds":60}'`, key `a`
-- `timer.stop` — Remove a countdown; `{"all":true}` clears every one.  ·  `kona call timer stop '{"id":"t1"}'`, key `s`
+- `timer.pause` — Pause a countdown — by `id`, `label`, `index`, else the selection, which may be a live pomodoro (`kind` in the reply says which it was).  ·  `kona call timer pause '{"id":"t1"}'`
+- `timer.resume` — Resume whatever `pause` paused — the named countdown, else the selection.  ·  `kona call timer resume '{"id":"t1"}'`
+- `timer.toggle` — Pause or resume, whichever applies (the `space` key). With a pomodoro selected and no countdown named, it drives the session.  ·  `kona call timer toggle '{"id":"t1"}'`, key `space`
+- `timer.add` — Add time to a running countdown, or to the current pomodoro phase.  ·  `kona call timer add '{"id":"t1","seconds":60}'`, key `a`
+- `timer.stop` — Remove a countdown; `{"all":true}` clears every one. With a pomodoro selected and none named, it ends the session.  ·  `kona call timer stop '{"id":"t1"}'`, key `s`
 - `timer.clear` — Drop the countdowns that already finished.  ·  `kona call timer clear`, key `c`
 - `timer.label` — Rename a countdown.  ·  `kona call timer label '{"id":"t1","to":"steep"}'`
-- `timer.select` — Move the human's selection to a countdown.  ·  `kona call timer select '{"id":"t1"}'`
+- `timer.select` — Move the human's selection to a countdown, or onto a live session with `{"pomodoro":true}`.  ·  `kona call timer select '{"id":"t1"}'`
 - `timer.pomodoro.start`  ·  `kona call timer pomodoro.start`
 - `timer.pomodoro.pause`  ·  `kona call timer pomodoro.pause`
 - `timer.pomodoro.resume`  ·  `kona call timer pomodoro.resume`
@@ -257,13 +274,14 @@ Searchable: `weather.search` takes `{"q": "..."}`.
 
 Spaces, their messages, and a verb that posts back.
 
-- `webex.refresh`  ·  `kona call webex refresh`, key `r`
-- `webex.search`  ·  `kona call webex search`
-- `webex.open`  ·  `kona call webex open`
-- `webex.compose`  ·  `kona call webex compose`, key `c`
-- `webex.cancel`  ·  `kona call webex cancel`
-- `webex.post`  ·  `kona call webex post`
-- `webex.read`  ·  `kona call webex read`, key `a`
+- `webex.refresh` — Re-read the space list, the unread count and who is around.  ·  `kona call webex refresh`, key `r`
+- `webex.search` — Filter the space list by title — local, no refetch.  ·  `kona call webex search '{"q":"ship"}'`
+- `webex.open` — Drill in one level: a space by name (or `index`), then a message by id, `index` or what it says — `{space, message}` does both at once, and a bare call from inside a space reads the newest. Returns the whole body; `back` climbs out again.  ·  `kona call webex open '{"space":"ship-kona","message":"m3"}'`
+- `webex.compose` — Give the compose field the keyboard (agents call `post` instead).  ·  `kona call webex compose`, key `c`
+- `webex.cancel` — Drop the draft and leave the composer.  ·  `kona call webex cancel`
+- `webex.post` — Post a message. Names the space, so nothing needs to be open.  ·  `kona call webex post '{"space":"ship-kona","text":"deploy is green"}'`
+- `webex.read` — Mark a space read — or every space with `{"all":true}`.  ·  `kona call webex read '{"space":"ship-kona"}'`, key `a`
+- `webex.presence` — Is this person around? `active`/`idle` plus when Webex last saw them; no args lists everyone we watch.  ·  `kona call webex presence '{"person":"Grace Hopper"}'`
 
 Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `up`, `down`.
 
@@ -293,6 +311,15 @@ Named sequences of applet verbs — run them by hand, or on a cron.
 Cursor verbs (the keyboard's business — address a row by id or index instead): `up`, `down`, `back`.
 
 ## Worked examples
+
+**Ask what needs attention right now**
+
+```sh
+kona state dash
+kona call dash open '{"index":0}'
+```
+
+`cards` is exactly what is on the human's screen: one row per applet with something live, most urgent first.
 
 **Triage the inbox**
 
@@ -327,6 +354,16 @@ kona state mycelium                                  # the messages themselves
 
 Read-only by design: kona observes the coordination layer, it does not post to it. Say something in a room with your own mycelium client; kona is the window, not the mouth.
 
+**Write a note and read it back**
+
+```sh
+kona call notes add '{"title":"release plan","body":"cut rc1 friday\nfreeze monday"}'
+kona call notes search '{"q":"release"}'
+kona state notes
+```
+
+add returns the note's id; `edit` and `open` take it as `{"id":"…"}`.
+
 **Queue a track without stopping what is playing**
 
 ```sh
@@ -335,6 +372,17 @@ kona state spotify                                       # upNext now leads with
 ```
 
 Needs `kona login spotify` and an active device (`kona call spotify devices`). To play something *now* instead, `spotify.search` then `spotify.enter {"index":N}`.
+
+**Retint the human's terminal, then put it back**
+
+```sh
+kona call theme list
+kona call theme preview '{"preset":"tokyo-night"}'
+kona call theme set '{"preset":"tokyo-night"}'
+kona call theme reset
+```
+
+preview is live but unsaved; set writes the config; reset returns to the saved preset.
 
 **Start a focus timer, then extend it**
 
@@ -345,6 +393,34 @@ kona call timer add '{"id":"t1","seconds":300}'             # +5m, without touch
 ```
 
 Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon posts a desktop banner (`kona notify on timer.done`).
+
+**Pause whatever the human is looking at**
+
+```sh
+kona call timer toggle '{}'                                 # -> { kind: "pomodoro", status: "paused" }
+kona call timer toggle '{"id":"t1"}'                        # ...or that countdown, whatever is selected
+```
+
+A live pomodoro and the countdowns share one selection, so an argument-less `pause`/`resume`/`toggle`/`add`/`stop` reaches whichever the human has on screen — `kind` in the reply says which it was. Name a countdown to reach it regardless.
+
+**Read me the last message in ship-kona**
+
+```sh
+kona call webex open '{"space":"ship-kona"}'
+kona call webex open
+kona call webex up
+```
+
+A space opens on its newest message, so a bare `open` reads that one in full — markdown and all, never truncated. `up` walks back through the conversation without leaving the reader; `back` leaves it.
+
+**Is Grace around before I ping her?**
+
+```sh
+kona call webex presence '{"person":"Grace Hopper"}'
+kona call webex post '{"space":"Grace Hopper","text":"got a minute?"}'
+```
+
+Presence is same-org and coarse: `active`/`idle`, or `unknown` when Webex won't say.
 
 **Define a workflow and run it**
 
