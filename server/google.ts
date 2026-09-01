@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { createHash, randomBytes } from "node:crypto";
 import { configDir } from "../core/config.ts";
 import { kcGet, kcSet, kcDelete } from "./keychain.ts";
 import { addAccount, kcAccountName, kcService, listAccounts, removeAccount, LEGACY_ACCOUNT } from "./mail.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
+import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
@@ -52,14 +52,6 @@ interface ClientCreds {
   client_secret: string;
 }
 
-async function readJson<T>(path: string): Promise<T | null> {
-  try {
-    return JSON.parse(await Bun.file(path).text()) as T;
-  } catch {
-    return null;
-  }
-}
-
 function refreshTokenFor(account: string): string | null {
   return kcGet(SERVICE, kcAccountName(account));
 }
@@ -94,12 +86,6 @@ export async function isAuthed(account = LEGACY_ACCOUNT): Promise<boolean> {
 }
 
 export const CLIENT_CONFIG_PATH = CLIENT_FILE;
-
-function pkce() {
-  const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
-}
 
 /** Ask Gmail who a freshly minted access token belongs to. */
 async function whoami(accessToken: string): Promise<string | null> {
@@ -213,14 +199,14 @@ export async function login(): Promise<string> {
 }
 
 // in-memory access-token cache, per account (per daemon lifetime)
-const cached = new Map<string, { token: string; exp: number }>();
+const cached = new Map<string, AccessToken>();
 
 async function accessToken(account: string): Promise<string> {
   // A token straight from the environment (tests, scripts against a fixture).
   if (process.env.KONA_GOOGLE_TOKEN) return process.env.KONA_GOOGLE_TOKEN;
   if (faked()) return FAKE_TOKEN; // a fake transport authenticates nothing
-  const hit = cached.get(account);
-  if (hit && hit.exp > Date.now() + 30_000) return hit.token;
+  const hit = freshToken(cached.get(account));
+  if (hit) return hit;
   const creds = await clientCreds();
   if (!creds) throw new Error("Gmail not configured — no client credentials");
   const refreshToken = refreshTokenFor(account);
@@ -238,7 +224,7 @@ async function accessToken(account: string): Promise<string> {
   });
   const j = (await res.json()) as { access_token?: string; expires_in?: number };
   if (!j.access_token) throw new Error(`token refresh failed: ${JSON.stringify(j)}`);
-  cached.set(account, { token: j.access_token, exp: Date.now() + (j.expires_in ?? 3600) * 1000 });
+  cached.set(account, expiringToken(j.access_token, j.expires_in));
   return j.access_token;
 }
 
