@@ -91,32 +91,9 @@ export async function startDaemon(port = DEFAULT_PORT) {
     };
   }
 
-  // --- init: one-shot on boot (e.g. email's first inbox load). Survives
-  // --watch restarts, so applets don't sit in their empty initial state.
-  for (const a of applets) {
-    if (a.init) {
-      try {
-        a.init(ctxFor(a.id));
-      } catch (e) {
-        console.error(`[init:${a.id}]`, e);
-      }
-    }
-  }
-
-  // --- the tick: internal caller, same state, same emit
-  for (const a of applets) {
-    if (a.tick && a.tickMs) {
-      const iv = setInterval(() => {
-        try {
-          a.tick!(ctxFor(a.id));
-        } catch (e) {
-          console.error(`[tick:${a.id}]`, e);
-        }
-      }, a.tickMs);
-      // the server keeps the daemon alive; ticks shouldn't pin the event loop
-      iv.unref?.();
-    }
-  }
+  // init + ticks run AFTER the port is bound (below) — a duplicate daemon that
+  // can't bind must exit BEFORE hitting any applet init (which calls APIs),
+  // otherwise a spawn storm becomes an API storm.
 
   async function invoke(id: string, verb: string, args: Record<string, unknown>) {
     const def = byId.get(id);
@@ -221,6 +198,32 @@ export async function startDaemon(port = DEFAULT_PORT) {
       return new Response("not found", { status: 404 });
     },
   });
+  // We bound the port (Bun.serve throws on EADDRINUSE) — safe to do work now.
+
+  // --- init: one-shot on boot (e.g. email's first inbox load).
+  for (const a of applets) {
+    if (a.init) {
+      try {
+        a.init(ctxFor(a.id));
+      } catch (e) {
+        console.error(`[init:${a.id}]`, e);
+      }
+    }
+  }
+
+  // --- ticks: internal caller, same state, same emit
+  for (const a of applets) {
+    if (a.tick && a.tickMs) {
+      const iv = setInterval(() => {
+        try {
+          a.tick!(ctxFor(a.id));
+        } catch (e) {
+          console.error(`[tick:${a.id}]`, e);
+        }
+      }, a.tickMs);
+      iv.unref?.(); // the server keeps the daemon alive; ticks shouldn't pin it
+    }
+  }
 
   console.error(`konad up on http://localhost:${server.port}  (${applets.length} applets)`);
   return server;

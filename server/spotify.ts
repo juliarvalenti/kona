@@ -185,6 +185,7 @@ export async function api(path: string, init?: RequestInit): Promise<Record<stri
 export interface QueueItem {
   track: string;
   artist: string;
+  uri: string;
 }
 export interface NowPlaying {
   playing: boolean;
@@ -195,6 +196,10 @@ export interface NowPlaying {
   durationMs: number;
   device: string;
   context: string; // playlist name (or album/artist label)
+  contextUri: string; // for navigating into it
+  contextType: string; // playlist | album | artist | ""
+  artistId: string; // primary artist, for drill-in
+  artistName: string;
   upNext: QueueItem[];
   shuffle: boolean;
   repeat: "off" | "context" | "track";
@@ -224,6 +229,7 @@ async function contextLabel(ctx: any): Promise<string> {
 const track = (t: any): QueueItem => ({
   track: t?.name ?? "",
   artist: (t?.artists ?? []).map((a: any) => a.name).join(", "),
+  uri: t?.uri ?? "",
 });
 
 export async function nowPlaying(): Promise<NowPlaying | null> {
@@ -246,6 +252,10 @@ export async function nowPlaying(): Promise<NowPlaying | null> {
     durationMs: item.duration_ms ?? 0,
     device: p.device?.name ?? "",
     context: await contextLabel(p.context),
+    contextUri: p.context?.uri ?? "",
+    contextType: p.context?.type ?? "",
+    artistId: item.artists?.[0]?.id ?? "",
+    artistName: item.artists?.[0]?.name ?? "",
     upNext,
     shuffle: !!p.shuffle_state,
     repeat: (p.repeat_state as NowPlaying["repeat"]) ?? "off",

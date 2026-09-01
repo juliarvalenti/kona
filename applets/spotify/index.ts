@@ -35,16 +35,38 @@ interface SpotifyState {
   durationMs: number;
   device: string;
   context: string;
+  contextUri: string;
+  contextType: string;
+  artistId: string;
+  artistName: string;
   upNext: QueueItem[];
   shuffle: boolean;
   repeat: "off" | "context" | "track";
   authed: boolean;
   loading: boolean;
   error: string | null;
+  nowCursor: number; // cursor over the now-playing screen's selectable rows
   // search / browse: a stack of screens; the top is the current one.
   mode: "now" | "browse";
   query: string;
   stack: Screen[];
+}
+
+/** Selectable rows on the now-playing screen: the artist, the context
+ * (playlist/album), and each up-next track. */
+type NowTarget =
+  | { kind: "artist"; id: string; name: string }
+  | { kind: "context"; uri: string; ctype: string; name: string }
+  | { kind: "track"; uri: string; name: string };
+
+function nowTargets(s: SpotifyState): NowTarget[] {
+  const t: NowTarget[] = [];
+  if (s.artistId) t.push({ kind: "artist", id: s.artistId, name: s.artistName });
+  if (s.contextUri && ["playlist", "album", "artist"].includes(s.contextType)) {
+    t.push({ kind: "context", uri: s.contextUri, ctype: s.contextType, name: s.context });
+  }
+  for (const q of s.upNext) if (q.uri) t.push({ kind: "track", uri: q.uri, name: q.track });
+  return t;
 }
 
 /** A selectable row: catalog Row plus a synthetic "play this whole thing" action. */
@@ -110,12 +132,17 @@ export default defineApplet<SpotifyState>({
     durationMs: 0,
     device: "",
     context: "",
+    contextUri: "",
+    contextType: "",
+    artistId: "",
+    artistName: "",
     upNext: [],
     shuffle: false,
     repeat: "off",
     authed: false,
     loading: false,
     error: null,
+    nowCursor: 0,
     mode: "now",
     query: "",
     stack: [],
