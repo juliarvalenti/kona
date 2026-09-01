@@ -1,17 +1,14 @@
-import { defineApplet, big, text, spacer, col } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer, col, theme } from "../../sdk/index.ts";
 import { progress } from "../../sdk/components.ts";
 
-// state -> color: green running, amber paused, red done, dim idle
-const RUNNING = "#00d488";
-const PAUSED = "#f0b000";
-const DONE = "#ff5c57";
-const IDLE = "#5a5a5a";
-
+// state -> theme role: ok running, warn paused, error done, muted idle. The
+// hexes live in ~/.config/kona/config.toml, so retheming kona retints the timer.
 function tint(s: { running: boolean; remaining: number; label: string }): string {
-  if (s.running) return RUNNING;
-  if (s.remaining > 0) return PAUSED;
-  if (s.label) return DONE; // finished (label survives until stop)
-  return IDLE;
+  const t = theme();
+  if (s.running) return t.ok;
+  if (s.remaining > 0) return t.warn;
+  if (s.label) return t.error; // finished (label survives until stop)
+  return t.muted;
 }
 
 /**

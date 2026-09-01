@@ -4,6 +4,7 @@
  * import what they want; anyone can add more here without touching the host.
  */
 import { type ViewNode, type Color, text, row, box, bar, spacer } from "./index.ts";
+import { theme } from "../core/config.ts";
 
 /** A progress bar with an optional trailing label, e.g. "▓▓▓░░ 60%". */
 export function progress(
@@ -142,8 +143,9 @@ export function recordRow(
   };
 
   const line = ("  " + cols.map(cell).join(" ".repeat(GAP))).slice(0, opts.width).padEnd(opts.width);
+  const t = theme();
   if (opts.selected) {
-    return text(line, { color: "#0b0b0b", bg: opts.accent ?? "#7aa2f7", focus: true, index: opts.index });
+    return text(line, { color: t.bg, bg: opts.accent ?? t.accent, focus: true, index: opts.index });
   }
   return text(line, { color: opts.color, index: opts.index });
 }

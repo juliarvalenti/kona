@@ -28,7 +28,7 @@ just another client.
 server/    konad — owns state (KV, persisted), runs the cron tick, streams SSE
 host/      OpenTUI client — launcher ("pick an app") → applet view → keymap
 sdk/       defineApplet({ view, verbs, keymap, tick }) + the tool manifest
-core/      applet loader + HTTP client shared by daemon and host
+core/      applet loader, config/theme, HTTP client — shared by daemon and host
 applets/
   timer/   the walking-skeleton proof
 ```
@@ -38,12 +38,14 @@ applets/
 ```sh
 bun install
 
-kona                       # launcher: pick an app
+kona                       # your default applet, else the launcher
+kona launcher              # always the launcher: pick an app
 kona timer 5m              # open the timer, pre-started
 kona ls                    # list applets
 kona tools                 # the manifest an agent reads
 kona call timer start '{"seconds":300}'   # ← exactly what an agent does
 kona state timer           # read current state
+kona config                # show the resolved config (init writes a starter)
 ```
 
 The daemon (`konad`) autostarts on first use; state lives in
@@ -115,12 +117,55 @@ or `KONA_TICKER_SYMBOLS="AAPL,BTC-USD"`. In the applet, `/` adds a symbol and
 `x` drops the selected one; an agent does the same with
 `kona call ticker add '{"symbol":"NVDA"}'`.
 
+## Config
+
+Everything tweakable lives in one optional file, `~/.config/kona/config.toml`.
+With no file you get the defaults below — `kona config init` writes them out
+commented, `kona config` prints what's actually in effect (and any complaints
+about the file; a bad value is ignored, never fatal).
+
+```toml
+default = "dash"      # applet a bare `kona` opens; omit for the launcher
+
+[theme]               # the palette — applets name ROLES, never hexes
+accent = "#7aa2f7"    # frames, selection, links
+alt    = "#bb9af7"    # secondary tint
+fg     = "#d0d0d0"    # body text
+dim    = "#6a6a6a"    # labels, hints
+muted  = "#5a5a5a"    # idle / inactive
+ok     = "#00d488"    # running, unread, success
+warn   = "#f0b000"    # paused, degraded
+error  = "#ff5c57"    # failure
+key    = "#e6e6e6"    # keybind glyphs
+bg     = "#0b0b0b"    # text on an accent fill
+
+[applets.spotify]     # per-applet blocks
+accent = "#1db954"    # `accent` retints any applet's frame
+[applets.timer]
+default = "5m"        # `kona timer` with no argument
+[applets.email]
+page = 20             # threads per fetch
+```
+
+Ten roles retheme all of kona because no applet hardcodes a color: they call
+`theme().ok` and the stage paints from the same table.
+
+```ts
+import { text, theme } from "../../sdk/index.ts";
+
+view: (s) => [text(s.done ? "done" : "working", { color: theme().ok })]
+```
+
+`appletConfig("<id>")` hands an applet its own `[applets.<id>]` block, and
+`appletAccent`/`appletString`/`appletNumber` read one key with a fallback.
+
 ## Writing an applet
 
 Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its
 `verbs` run in the daemon and are auto-exposed to agents; its `view` and
-`keymap` are picked up by the host. That's the whole extension surface — see
-`applets/timer/index.ts`.
+`keymap` are picked up by the host. Colors come from `theme()` and settings from
+`appletConfig("<id>")` — both re-exported by the SDK, so `sdk/index.ts` is the
+whole extension surface. See `applets/timer/index.ts`.
 
 ### Typing into an applet
 

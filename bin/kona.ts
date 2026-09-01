@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { ensureDaemon, api, callVerb, base } from "../core/client.ts";
 import { startDaemon } from "../server/daemon.ts";
+import { loadConfig, configPath, defaultConfigToml, appletString, resetConfig } from "../core/config.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -49,12 +50,14 @@ async function select(prompt: string, options: string[]): Promise<string> {
 function usage() {
   console.log(`kona — bimodal terminal applets
 
-  kona                     launcher: pick an app
+  kona                     the configured default applet, else the launcher
+  kona launcher            always the launcher: pick an app
   kona <applet> [args]     open an applet's TUI  (e.g. kona timer 5m)
   kona ls                  list applets
   kona tools               list agent-callable verbs (the manifest)
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
+  kona config [init]       show the resolved config (init writes a starter file)
   kona login [gmail|spotify]  connect an account (default gmail)
   kona daemon              run konad in the foreground
 `);
@@ -148,7 +151,51 @@ switch (cmd) {
     break;
   }
 
-  case undefined:
+  case "config": {
+    const cfg = loadConfig();
+    if (rest[0] === "init") {
+      if (await Bun.file(cfg.path).exists()) {
+        console.error(`${cfg.path} already exists — not overwriting`);
+        process.exit(1);
+      }
+      await Bun.write(cfg.path, defaultConfigToml());
+      resetConfig();
+      console.log(`wrote ${cfg.path}`);
+      break;
+    }
+    console.log(`${cfg.path}${cfg.exists ? "" : "  (absent — using defaults)"}\n`);
+    console.log(`default   ${cfg.defaultApplet ?? "(launcher)"}`);
+    console.log("\ntheme");
+    for (const [role, hex] of Object.entries(cfg.theme)) console.log(`  ${role.padEnd(8)} ${hex}`);
+    const blocks = Object.entries(cfg.applets);
+    if (blocks.length) {
+      console.log("\napplets");
+      for (const [id, block] of blocks) console.log(`  [${id}] ${JSON.stringify(block)}`);
+    }
+    if (cfg.errors.length) {
+      console.log("\nproblems (ignored, defaults used)");
+      for (const e of cfg.errors) console.log(`  ! ${e}`);
+    }
+    break;
+  }
+
+  case undefined: {
+    // A bare `kona` opens the configured default applet; with none set (or one
+    // that doesn't exist) you get the launcher.
+    await ensureDaemon();
+    const want = loadConfig().defaultApplet;
+    let start: string | null = null;
+    if (want) {
+      const applets = (await api("/applets")) as Array<{ id: string }>;
+      if (applets.some((a) => a.id === want)) start = want;
+      else console.error(`config: default = "${want}" is not an applet — opening the launcher`);
+    }
+    if (start) await callVerb(start, "refresh", {}).catch(() => {});
+    const { runHost } = await import("../host/index.ts");
+    await runHost(start);
+    break;
+  }
+
   case "launcher": {
     await ensureDaemon();
     const { runHost } = await import("../host/index.ts");
@@ -173,9 +220,18 @@ switch (cmd) {
       process.exit(1);
     }
     // A bare positional arg after the applet name is a convenience: `kona timer 5m`
-    // fires the applet's `start` verb with it before opening the view.
-    if (rest.length && cmd === "timer") {
-      await callVerb("timer", "start", { seconds: rest[0] });
+    // fires the applet's `start` verb with it before opening the view. With no
+    // arg, `[applets.timer] default` in config.toml supplies one — but only for
+    // an idle timer, so `kona timer` still just opens a countdown in progress.
+    if (cmd === "timer") {
+      const arg = rest[0] ?? "";
+      if (arg) {
+        await callVerb("timer", "start", { seconds: arg });
+      } else {
+        const preset = appletString("timer", "default", "");
+        const live = (await api("/applets/timer/state").catch(() => null)) as { remaining?: number } | null;
+        if (preset && !(live?.remaining ?? 0)) await callVerb("timer", "start", { seconds: preset });
+      }
     }
     // Applets with a `refresh` verb (e.g. email) get an initial load on open.
     await callVerb(cmd, "refresh", {}).catch(() => {});

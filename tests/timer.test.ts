@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import type { AppletCtx } from "../sdk/index.ts";
+import { theme, type AppletCtx } from "../sdk/index.ts";
 import timer from "../applets/timer/index.ts";
 
 /**
@@ -122,11 +122,14 @@ test("total tracks the countdown for the progress bar", () => {
   expect(h.state.total).toBe(0);
 });
 
+// Roles, not hexes: the timer paints from the central theme, so this asserts
+// the state -> role mapping and stays true under any palette.
 test("accent color tracks timer state", () => {
+  const t = theme();
   const h = harness();
-  expect(timer.accent!(h.state)).toBe("#5a5a5a"); // idle
+  expect(timer.accent!(h.state)).toBe(t.muted); // idle
   h.call("start", { seconds: 30 });
-  expect(timer.accent!(h.state)).toBe("#00d488"); // running
+  expect(timer.accent!(h.state)).toBe(t.ok); // running
   h.call("pause");
-  expect(timer.accent!(h.state)).toBe("#f0b000"); // paused
+  expect(timer.accent!(h.state)).toBe(t.warn); // paused
 });

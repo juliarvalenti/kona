@@ -1,8 +1,9 @@
-import { defineApplet, text, spacer, col, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, theme, appletAccent, appletNumber, type ViewNode } from "../../sdk/index.ts";
 import { keyValue, divider, recordRow } from "../../sdk/components.ts";
 import { listInbox, getThread, type MailThread, type OpenThread } from "../../server/gmail.ts";
 
-const PAGE = 20;
+/** Threads per fetch. `[applets.email] page = 50` in config.toml raises it. */
+const PAGE = Math.max(1, Math.min(100, Math.round(appletNumber("email", "page", 20))));
 
 /**
  * email — browse Gmail in the terminal. The daemon owns the OAuth tokens and
@@ -22,12 +23,11 @@ interface EmailState {
   nextPage: string | null; // Gmail page cursor; null = no more
 }
 
-const ACCENT = "#7aa2f7";
-const FG = "#d0d0d0";
-const DIM = "#6a6a6a";
-const AMBER = "#f0b000";
-const RED = "#ff5c57";
-const UNREAD = "#00d488";
+/** Every color is a theme role; `[applets.email] accent` retints the frame. */
+const palette = () => {
+  const t = theme();
+  return { ACCENT: appletAccent("email", t.accent), FG: t.fg, DIM: t.dim, AMBER: t.warn, RED: t.error, UNREAD: t.ok };
+};
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
@@ -188,6 +188,7 @@ export default defineApplet<EmailState>({
   crumb: (s) => (s.open ? truncate(s.open.subject, 40) : null),
 
   accent(state) {
+    const { ACCENT, AMBER, RED } = palette();
     if (state.error && !state.authed) return AMBER;
     if (state.error) return RED;
     return ACCENT;
@@ -195,6 +196,7 @@ export default defineApplet<EmailState>({
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, (ctx?.width ?? 80)); // usable inner width
+    const { ACCENT, FG, DIM, AMBER, UNREAD } = palette();
 
     if (!state.authed && !state.loading && state.threads.length === 0) {
       return [

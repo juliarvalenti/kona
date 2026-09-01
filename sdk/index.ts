@@ -69,6 +69,21 @@ export function bindingFor<S extends object>(
 /** Hex color, e.g. "#00d488". */
 export type Color = string;
 
+/**
+ * Theming + per-applet settings, re-exported so an applet has ONE import.
+ * Colors live in `~/.config/kona/config.toml` (see core/config.ts): name a
+ * semantic ROLE — `theme().ok`, not "#00d488" — and one file rethemes all of
+ * kona. `appletConfig("<id>")` is that applet's own `[applets.<id>]` block.
+ */
+export {
+  theme,
+  appletConfig,
+  appletAccent,
+  appletString,
+  appletNumber,
+  type Theme,
+} from "../core/config.ts";
+
 /** ASCII-art fonts the host can render for a `big` node. */
 export type BigFont = "block" | "tiny" | "slick" | "shade" | "huge" | "grid" | "pallet";
 

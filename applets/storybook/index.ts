@@ -1,4 +1,4 @@
-import { defineApplet, text, row, col, input, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, row, col, input, theme, type ViewNode } from "../../sdk/index.ts";
 import {
   progress,
   gauge,
@@ -49,11 +49,6 @@ interface StoryState {
 function series(frame: number, n = 24): number[] {
   return Array.from({ length: n }, (_, i) => Math.sin((frame + i) / 3) + Math.sin((frame + i) / 7));
 }
-
-const PURPLE = "#bb9af7";
-const GREEN = "#00d488";
-const BLUE = "#7aa2f7";
-const AMBER = "#f0b000";
 
 export default defineApplet<StoryState>({
   id: "storybook",
@@ -118,6 +113,9 @@ export default defineApplet<StoryState>({
 
   view(state) {
     const sweep = (state.frame % 100) / 100; // 0..1 looping
+    // Straight from the central theme — recolor config.toml and the gallery
+    // recolors with it.
+    const { alt: PURPLE, ok: GREEN, accent: BLUE, warn: AMBER } = theme();
 
     // one labeled demo row: fixed-width dim label + the component, vertically centered
     const demo = (label: string, node: ViewNode): ViewNode =>

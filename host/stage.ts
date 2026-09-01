@@ -14,6 +14,7 @@ import {
 } from "@opentui/core";
 import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay, type ViewNode, type LayoutOpts, type InputNode } from "../sdk/index.ts";
 import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
+import { theme, appletAccent, type Theme } from "../core/config.ts";
 
 /**
  * The stage: everything that turns applet view-nodes into OpenTUI renderables —
@@ -22,19 +23,11 @@ import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
  * snapshot tool/tests drive it with a headless test renderer.
  */
 
-export const COLORS = {
-  DIM: "#6a6a6a",
-  FG: "#d0d0d0",
-  ACCENT: "#7aa2f7",
-  RED: "#ff5c57",
-  KEY: "#e6e6e6",
-  FIELD: "#20222c", // text-field trough
-  FIELD_FOCUS: "#2b2e3d", // ...brighter while it has the keyboard
-  CARET: "#7aa2f7",
-  CARET_FG: "#0b0b0b",
-  /** Opaque fill for chrome that must hide what is behind it (scrim, panels). */
-  PANEL: "#0d0d12",
-};
+/**
+ * The stage owns NO colors of its own — every hex comes from the central theme
+ * (`~/.config/kona/config.toml`; defaults and roles in core/config.ts).
+ */
+const palette = (): Theme => theme();
 
 export interface Hint {
   key: string;
@@ -189,7 +182,17 @@ export interface Stage {
 }
 
 export function createStage(renderer: CliRenderer): Stage {
-  const { DIM, FG, ACCENT, KEY } = COLORS;
+  const {
+    dim: DIM,
+    fg: FG,
+    accent: ACCENT,
+    key: KEY,
+    field: FIELD,
+    fieldFocus: FIELD_FOCUS,
+    caret: CARET,
+    caretFg: CARET_FG,
+    panel: PANEL,
+  } = palette();
 
   // Inner content size = terminal size minus fixed chrome. Width: stage pad 2 +
   // border 2 + frame pad 2 + scrollbar column 1 = 7. Height: the same 6, plus
@@ -394,7 +397,7 @@ export function createStage(renderer: CliRenderer): Stage {
     const width = Math.max(1, node.width ?? 32);
     const live = node.focus && draft?.id === node.id ? draft.edit : mkEdit(node.value);
     const buf: Edit = node.mask ? mkEdit("•".repeat(live.value.length), live.cursor) : live;
-    const trough = node.focus ? COLORS.FIELD_FOCUS : COLORS.FIELD;
+    const trough = node.focus ? FIELD_FOCUS : FIELD;
     const ink = node.color ?? FG;
     const paint = (t: string) => fg(ink)(bg(trough)(t));
     const hint = (t: string) => fg(DIM)(bg(trough)(t));
@@ -408,7 +411,7 @@ export function createStage(renderer: CliRenderer): Stage {
 
     const win = windowOf(buf, width);
     const line = win.text.padEnd(width);
-    const caret = fg(COLORS.CARET_FG)(bg(COLORS.CARET)(line.slice(win.cursor, win.cursor + 1) || " "));
+    const caret = fg(CARET_FG)(bg(CARET)(line.slice(win.cursor, win.cursor + 1) || " "));
     // An empty focused field still advertises what it wants, to the caret's right.
     const tail =
       buf.value.length === 0 && node.placeholder
@@ -426,7 +429,7 @@ export function createStage(renderer: CliRenderer): Stage {
     // Cells have no alpha, so a scrim is an opaque fill, not a tint: it covers
     // the body rather than dimming it. Without one the layer stays transparent
     // and only the overlay node itself hides what it sits on.
-    overlayLayer.backgroundColor = overlay?.scrim ? COLORS.PANEL : "transparent";
+    overlayLayer.backgroundColor = overlay?.scrim ? PANEL : "transparent";
     if (overlay) overlayLayer.add(nodeToRenderable(overlay.node, `ov${gen}`));
   }
 
@@ -520,7 +523,9 @@ export function createStage(renderer: CliRenderer): Stage {
     renderApplet(def, state) {
       const body = def.view(state, { width: innerWidth(), height: innerHeight() });
       const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
-      const accent = def.accent?.(state) ?? ACCENT;
+      // An applet's own accent(state) is dynamic (the timer's run/pause tint)
+      // and always wins; otherwise `[applets.<id>].accent` sets the frame color.
+      const accent = def.accent?.(state) ?? appletAccent(def.id, ACCENT);
       const crumb = def.crumb?.(state);
       const overlay = def.overlay?.(state) ?? null;
       setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
@@ -579,7 +584,7 @@ export function createStage(renderer: CliRenderer): Stage {
         { key: "ctrl+c", label: "quit" },
       ]);
     },
-    footerNote(text, color = COLORS.RED) {
+    footerNote(text, color = palette().error) {
       footer.content = new StyledText([fg(color)(text)]);
       renderer.requestRender();
     },
@@ -588,12 +593,12 @@ export function createStage(renderer: CliRenderer): Stage {
       // editor and a field in the view tree feel like one widget.
       const chunks: TextChunk[] = [fg(ACCENT)(bold("search "))];
       if (buf.value.length === 0) {
-        chunks.push(fg(COLORS.CARET)("█"), fg(DIM)(placeholder ?? ""));
+        chunks.push(fg(CARET)("█"), fg(DIM)(placeholder ?? ""));
       } else {
         const at = buf.value.slice(buf.cursor, buf.cursor + 1);
         chunks.push(
           fg(FG)(buf.value.slice(0, buf.cursor)),
-          at ? fg(COLORS.CARET_FG)(bg(COLORS.CARET)(at)) : fg(COLORS.CARET)("█"),
+          at ? fg(CARET_FG)(bg(CARET)(at)) : fg(CARET)("█"),
           fg(FG)(buf.value.slice(buf.cursor + 1)),
         );
       }

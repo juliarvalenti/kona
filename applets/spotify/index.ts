@@ -1,4 +1,4 @@
-import { defineApplet, text, spacer, col, row, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, row, theme, appletAccent, type ViewNode } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import {
   nowPlaying,
@@ -94,10 +94,16 @@ interface Screen {
   more?: { query: string; offset: number; total: number };
 }
 
-const GREEN = "#1db954"; // Spotify green
-const FG = "#d0d0d0";
-const AMBER = "#f0b000";
-const DIM = "#6a6a6a";
+/**
+ * Spotify keeps its brand green as its default accent; `[applets.spotify]
+ * accent = "#..."` in ~/.config/kona/config.toml overrides it. The rest are
+ * theme roles, so a palette change carries through.
+ */
+const BRAND = "#1db954"; // Spotify green
+const palette = () => {
+  const t = theme();
+  return { GREEN: appletAccent("spotify", BRAND), FG: t.fg, AMBER: t.warn, DIM: t.dim };
+};
 
 function fmt(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -568,12 +574,14 @@ export default defineApplet<SpotifyState>({
   crumb: (s) => (s.mode === "browse" ? (s.stack[s.stack.length - 1]?.title ?? null) : null),
 
   accent(state) {
+    const { GREEN, AMBER, DIM } = palette();
     if (state.error && !state.authed) return AMBER;
     return state.playing ? GREEN : DIM;
   },
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
+    const { GREEN, FG, AMBER, DIM } = palette();
 
     if (!state.authed && !state.loading) {
       return [

@@ -1,6 +1,6 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
+import { configDir } from "../core/config.ts";
 
 /**
  * Google OAuth for kona — a standard desktop/loopback flow with PKCE. The
@@ -16,8 +16,7 @@ import { createHash, randomBytes } from "node:crypto";
  *                                your login. No plaintext token touches disk.
  */
 
-const CONFIG_DIR = join(homedir(), ".config", "kona");
-const CLIENT_FILE = join(CONFIG_DIR, "google.json");
+const CLIENT_FILE = join(configDir(), "google.json");
 
 const KC_SERVICE = "kona-gmail";
 const KC_ACCOUNT = "refresh-token";
