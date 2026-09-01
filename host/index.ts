@@ -110,6 +110,10 @@ export async function runHost(startAppletId: string | null) {
   let current: string | null = startAppletId;
   let cursor = 0; // launcher selection
 
+  // Search input mode (first-class): `/` opens a footer line editor.
+  let searching = false;
+  let query = "";
+
   let filling = false;
   function render() {
     if (!alive) return; // never touch renderables after teardown
@@ -121,6 +125,10 @@ export async function runHost(startAppletId: string | null) {
     }
     const state = (states[def.id] ?? def.initialState) as AppletState;
     stage.renderApplet(def, state);
+
+    // If a search is open, keep the footer showing it — otherwise a background
+    // re-render (e.g. a 1s scrubber tick) would clobber the search line.
+    if (searching && def.search) stage.searchBar(query, def.search.placeholder);
 
     // Viewport auto-fill: keep loading pages until the list covers the visible
     // rows, so a tall terminal isn't half-empty. Converges as count grows.
@@ -162,10 +170,6 @@ export async function runHost(startAppletId: string | null) {
   const isDown = (n: string) => n === "down" || n === "j";
   const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
   const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
-
-  // Search input mode (first-class): `/` opens a footer line editor.
-  let searching = false;
-  let query = "";
 
   renderer.keyInput.on(
     "keypress",
