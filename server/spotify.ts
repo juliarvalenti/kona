@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { configDir } from "../core/config.ts";
 import { providerFetch, assertAllowed, faked, FAKE_TOKEN } from "./transport.ts";
 import { expiringToken, freshToken, pkce, readJson, type AccessToken } from "./provider.ts";
+import { callbackPage, type CallbackProvider } from "./callback.ts";
 
 /**
  * Spotify OAuth (Authorization Code + PKCE — no client secret) and a thin Web
@@ -60,6 +61,9 @@ export async function isAuthed(): Promise<boolean> {
   return kcGet() !== null;
 }
 
+/** What the browser-facing callback page calls this provider, and how to retry. */
+const SPOTIFY: CallbackProvider = { name: "Spotify", login: "spotify" };
+
 export async function login(): Promise<string> {
   const id = await clientId();
   if (!id) {
@@ -86,13 +90,13 @@ export async function login(): Promise<string> {
       const code = u.searchParams.get("code");
       if (err) {
         rejectCode(new Error(err));
-        return new Response("kona: authorization failed. You can close this tab.");
+        return callbackPage(SPOTIFY, "failed", err);
       }
       if (code) {
         resolveCode(code);
-        return new Response("kona: authorized ✓  — you can close this tab and return to the terminal.");
+        return callbackPage(SPOTIFY, "ok");
       }
-      return new Response("kona: waiting for authorization…");
+      return callbackPage(SPOTIFY, "waiting");
     },
   });
 

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { configDir } from "../core/config.ts";
 import { providerFetch, faked, FAKE_TOKEN } from "./transport.ts";
 import { readJson } from "./provider.ts";
+import { callbackPage, type CallbackProvider } from "./callback.ts";
 
 /**
  * Webex — spaces, their messages, and posting one back.
@@ -155,6 +156,9 @@ export function saveToken(token: string): void {
   kcSet(KC_TOKEN, t);
 }
 
+/** What the browser-facing callback page calls this provider, and how to retry. */
+const WEBEX: CallbackProvider = { name: "Webex", login: "webex" };
+
 /**
  * Sign in. With an OAuth integration configured this runs the loopback consent
  * flow and stores a refresh token; without one it reads a personal access token
@@ -185,13 +189,13 @@ export async function login(): Promise<string> {
       const code = u.searchParams.get("code");
       if (err) {
         rejectCode(new Error(err));
-        return new Response("kona: authorization failed. You can close this tab.");
+        return callbackPage(WEBEX, "failed", err);
       }
       if (code) {
         resolveCode(code);
-        return new Response("kona: authorized ✓  — you can close this tab and return to the terminal.");
+        return callbackPage(WEBEX, "ok");
       }
-      return new Response("kona: waiting for authorization…");
+      return callbackPage(WEBEX, "waiting");
     },
   });
 
