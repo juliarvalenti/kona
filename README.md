@@ -49,6 +49,19 @@ kona state timer           # read current state
 The daemon (`konad`) autostarts on first use; state lives in
 `~/.local/state/kona/state.json`.
 
+### Gmail
+
+`kona login` runs a Google OAuth loopback flow (read-only) and stores the
+refresh token in the macOS Keychain. Create a Desktop OAuth client, enable the
+Gmail API, and save the JSON to `~/.config/kona/google.json`.
+
+For best HTML-email rendering, install a text renderer (same ones aerc/mutt
+use); kona picks the first available, else falls back to a JS converter:
+
+```sh
+brew install w3m     # or: pandoc / lynx / elinks
+```
+
 ## Writing an applet
 
 Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its

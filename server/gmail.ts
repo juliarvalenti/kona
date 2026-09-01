@@ -73,24 +73,59 @@ function findPart(payload: GPayload | undefined, mime: string): string | null {
  * to text (most real mail — receipts, newsletters — is HTML-only). Links and
  * images are flattened so the reader stays clean.
  */
-export function extractBody(payload: GPayload | undefined): string {
-  const collapse = (s: string) => s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+/**
+ * Strip the invisible junk marketers stuff into preheaders (zero-width chars,
+ * figure spaces, combining grapheme joiner) plus any literal HTML entities that
+ * survived, then collapse whitespace. Turns spacer soup into blank space.
+ */
+function cleanText(s: string): string {
+  return s
+    .replace(/&#\d+;|&#x[0-9a-f]+;/gi, " ") // literal numeric entities (double-encoded spacers)
+    .replace(/&(zwnj|zwj|nbsp|shy|ensp|emsp|thinsp);/gi, " ") // literal named spacers
+    .replace(/[͏​-‍ ⁠﻿­ ]/g, " ") // invisible/spacer chars
+    .replace(/[ \t]{2,}/g, " ") // collapse runs of spaces
+    .split("\n")
+    .map((l) => l.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n") // at most one blank line
+    .trim();
+}
 
+/**
+ * Prefer a real HTML renderer if the user has one (same tools aerc/nmail use);
+ * fall back to the html-to-text library. Order matches nmail's html2nmail.
+ */
+function renderHtml(html: string): string {
+  const tools: Array<[string, string[]]> = [
+    ["pandoc", ["-f", "html", "-t", "plain"]],
+    ["w3m", ["-dump", "-T", "text/html", "-cols", "100", "-o", "display_image=false"]],
+    ["lynx", ["-stdin", "-dump", "-nolist", "-width=100"]],
+    ["elinks", ["-dump"]],
+  ];
+  for (const [cmd, args] of tools) {
+    try {
+      const r = Bun.spawnSync([cmd, ...args], { stdin: Buffer.from(html) });
+      if (r.exitCode === 0) return r.stdout.toString();
+    } catch {
+      /* not installed — try the next */
+    }
+  }
+  return htmlToText(html, {
+    wordwrap: false, // let the TUI wrap
+    selectors: [
+      { selector: "img", format: "skip" },
+      { selector: "a", options: { ignoreHref: true } },
+    ],
+  });
+}
+
+export function extractBody(payload: GPayload | undefined): string {
   const plain = findPart(payload, "text/plain");
-  if (plain) return collapse(plain);
+  if (plain) return cleanText(plain);
 
   const html = findPart(payload, "text/html");
-  if (html) {
-    return collapse(
-      htmlToText(html, {
-        wordwrap: false, // let the TUI wrap
-        selectors: [
-          { selector: "img", format: "skip" },
-          { selector: "a", options: { ignoreHref: true } },
-        ],
-      }),
-    );
-  }
+  if (html) return cleanText(renderHtml(html));
+
   return "";
 }
 
