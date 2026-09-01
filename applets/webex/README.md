@@ -35,6 +35,26 @@ of its own, so kona keeps read receipts per space in
 `~/.local/state/kona/webex-seen.json` — opening a space marks it read, and the
 dash shows how many are still waiting.
 
+## Presence
+
+Webex tells the People API who is around, on the scope the applet already asks
+for, so the space list says it too: `●` next to a 1:1 means they are at their
+keyboard, `○` means they are not — with `seen 12m` for how long it has been.
+Open the space and the header spells it out ("last seen 12m ago"), and in a
+group the same dot rides beside whoever wrote each message.
+
+```sh
+kona call webex presence '{"person":"Grace Hopper"}'
+# -> { person: "Grace Hopper", status: "active", lastSeen: "2m" }
+kona call webex presence     # everyone we are watching, and how many are active
+```
+
+It is deliberately coarse. Webex only reports presence inside your own
+organisation, a person can turn status sharing off, and the rich states (in a
+call, do not disturb) need the real-time SDK rather than REST — so anything we
+can't stand behind draws no dot at all and answers `unknown`. Never an error:
+a Webex that won't talk about people costs you the dots and nothing else.
+
 ## Config
 
 ```toml

@@ -34,6 +34,10 @@ import {
   isUnread,
   unreadCount,
   resetAuth,
+  normalizePresence,
+  presence,
+  lookupPerson,
+  resetPresence,
   type Space,
 } from "../../server/webex.ts";
 import webex from "./index.ts";
@@ -57,7 +61,21 @@ const MESSAGES: Record<string, Array<Record<string, unknown>>> = {
   "r-quiet": [],
 };
 
+// Webex hands presence back on the same People payload as the display name:
+// `status` plus `lastActivity`. Deb shares neither — same as anyone in another
+// org, or with status sharing turned off.
+const PEOPLE = [
+  { id: "p-ada", displayName: "Ada Lovelace", emails: ["ada@x.com"], status: "active", lastActivity: "2026-09-01T12:00:00Z" },
+  { id: "p-bob", displayName: "Bob Barker", emails: ["bob@x.com"], status: "inactive", lastActivity: new Date(Date.now() - 12 * 60_000).toISOString() },
+  { id: "p-me", displayName: "Grace Hopper", emails: ["grace@x.com"], status: "active", lastActivity: "2026-09-01T12:00:00Z" },
+  { id: "p-deb", displayName: "Deb Roy", emails: ["deb@y.com"] },
+  // Two people, one name: neither of them gets a dot.
+  { id: "p-jo1", displayName: "Jo Twin", emails: ["jo1@x.com"], status: "active" },
+  { id: "p-jo2", displayName: "Jo Twin", emails: ["jo2@x.com"], status: "inactive" },
+];
+
 let posted: Array<{ roomId: string; text: string }> = [];
+let peopleCalls: string[] = [];
 
 const server = Bun.serve({
   port: 0,
@@ -67,12 +85,22 @@ const server = Bun.serve({
     if (auth !== "Bearer test-token") return new Response("bad token", { status: 401 });
 
     if (u.pathname === "/v1/people/me") {
-      return Response.json({ id: "p-me", displayName: "Grace Hopper", emails: ["grace@x.com"] });
+      return Response.json({ id: "p-me", displayName: "Grace Hopper", emails: ["grace@x.com"], status: "active" });
     }
     if (u.pathname === "/v1/people") {
-      const ids = (u.searchParams.get("id") ?? "").split(",");
-      const all: Record<string, string> = { "p-ada": "Ada Lovelace", "p-bob": "Bob Barker", "p-me": "Grace Hopper" };
-      return Response.json({ items: ids.filter((id) => all[id]).map((id) => ({ id, displayName: all[id] })) });
+      peopleCalls.push(u.search);
+      const id = u.searchParams.get("id");
+      const name = (u.searchParams.get("displayName") ?? "").toLowerCase();
+      const email = (u.searchParams.get("email") ?? "").toLowerCase();
+      const hit = (p: (typeof PEOPLE)[number]) =>
+        id
+          ? id.split(",").includes(p.id)
+          : name
+            ? p.displayName.toLowerCase().startsWith(name)
+            : email
+              ? p.emails[0]!.toLowerCase() === email
+              : false;
+      return Response.json({ items: PEOPLE.filter(hit) });
     }
     if (u.pathname === "/v1/rooms") {
       return Response.json({ items: ROOMS.slice(0, Number(u.searchParams.get("max") ?? 25)) });
@@ -118,6 +146,8 @@ afterAll(() => {
 
 beforeEach(() => {
   posted = [];
+  peopleCalls = [];
+  resetPresence(); // no reading leaks from the last test's cache
   writeSeen({}); // every test starts with nothing marked read
 });
 
@@ -207,6 +237,59 @@ test("unreadCount counts the spaces with something new", () => {
   expect(unreadCount(spaces, {})).toBe(2);
   expect(unreadCount(spaces, { a: 10 })).toBe(1);
   expect(unreadCount(spaces, { a: 10, b: 10 })).toBe(0);
+});
+
+// --- presence ---------------------------------------------------------------
+
+test("normalizePresence keeps the two states REST can be trusted for", () => {
+  expect(normalizePresence(PEOPLE[0])).toEqual({
+    id: "p-ada",
+    name: "Ada Lovelace",
+    email: "ada@x.com",
+    status: "active",
+    lastActivity: Date.parse("2026-09-01T12:00:00Z"),
+  });
+  expect(normalizePresence(PEOPLE[1])?.status).toBe("idle");
+  // In a call is still at the keyboard; the rich states we can't trust — and a
+  // person who shares nothing at all — are no presence rather than "idle".
+  expect(normalizePresence({ id: "x", status: "meeting" })?.status).toBe("active");
+  expect(normalizePresence({ id: "x", status: "DoNotDisturb" })?.status).toBeNull();
+  expect(normalizePresence({ id: "x", status: "unknown" })?.status).toBeNull();
+  expect(normalizePresence(PEOPLE[3])?.status).toBeNull();
+  expect(normalizePresence({ displayName: "no id" })).toBeNull();
+});
+
+test("presence batches a screenful of people into one call, then caches it", async () => {
+  const first = await presence(["p-ada", "p-bob", "p-deb"]);
+  expect(peopleCalls.length).toBe(1);
+  expect(first.get("p-ada")?.status).toBe("active");
+  expect(first.get("p-bob")?.status).toBe("idle");
+  expect(first.get("p-deb")?.status).toBeNull(); // shares nothing — still an entry, just no dot
+  expect(ago(first.get("p-bob")!.lastActivity)).toBe("12m");
+
+  await presence(["p-ada", "p-bob"]);
+  expect(peopleCalls.length).toBe(1); // still warm
+
+  await presence(["p-ada"], 0); // ...until someone asks for a fresh reading
+  expect(peopleCalls.length).toBe(2);
+});
+
+test("presence says nothing about someone Webex has never heard of", async () => {
+  const got = await presence(["p-nobody"]);
+  expect(got.size).toBe(0);
+});
+
+test("lookupPerson turns a 1:1's title into the person it is with", async () => {
+  expect((await lookupPerson("Ada Lovelace"))?.id).toBe("p-ada");
+  expect((await lookupPerson("deb@y.com"))?.id).toBe("p-deb");
+  const calls = peopleCalls.length;
+  expect((await lookupPerson("Ada Lovelace"))?.id).toBe("p-ada"); // remembered
+  expect(peopleCalls.length).toBe(calls);
+
+  // Ambiguous, or simply not in the org: no answer, and no wrong dot.
+  expect(await lookupPerson("Jo Twin")).toBeNull();
+  expect(await lookupPerson("Nobody At All")).toBeNull();
+  expect(await lookupPerson("  ")).toBeNull();
 });
 
 // --- REST layer -------------------------------------------------------------
@@ -369,6 +452,67 @@ test("search filters the list and up/down stay inside it", async () => {
   expect(h.state.cursor).toBe(0);
 });
 
+test("a DM knows who it is with, and whether they are around", async () => {
+  const h = harness();
+  await h.call("refresh");
+
+  // The space list resolves a 1:1's counterpart from its title, so the dot is
+  // there before you open anything.
+  expect(h.state.dm["r-ada"]).toBe("p-ada");
+  expect(h.state.presence["p-ada"]?.status).toBe("active");
+  // A group space has no single person behind it, and we never ask about
+  // ourselves.
+  expect(h.state.dm["r-ship"]).toBeUndefined();
+  expect(h.state.presence["p-me"]).toBeUndefined();
+
+  // Opening a space picks up the people in it — Bob has been idle 12 minutes.
+  await h.call("open", { space: "ship-kona" });
+  expect(h.state.presence["p-bob"]?.status).toBe("idle");
+});
+
+test("presence answers 'is Grace around?' by name, by email, or for everyone", async () => {
+  const h = harness();
+  await h.call("refresh");
+  await h.call("open", { space: "ship-kona" });
+
+  expect(await h.call("presence", { person: "Ada Lovelace" })).toMatchObject({
+    person: "Ada Lovelace",
+    status: "active",
+  });
+  expect(await h.call("presence", { person: "bob" })).toMatchObject({ status: "idle", lastSeen: "12m" });
+
+  // Someone we share no space with: the directory still knows them.
+  expect(await h.call("presence", { person: "deb@y.com" })).toMatchObject({
+    person: "Deb Roy",
+    status: "unknown", // shares no status — an answer, not an error
+  });
+  expect(await h.call("presence", { person: "Jo Twin" })).toMatchObject({ error: "no presence for jo twin" });
+
+  const all = (await h.call("presence")) as { active: number; people: Array<{ person: string }> };
+  expect(all.active).toBe(1); // Ada
+  expect(all.people.map((p) => p.person)).toContain("Bob Barker");
+});
+
+test("a Webex that won't talk about people costs dots, not the applet", async () => {
+  const h = harness();
+  await h.call("refresh");
+  expect(h.state.presence["p-ada"]?.status).toBe("active");
+
+  // Presence is a nicety: when the lookups fail — another org, sharing off, a
+  // hiccup — the applet loses its dots and nothing else.
+  const live = process.env.KONA_WEBEX_API;
+  process.env.KONA_WEBEX_API = "http://localhost:1";
+  h.state.dm = {};
+  h.state.presence = {};
+  try {
+    expect(await h.call("presence")).toMatchObject({ active: 0, people: [] });
+  } finally {
+    process.env.KONA_WEBEX_API = live;
+  }
+  expect(h.state.error).toBeNull();
+  expect(h.state.spaces.length).toBe(3);
+});
+
 // --- render -----------------------------------------------------------------
 
 /** The node the host will scroll to — the one flagged `focus`. */
@@ -417,6 +561,36 @@ test("the space list renders unread dots and the room view renders a composer", 
   const room = flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[]);
   expect(room).toContain("shipping now");
   expect(room).toContain("message ship-kona…");
+});
+
+test("presence reads in the list, at the top of a DM, and beside a message", async () => {
+  const h = harness();
+  await h.call("refresh");
+
+  // Ada is active, so her 1:1 carries a presence dot next to the unread one.
+  const list = flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[]);
+  expect(list).toMatch(/●\s+●\s+Ada Lovelace/);
+  expect(list).toMatch(/●\s+ship-kona/); // a group has nobody to be present
+
+  // The DM header says it in words.
+  await h.call("open", { space: "Ada" });
+  expect(flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[])).toContain("active now");
+
+  // Idle is the other half of the answer: when, not just whether.
+  h.state.presence["p-ada"] = { ...h.state.presence["p-ada"]!, status: "idle", lastActivity: Date.now() - 12 * 60_000 };
+  expect(flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[])).toContain("last seen 12m ago");
+
+  // In a group it rides beside whoever spoke — Bob has been idle 12 minutes.
+  await h.call("open", { space: "ship-kona" });
+  expect(flatten(webex.view(h.state, { width: 80, height: 24 }) as ViewNode[])).toMatch(/○\s+Bob Barker/);
+});
+
+test("the dash card counts the people who are around", async () => {
+  const h = harness();
+  await h.call("refresh");
+  const cards = webex.dash!(h.state) as Array<{ id?: string; text: string }>;
+  expect(cards.map((c) => c.id)).toEqual(["unread", "presence"]);
+  expect(cards[1]!.text).toBe("● 1 person active");
 });
 
 test("a long conversation is anchored at its newest message", async () => {
