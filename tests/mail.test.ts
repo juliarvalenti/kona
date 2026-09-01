@@ -1,6 +1,15 @@
 import { test, expect, afterEach } from "bun:test";
 import {
+  archiveThread,
   findAccount,
+  isScopeError,
+  labelThread,
+  listDrafts,
+  markRead,
+  MailWriteUnsupported,
+  saveDraft,
+  scopeHint,
+  sendMail,
   kcAccountName,
   kcService,
   listInbox,
@@ -10,12 +19,18 @@ import {
   withLegacy,
   type Account,
   type InboxPage,
+  type MailDraft,
   type MailProvider,
   type OpenThread,
+  type StoredDraft,
   type UnifiedThread,
 } from "../server/mail.ts";
 
-/** The provider seam: accounts, the merge, and the fan-out — no network. */
+/**
+ * The provider seam: accounts, the merge, the fan-out — and the write half,
+ * which routes an action to the mailbox that owns the thread and says so
+ * plainly when a backend cannot do it. No network anywhere.
+ */
 
 afterEach(() => setProviders(null));
 
@@ -174,4 +189,125 @@ test("cursors page only the accounts that still have mail", async () => {
   const second = await listInbox("in:inbox", 20, { cursors: first.cursors });
   expect(second.threads.map((t) => t.id)).toEqual(["g2"]); // only Gmail was asked
   expect(second.cursors).toEqual({});
+});
+
+// --- the write side ----------------------------------------------------------
+
+interface Journal {
+  sent: MailDraft[];
+  drafts: MailDraft[];
+  read: Array<{ id: string; read: boolean }>;
+  archived: string[];
+  trashed: string[];
+  labelled: Array<{ id: string; name: string }>;
+}
+
+/** A provider that writes to an array instead of a mailbox. */
+function writable(account: string, journal: Journal, opts: { fail?: Error; drafts?: StoredDraft[] } = {}): MailProvider {
+  const boom = () => {
+    if (opts.fail) throw opts.fail;
+  };
+  return {
+    id: "gmail",
+    account,
+    async listInbox() {
+      return { threads: [] };
+    },
+    async getThread(id) {
+      return { id, subject: "", messages: [] };
+    },
+    async send(draft) {
+      boom();
+      journal.sent.push(draft);
+      return { id: `sent-${journal.sent.length}` };
+    },
+    async saveDraft(draft) {
+      boom();
+      journal.drafts.push(draft);
+      return { id: `draft-${journal.drafts.length}` };
+    },
+    async listDrafts() {
+      return opts.drafts ?? [];
+    },
+    async markRead(id, read) {
+      boom();
+      journal.read.push({ id, read });
+    },
+    async archive(id) {
+      boom();
+      journal.archived.push(id);
+    },
+    async trash(id) {
+      journal.trashed.push(id);
+    },
+    async label(id, name) {
+      boom();
+      journal.labelled.push({ id, name });
+    },
+  };
+}
+
+const journal = (): Journal => ({ sent: [], drafts: [], read: [], archived: [], trashed: [], labelled: [] });
+
+test("a write goes to the mailbox that owns the thread, not the first one", async () => {
+  const ada = journal();
+  const grace = journal();
+  setProviders([writable("ada@gmail.com", ada), writable("grace@work.com", grace)]);
+
+  await sendMail("grace@work.com", { to: ["bob@z.com"], subject: "hi", body: "yo" });
+  await markRead("ada@gmail.com", "t1", true);
+  await archiveThread("ada@gmail.com", "t2");
+  await labelThread("grace@work.com", "t3", "todo");
+  await saveDraft("ada@gmail.com", { to: [], subject: "later", body: "" });
+
+  expect(grace.sent.map((d) => d.subject)).toEqual(["hi"]);
+  expect(ada.sent).toEqual([]);
+  expect(ada.read).toEqual([{ id: "t1", read: true }]);
+  expect(ada.archived).toEqual(["t2"]);
+  expect(grace.labelled).toEqual([{ id: "t3", name: "todo" }]);
+  expect(ada.drafts.map((d) => d.subject)).toEqual(["later"]);
+});
+
+test("a backend without the method says so, instead of crashing", async () => {
+  setProviders([
+    {
+      id: "outlook",
+      account: "grace@work.com",
+      async listInbox() {
+        return { threads: [] };
+      },
+      async getThread(id): Promise<OpenThread> {
+        return { id, subject: "", messages: [] };
+      },
+    },
+  ]);
+  const boom = sendMail("grace@work.com", { to: ["a@x.com"], subject: "hi", body: "" });
+  await expect(boom).rejects.toThrow(MailWriteUnsupported);
+  await expect(boom).rejects.toThrow("outlook cannot send mail");
+});
+
+test("listDrafts merges every mailbox newest-first and survives one failing", async () => {
+  const ada: StoredDraft[] = [{ id: "d1", to: ["a@x.com"], subject: "old", body: "", ts: 100 }];
+  const grace: StoredDraft[] = [{ id: "d2", to: ["b@y.com"], subject: "new", body: "", ts: 200 }];
+  setProviders([
+    writable("ada@gmail.com", journal(), { drafts: ada }),
+    writable("grace@work.com", journal(), { drafts: grace }),
+  ]);
+
+  const page = await listDrafts(20);
+  expect(page.drafts.map((d) => d.subject)).toEqual(["new", "old"]);
+  expect(page.drafts[0]!.account).toBe("grace@work.com");
+  expect(page.errors).toEqual([]);
+
+  const scoped = await listDrafts(20, { only: "ada@gmail.com" });
+  expect(scoped.drafts.map((d) => d.id)).toEqual(["d1"]);
+});
+
+test("isScopeError picks the reconnect case out of an ordinary failure", () => {
+  expect(isScopeError(new Error("gmail 403: Request had insufficient authentication scopes"))).toBe(true);
+  expect(isScopeError(new Error("gmail 403: ACCESS_TOKEN_SCOPE_INSUFFICIENT"))).toBe(true);
+  expect(isScopeError(new Error("graph 403: ErrorAccessDenied"))).toBe(true);
+  expect(isScopeError(new Error("gmail 404: not found"))).toBe(false);
+  expect(isScopeError(new Error("fetch failed"))).toBe(false);
+  expect(scopeHint("gmail")).toBe("reconnect for write access: kona login gmail");
 });

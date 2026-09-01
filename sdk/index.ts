@@ -89,6 +89,7 @@ export {
   appletAccent,
   appletString,
   appletNumber,
+  appletBool,
   type Theme,
 } from "../core/config.ts";
 

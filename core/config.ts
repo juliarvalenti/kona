@@ -234,6 +234,20 @@ export function appletNumber(id: string, key: string, fallback: number): number 
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+/**
+ * A boolean setting from an applet's block. TOML `true`/`false`, and the
+ * strings people type anyway ("yes", "off"), both count.
+ */
+export function appletBool(id: string, key: string, fallback: boolean): boolean {
+  const v = appletConfig(id)[key];
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") {
+    if (/^(true|yes|on|1)$/i.test(v.trim())) return true;
+    if (/^(false|no|off|0)$/i.test(v.trim())) return false;
+  }
+  return fallback;
+}
+
 /** The commented starter file `kona config init` writes. */
 export function defaultConfigToml(): string {
   return `# kona — ~/.config/kona/config.toml

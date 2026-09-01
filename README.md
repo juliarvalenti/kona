@@ -119,31 +119,53 @@ limited, so a re-sync can't spam you. Add a new event to `EVENTS` in
 ### Mail (Gmail and Outlook)
 
 `email` is provider-abstracted: `server/mail.ts` defines a `MailProvider`
-(list an inbox, open a thread) that Gmail and Outlook both implement, and the
-applet only ever talks to that seam. Connect as many mailboxes as you like —
-they merge into ONE inbox, newest first, each row badged with the account it
-came from.
+(list an inbox, open a thread, send, save a draft, mark read, archive, trash,
+label) that Gmail and Outlook both implement, and the applet only ever talks to
+that seam. Connect as many mailboxes as you like — they merge into ONE inbox,
+newest first, each row badged with the account it came from, and a reply leaves
+from the mailbox it arrived in.
 
 ```sh
-kona login gmail             # Google OAuth, read-only
-kona login outlook           # Microsoft Graph, read-only
+kona login gmail             # Google OAuth (read + send)
+kona login outlook           # Microsoft Graph (read + send)
 kona accounts                # what's connected
 kona logout gmail ada@x.com  # drop one mailbox (omit the address for all)
 ```
+
+Signed in with an older, read-only kona? Reading keeps working; the first
+write says `reconnect for write access: kona login gmail` — run it once and the
+new scopes are granted.
 
 Each account's refresh token goes to the macOS Keychain (service `kona-gmail`
 / `kona-outlook`, account = the address); mail itself never touches disk. A
 token stored by an older kona keeps working as-is.
 
 In the TUI, `a` cycles the list between the unified inbox and one account at a
-time. Agents get the same seam:
+time. `n` opens the composer; in an open thread `enter` replies, `g` replies to
+all and `f` forwards. `e` archives, `d` trashes, `u` toggles unread, `t` labels
+and `s` shows your saved drafts. Opening a thread marks it read
+(`[applets.email] autoRead = false` if you'd rather it didn't).
+
+The composer is a modal of real text fields: tab moves between To / Cc /
+Subject / Body, the body is written a line at a time, an **empty line sends**,
+and `ctrl+s` parks it in the provider's Drafts folder to finish later.
+
+Agents fire the same verbs — a form is only ever a way to fill in arguments:
 
 ```sh
 kona call email accounts '{}'
 kona call email account '{"id":"outlook"}'          # scope the list
 kona call email search '{"q":"is:unread from:github"}'
 kona call email open '{"account":"ada@x.com","id":"18f..."}'
+kona call email reply '{"body":"on it — shipping tonight."}'
+kona call email compose '{"to":"ada@x.com","subject":"dinner","body":"friday?"}'
+kona call email draft '{"to":"ada@x.com","subject":"dinner","body":"half-written…"}'
+kona call email archive '{"id":"18f..."}'           # or trash / label / markUnread
 ```
+
+A verb called with everything it needs acts; called with nothing it opens the
+form instead. `email.reply` with a `body` sends; without one it opens the
+composer with the recipients filled in and the message quoted below.
 
 Gmail's query syntax is the lingua franca: the Outlook provider translates
 `from:`, `subject:`, `is:unread` and `has:attachment` into Graph's
@@ -151,12 +173,14 @@ Gmail's query syntax is the lingua franca: the Outlook provider translates
 
 **Google client.** Create a Desktop OAuth client, enable the Gmail API, and
 save the JSON to `~/.config/kona/google.json` (or set
-`KONA_GOOGLE_CLIENT_ID` / `KONA_GOOGLE_CLIENT_SECRET`).
+`KONA_GOOGLE_CLIENT_ID` / `KONA_GOOGLE_CLIENT_SECRET`). kona asks for
+`gmail.modify` (read, unread flag, archive, trash, labels) plus
+`gmail.compose`/`gmail.send`.
 
 **Microsoft client.** Register an app in Azure → App registrations, add the
 redirect URI `http://127.0.0.1:8897/callback` under *Mobile and desktop
-applications*, grant the delegated Graph permissions `Mail.Read`,
-`offline_access` and `User.Read`, then save `{"client_id":"..."}` to
+applications*, grant the delegated Graph permissions `Mail.ReadWrite`,
+`Mail.Send`, `offline_access` and `User.Read`, then save `{"client_id":"..."}` to
 `~/.config/kona/microsoft.json` (or set `KONA_MICROSOFT_CLIENT_ID`;
 `KONA_MICROSOFT_TENANT` pins a tenant, default `common`, and
 `KONA_MICROSOFT_PORT` moves the loopback port). It's a public client — there
@@ -415,6 +439,7 @@ default = "5m"        # `kona timer` with no argument
 work  = "25m"         # the cycle: see "Pomodoro" above
 [applets.email]
 page = 20             # threads per fetch
+autoRead = true       # opening a thread marks it read
 [applets.mycelium]
 agent = "kona"        # the name your messages are posted under
 ```

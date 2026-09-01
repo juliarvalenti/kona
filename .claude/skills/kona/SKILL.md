@@ -77,15 +77,33 @@ Cursor verbs (the keyboard's business — address a row by id or index instead):
 
 ### email — Email
 
-Browse Gmail and Outlook in one list. Agents can search and open threads too.
+Read, write, reply and file mail from Gmail and Outlook in one list.
 
 - `email.refresh` — Reload the inbox. Call this before you read state.  ·  `kona call email refresh`, key `r`
 - `email.search` — Run a Gmail query and replace the list with its results.  ·  `kona call email search '{"q":"is:unread newer_than:1d"}'`
 - `email.more` — Fetch the next page of threads.  ·  `kona call email more`
 - `email.accounts`  ·  `kona call email accounts`
 - `email.account`  ·  `kona call email account`
-- `email.open` — Open a thread by list `index` and load its body.  ·  `kona call email open '{"index":0}'`
+- `email.open` — Open a thread by list `index` and load its body. Marks it read.  ·  `kona call email open '{"index":0}'`
 - `email.cycleAccount`  ·  `kona call email cycleAccount`, key `a`
+- `email.compose` — Send a new message. With no `to`, opens the composer instead.  ·  `kona call email compose '{"to":"ada@x.com","subject":"dinner","body":"friday?"}'`, key `n`
+- `email.reply` — Reply to a thread (`id`, or whatever is open). With no `body`, opens the composer prefilled.  ·  `kona call email reply '{"id":"18f2c…","body":"on it — shipping tonight."}'`, key `return`
+- `email.replyAll` — Reply keeping everyone else on the thread.  ·  `kona call email replyAll '{"id":"18f2c…","body":"thanks all"}'`, key `g`
+- `email.forward` — Forward a thread to someone else.  ·  `kona call email forward '{"id":"18f2c…","to":"grace@x.com"}'`, key `f`
+- `email.draft` — Save a message as a provider draft instead of sending it.  ·  `kona call email draft '{"to":"ada@x.com","subject":"dinner","body":"half-written…"}'`
+- `email.drafts` — List saved drafts (and show them in place of the inbox).  ·  `kona call email drafts`, key `s`
+- `email.openDraft` — Reopen a saved draft in the composer, by `index` or `id`.  ·  `kona call email openDraft '{"index":0}'`
+- `email.send` — Send what the composer holds. Prefer compose/reply, which fill it in for you.  ·  `kona call email send`
+- `email.field` — The composer's plumbing: set one field. `compose.to`, `.cc`, `.subject`.  ·  `kona call email field '{"id":"compose.to","value":"ada@x.com"}'`
+- `email.next` — The composer's plumbing: move to the next field (what tab presses).  ·  `kona call email next`
+- `email.form` — The composer's plumbing: commit a field — on the body, a line; on an empty line, send.  ·  `kona call email form '{"id":"compose.body","value":"friday?"}'`
+- `email.dismiss` — Close the composer (or the label prompt), keeping what was typed.  ·  `kona call email dismiss`
+- `email.archive` — Archive a thread — out of the inbox, still in the mailbox.  ·  `kona call email archive '{"id":"18f2c…"}'`, key `e`
+- `email.trash` — Move a thread to the trash.  ·  `kona call email trash '{"id":"18f2c…"}'`, key `d`
+- `email.label` — Apply a label (Gmail) / category (Outlook), creating it if it is new.  ·  `kona call email label '{"id":"18f2c…","name":"todo"}'`, key `t`
+- `email.markRead` — Clear the unread dot on a thread.  ·  `kona call email markRead '{"id":"18f2c…"}'`
+- `email.markUnread` — Put it back.  ·  `kona call email markUnread '{"id":"18f2c…"}'`
+- `email.toggleRead` — Flip a thread between read and unread.  ·  `kona call email toggleRead '{"id":"18f2c…"}'`, key `u`
 
 Cursor verbs (the keyboard's business — address a row by id or index instead): `back`, `down`, `up`.
 
@@ -282,10 +300,22 @@ Cursor verbs (the keyboard's business — address a row by id or index instead):
 kona call email refresh
 kona call email search '{"q":"is:unread newer_than:1d"}'   # -> { count: 12 }
 kona state email                                            # threads[]: from, subject, snippet
-kona call email open '{"index":0}'                          # -> the body, for summarising
+kona call email open '{"index":0}'                          # -> the body, and the dot clears
+kona call email archive '{"index":0}'                       # or trash / label / markUnread
 ```
 
-The Gmail scope is read-only: kona reads and shows mail, it never sends or archives. Triage means reading, summarising, and telling the human what deserves a reply.
+Triage is reading AND filing: archive what is done, label what needs a human, leave the rest unread.
+
+**Answer a thread**
+
+```sh
+kona call email open '{"index":0}'
+kona call email reply '{"body":"on it — shipping tonight."}'   # replyAll keeps the cc list
+kona call email compose '{"to":"ada@x.com","subject":"dinner","body":"friday?"}'
+kona call email draft '{"to":"ada@x.com","subject":"dinner","body":"half-written…"}'
+```
+
+`reply` with no body opens the composer prefilled (quoted text and recipients) for the human instead — same verb, both callers.
 
 **Read a mycelium room**
 
