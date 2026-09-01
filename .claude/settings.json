@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && bun run bin/kona.ts tools --skill --install >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -297,6 +297,21 @@ export default defineApplet<MyceliumState>({
   id: "mycelium",
   title: "Mycelium",
   summary: "The coordination layer — rooms, agents, and what you say to them.",
+  labels: ["agents", "chat"],
+  requires: ["a backend: MYCELIUM_URL, the `mycelium` CLI, or ~/.mycelium/rooms"],
+  // `kona mycelium ship-kona` opens straight into that room.
+  cli: {
+    usage: "kona mycelium <room>",
+    open: (args) => (args[0] ? { verb: "open", args: { room: args[0] } } : null),
+  },
+  notifications: {
+    "mycelium.message": {
+      summary: "a coordination room you watch gets new messages",
+      default: false,
+    },
+  },
+  configSample: `[applets.mycelium]
+agent = "kona"       # the name your messages are posted under`,
   ephemeral: true, // a live view of someone else's state; nothing to persist
   initialState: {
     rooms: [],

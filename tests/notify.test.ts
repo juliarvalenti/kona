@@ -10,6 +10,7 @@ import {
   setEvent,
   setEnabled,
   readConfig,
+  registerEvents,
   __setSender,
   __reset,
   type Notification,
@@ -23,6 +24,10 @@ import type { AppletCtx } from "../sdk/index.ts";
  * rate limit) and WHAT gets handed to the OS — never spawning anything: the
  * sender is faked, and the config lives in a throwaway dir.
  */
+
+// The event catalogue is built from the applets that are loaded — the daemon
+// does this at boot, so a test that fires `timer.done` does it too.
+registerEvents([timer]);
 
 let sent: Notification[] = [];
 let configFile: string;

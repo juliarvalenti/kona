@@ -17,6 +17,7 @@ import {
 } from "../core/config.ts";
 import { recordRow } from "../sdk/components.ts";
 import timer from "../applets/timer/index.ts";
+import spotify from "../applets/spotify/index.ts";
 
 /**
  * Config + theming. The file is optional and user-written, so the contract is:
@@ -166,14 +167,18 @@ test("wrong shapes for [theme] / [applets] are reported, not fatal", () => {
 test("the shipped starter file parses to the shipped defaults", () => {
   const dir = mkdtempSync(join(tmpdir(), "kona-config-"));
   dirs.push(dir);
-  writeFileSync(join(dir, "config.toml"), defaultConfigToml());
+  // The applet half of the starter file is contributed by the applets
+  // themselves (`configSample`), exactly as `kona config init` composes it.
+  writeFileSync(join(dir, "config.toml"), defaultConfigToml([spotify.configSample!, timer.configSample!]));
   process.env.KONA_CONFIG_DIR = dir;
   resetConfig();
   const cfg = loadConfig();
   expect(cfg.errors).toEqual([]);
   expect(cfg.theme).toEqual(DEFAULT_THEME);
   expect(cfg.defaultApplet).toBeNull(); // `default` ships commented out
+  expect(cfg.plugins).toEqual([]); // ...and so does `plugins`
   expect(cfg.applets.spotify?.accent).toBe("#1db954");
+  expect(cfg.applets.timer?.default).toBe("5m");
 });
 
 test("a themed palette reaches applets and components", () => {

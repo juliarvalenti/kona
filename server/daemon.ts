@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { mkdirSync, watch } from "node:fs";
 import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
-import { loadApplets, APPLETS_DIR } from "../core/load.ts";
+import { loadApplets, pluginRoots, APPLETS_DIR } from "../core/load.ts";
 import { skillMarkdown } from "../core/skill.ts";
 import { CronScheduler } from "./cron.ts";
+import { registerEvents } from "./notify.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
 
@@ -31,6 +32,8 @@ export async function startDaemon(port = DEFAULT_PORT) {
   const SCHEDULER_MS = Number(process.env.KONA_SCHEDULER_MS ?? 1_000);
   const applets = await loadApplets();
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
+  // Applets declare the banners they can raise; nothing central lists them.
+  registerEvents(applets);
 
   // `bun --watch` only reloads files already in the module graph; applets are
   // imported dynamically, so a BRAND-NEW applet file never triggers a restart
@@ -38,16 +41,20 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // exit on change — the client respawns a fresh daemon that re-scans. unref so
   // this never keeps a test process alive.
   if (!process.env.KONA_NO_WATCH) {
-    try {
-      const w = watch(APPLETS_DIR, { recursive: true }, (_e, file) => {
-        if (file && file.endsWith(".ts")) {
-          console.error(`applets changed (${file}) — restarting`);
-          process.exit(0);
-        }
-      });
-      w.unref?.();
-    } catch {
-      /* watch unsupported — fall back to manual restart */
+    // Plugin roots get the same treatment as the repo's applets/, so an applet
+    // installed outside this checkout is just as live.
+    for (const dir of [APPLETS_DIR, ...pluginRoots()]) {
+      try {
+        const w = watch(dir, { recursive: true }, (_e, file) => {
+          if (file && file.endsWith(".ts")) {
+            console.error(`applets changed (${file}) — restarting`);
+            process.exit(0);
+          }
+        });
+        w.unref?.();
+      } catch {
+        /* absent or unwatchable (a plugin dir may not exist) — manual restart */
+      }
     }
   }
 
@@ -62,12 +69,18 @@ export async function startDaemon(port = DEFAULT_PORT) {
   } catch {
     saved = {};
   }
+  // Deep-copy: a shallow spread would hand every applet's own module the array
+  // (or object) inside its `initialState` to mutate, so a running daemon would
+  // edit the applet's declared defaults in place.
+  const fresh = (a: (typeof applets)[number]): AppletState => {
+    try {
+      return structuredClone(a.initialState) as AppletState;
+    } catch {
+      return { ...a.initialState };
+    }
+  };
   for (const a of applets) {
-    // Deep-clone: a shallow spread would share the applet module's own arrays
-    // and objects, so the first verb that pushed a row would mutate the
-    // module's `initialState` and every later boot would start from it.
-    const fresh = structuredClone(a.initialState) as AppletState;
-    states[a.id] = ephemeral.has(a.id) ? fresh : { ...fresh, ...saved[a.id] };
+    states[a.id] = ephemeral.has(a.id) ? fresh(a) : { ...fresh(a), ...saved[a.id] };
   }
 
   let flushTimer: ReturnType<typeof setTimeout> | null = null;

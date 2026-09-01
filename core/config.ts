@@ -24,6 +24,8 @@ import type { Color } from "../sdk/index.ts";
  *   [applets.timer]
  *   default = "5m"            # `kona timer` with no argument
  *
+ *   plugins = ["~/src/kona-plugins"]   # load applets from outside the repo
+ *
  * Reading is synchronous and memoized, so any module can ask for the theme at
  * render time without threading config through every call. Tests point
  * KONA_CONFIG_DIR at a throwaway dir and call resetConfig().
@@ -92,6 +94,11 @@ export interface KonaConfig {
   theme: Theme;
   /** Raw `[applets.<id>]` blocks, keyed by applet id. */
   applets: Record<string, Record<string, unknown>>;
+  /**
+   * Extra places to load applets from — a plugin package (a dir with an
+   * `index.ts`) or a dir full of them. `~` expands. See core/load.ts.
+   */
+  plugins: string[];
   /** Absolute path we read (or would read). */
   path: string;
   /** True when that file exists — everything else is then defaults. */
@@ -173,7 +180,21 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     }
   }
 
-  return { defaultApplet, theme, applets, path: meta.path, exists: meta.exists, errors };
+  // --- external plugin roots
+  const plugins: string[] = [];
+  const rawPlugins = doc.plugins;
+  if (rawPlugins !== undefined) {
+    if (!Array.isArray(rawPlugins)) {
+      errors.push(`plugins: must be a list of paths (got ${JSON.stringify(rawPlugins)})`);
+    } else {
+      for (const entry of rawPlugins) {
+        if (typeof entry === "string" && entry.trim()) plugins.push(entry.trim());
+        else errors.push(`plugins: not a path (got ${JSON.stringify(entry)})`);
+      }
+    }
+  }
+
+  return { defaultApplet, theme, applets, plugins, path: meta.path, exists: meta.exists, errors };
 }
 
 let cached: KonaConfig | null = null;
@@ -248,13 +269,31 @@ export function appletBool(id: string, key: string, fallback: boolean): boolean 
   return fallback;
 }
 
-/** The commented starter file `kona config init` writes. */
-export function defaultConfigToml(): string {
+/**
+ * The commented starter file `kona config init` writes.
+ *
+ * The per-applet half is NOT listed here: each applet ships its own commented
+ * block as `configSample` in its `defineApplet`, and the caller passes them in
+ * (see `kona config init`). Adding an applet therefore never edits this file.
+ */
+export function defaultConfigToml(appletBlocks: string[] = []): string {
+  const blocks = appletBlocks.map((b) => b.trim()).filter(Boolean);
+  const applets = blocks.length
+    ? `
+# Per-applet settings. \`accent\` works for any applet; the rest are the
+# applet's own knobs, declared by the applet itself.
+${blocks.join("\n\n")}
+`
+    : "";
   return `# kona — ~/.config/kona/config.toml
 # Every key is optional; delete a line to fall back to the default shown.
 
 # Applet a bare \`kona\` opens. Comment out for the "pick an app" launcher.
 # default = "dash"
+
+# Load applets from outside the repo: a plugin package (a dir with index.ts)
+# or a dir full of them. \`~/.config/kona/plugins/*\` is always scanned.
+# plugins = ["~/src/my-kona-applet"]
 
 # The palette. Applets name ROLES, so these ten colors retheme all of kona.
 [theme]
@@ -268,28 +307,5 @@ warn   = "${DEFAULT_THEME.warn}"  # paused, degraded
 error  = "${DEFAULT_THEME.error}"  # failure
 key    = "${DEFAULT_THEME.key}"  # keybind glyphs
 bg     = "${DEFAULT_THEME.bg}"  # text on an accent fill
-
-# Per-applet settings. \`accent\` works for any applet; the rest are the
-# applet's own knobs.
-[applets.spotify]
-accent = "#1db954"   # Spotify green
-
-[applets.dash]
-accent = "#1db954"
-
-[applets.timer]
-default = "5m"       # \`kona timer\` with no argument
-
-# Pomodoro mode (\`p\` in the TUI, \`timer.pomodoro.start\` for an agent).
-# Durations may be written "25m" or as a bare number of MINUTES.
-[applets.timer.pomodoro]
-work  = "25m"
-short = "5m"
-long  = "15m"
-every = 4            # long break after every 4th work phase
-auto  = true         # false: wait for \`p\` at each phase boundary
-
-[applets.email]
-page = 20            # threads per fetch
-`;
+${applets}`;
 }

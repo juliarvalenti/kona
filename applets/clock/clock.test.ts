@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import type { AppletCtx, ViewNode } from "../sdk/index.ts";
-import clock from "../applets/clock/index.ts";
+import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
+import clock from "./index.ts";
 
 /**
  * The clock applet is a pure reducer plus a pure projection of one timestamp.

@@ -27,11 +27,20 @@ just another client.
 ```
 server/    konad — owns state (KV, persisted), runs the cron scheduler, streams SSE
 host/      OpenTUI client — launcher ("pick an app") → applet view → keymap
-sdk/       defineApplet({ view, verbs, keymap, tick }) + the tool manifest
-core/      applet loader, config/theme, HTTP client — shared by daemon and host
+sdk/       defineApplet({ view, verbs, keymap, tick }), the tool manifest,
+           and sdk/testing.ts — the whole plugin ABI
+core/      loader, config/theme, HTTP client, skill + catalog generators
 applets/
-  timer/   the walking-skeleton proof
+  timer/     one applet, one package:
+             index.ts        the applet — defineApplet(...)
+             timer.test.ts   its unit tests
+             snapshots.ts    its rendering fixtures
+             README.md       its docs
 ```
+
+Every applet is a self-contained package: kona discovers it, its tests, its
+fixtures and its docs from that one directory. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Use
 
@@ -42,7 +51,9 @@ kona                       # your default applet, else the launcher
 kona launcher              # always the launcher: pick an app
 kona timer 5m              # open the timer, pre-started
 kona timer pomodoro        # ...or a 25/5 work-break cycle
-kona ls                    # list applets
+kona ls                    # list applets (plugins marked)
+kona docs [applet]         # the applet catalog, or one applet's README
+kona new <id>              # scaffold a new applet package
 kona tools                 # the manifest an agent reads
 kona tools --json          # ...with docs, example args, and the key each verb binds
 kona tools --skill         # that manifest as a drop-in agent skill
@@ -59,33 +70,6 @@ The daemon (`konad`) autostarts on first use; state lives in
 In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes back,
 and `/` searches. The mouse works the same way: click a row to select and open
 it, scroll the wheel to scroll.
-
-### Pomodoro
-
-The timer also runs a pomodoro cycle — work → short break → … → long break —
-alongside the plain countdowns, not instead of them. Each phase counts down in
-the daemon, hands itself to the next one, and banners the desktop on the way
-past (`timer.pomodoro`, toggleable on its own). The view shows the phase, the
-round you're on and how many you've banked today.
-
-```sh
-kona timer pomodoro                                  # or `p` in the TUI
-kona call timer pomodoro.start '{"work":"50m","short":"10m"}'
-kona call timer pomodoro.skip '{}'                   # "skip this break"
-kona call timer pomodoro.pause '{}'                  # ...and .resume/.toggle/.stop
-```
-
-In the TUI: `p` starts a session and pauses/resumes it, `n` skips the current
-phase, `x` ends the session. The shape of the cycle lives in the config file:
-
-```toml
-[applets.timer.pomodoro]
-work  = "25m"   # a duration string, or a bare number of MINUTES
-short = "5m"
-long  = "15m"
-every = 4       # long break after every 4th work phase
-auto  = false   # wait for `p` at each boundary instead of rolling on
-```
 
 ### Desktop notifications
 
@@ -113,10 +97,25 @@ void notify({ event: "timer.done", title: "Timer", body: "05:00 is up." });
 ```
 
 Repeats of the same `key` inside a window are dropped and a burst is rate
-limited, so a re-sync can't spam you. Add a new event to `EVENTS` in
-`server/notify.ts` to make it listable and toggleable.
+limited, so a re-sync can't spam you. An applet declares the events it can raise
+in its own `notifications` block — that is what makes one listable and
+toggleable, so a new applet adds a banner without editing `server/notify.ts`.
 
-### Mail (Gmail and Outlook)
+## Applets
+
+Each applet documents itself, in its own package:
+
+```sh
+kona ls                  # what's installed here
+kona docs                # the catalog, generated from the live manifest
+kona docs email          # applets/email/README.md
+```
+
+There is deliberately no exhaustive list of applets in this file. A dozen-plus
+ship in `applets/`, you may have more installed as plugins, and any bare list
+here would be wrong the day someone adds one — which is the whole point of the
+package boundary below. `kona ls` is always right. The notes that follow cover
+the applets that need setup beyond `mkdir`.
 
 `email` is provider-abstracted: `server/mail.ts` defines a `MailProvider`
 (list an inbox, open a thread, send, save a draft, mark read, archive, trash,
@@ -386,11 +385,12 @@ kona tools --skill --out ~/.claude/skills/kona/SKILL.md
 bun run skill                        # the same install, from the repo
 ```
 
-The daemon renders it (`GET /skill`) from the applets it actually loaded, so
-the skill can never describe a verb the machine doesn't have — drop a new
-applet into `applets/` and re-run it. A copy lives at
-`.claude/skills/kona/SKILL.md`, and a test fails if it drifts from the
-generator.
+The daemon renders it (`GET /skill`) from the applets it actually loaded, so the
+skill can never describe a verb the machine doesn't have — drop in a new applet
+and re-run it. The rendered file is a build artifact, not a source file: it is
+gitignored and regenerated (a `SessionStart` hook does it for Claude Code), so
+adding an applet never means committing a regenerated skill that collides with
+somebody else's.
 
 What feeds it is per-applet, next to the verbs themselves:
 
@@ -431,18 +431,21 @@ error  = "#ff5c57"    # failure
 key    = "#e6e6e6"    # keybind glyphs
 bg     = "#0b0b0b"    # text on an accent fill
 
+plugins = ["~/src/my-applet"]   # load applets from outside this repo
+
 [applets.spotify]     # per-applet blocks
 accent = "#1db954"    # `accent` retints any applet's frame
-[applets.timer]
-default = "5m"        # `kona timer` with no argument
-[applets.timer.pomodoro]
-work  = "25m"         # the cycle: see "Pomodoro" above
-[applets.email]
-page = 20             # threads per fetch
-autoRead = true       # opening a thread marks it read
-[applets.mycelium]
-agent = "kona"        # the name your messages are posted under
 ```
+
+Concrete per-applet blocks are not listed by hand here — each applet ships its
+own commented `configSample` and `kona config init` composes them. For example
+the timer contributes `[applets.timer] default`/`[applets.timer.pomodoro]`,
+email contributes `[applets.email] page`/`autoRead`, and mycelium contributes
+`[applets.mycelium] agent`.
+
+The per-applet blocks are contributed by the applets: each one ships a commented
+`configSample`, `kona config init` composes them, and `kona docs <id>` explains
+what they mean. `[applets.<id>] accent` works for every applet.
 
 Ten roles retheme all of kona because no applet hardcodes a color: they call
 `theme().ok` and the stage paints from the same table.
@@ -458,11 +461,35 @@ view: (s) => [text(s.done ? "done" : "working", { color: theme().ok })]
 
 ## Writing an applet
 
-Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its
-`verbs` run in the daemon and are auto-exposed to agents; its `view` and
-`keymap` are picked up by the host. Colors come from `theme()` and settings from
-`appletConfig("<id>")` — both re-exported by the SDK, so `sdk/index.ts` is the
-whole extension surface. See `applets/timer/index.ts`.
+An applet is a **package**, and the rule is: adding one edits **no shared file**.
+
+```sh
+kona new pomodoro              # applets/pomodoro/ — applet, fixtures, test, docs
+kona new pomodoro --plugin     # ...or ~/.config/kona/plugins/pomodoro, outside the repo
+bun test applets/pomodoro
+kona pomodoro
+```
+
+That directory is everything kona knows about it:
+
+| file | who reads it |
+| --- | --- |
+| `index.ts` | the loader — `defineApplet(...)` as the default export |
+| `snapshots.ts` | `tests/snapshot.test.ts`, which discovers fixtures per package |
+| `<id>.test.ts` | `bun test`, which finds tests wherever they live |
+| `README.md` | `kona docs <id>` and the generated catalog |
+
+The definition is also the manifest: `docs`/`recipes` feed the agent skill,
+`notifications` register the applet's desktop banners, `auth` adds a
+`kona login <service>`, `cli` gives it arguments (`kona timer 5m`),
+`configSample` contributes to `kona config init`. Nothing central to append to,
+so two people adding two applets never conflict.
+
+Applets load from `applets/*/` in this repo, from `~/.config/kona/plugins/*/`,
+and from anything named by `plugins` in config.toml or `KONA_PLUGINS`. The
+stable surface a plugin targets — `defineApplet`, the view vocabulary,
+`sdk/components.ts`, `AppletCtx`, `sdk/testing.ts` — is written down in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Typing into an applet
 

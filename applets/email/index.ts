@@ -573,6 +573,20 @@ export default defineApplet<EmailState>({
   id: "email",
   title: "Email",
   summary: "Read, write, reply and file mail from Gmail and Outlook in one list.",
+  labels: ["mail", "network"],
+  requires: ["a mailbox: `kona login gmail` or `kona login outlook`"],
+  // Both providers are this applet's business, so `kona login gmail` is wired
+  // here — the CLI has no provider table of its own. Imported lazily: the OAuth
+  // module only loads when someone actually signs in.
+  auth: {
+    gmail: () => import("../../server/google.ts"),
+    outlook: () => import("../../server/microsoft.ts"),
+  },
+  notifications: {
+    "email.unread": { summary: "unread mail arrives", default: false },
+  },
+  configSample: `[applets.email]
+page = 20            # threads per fetch`,
   ephemeral: true, // mail lives in RAM only — never written to state.json
   initialState: {
     threads: [],

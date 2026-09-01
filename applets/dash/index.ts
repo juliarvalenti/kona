@@ -164,6 +164,12 @@ export default defineApplet<DashState>({
   id: "dash",
   title: "Dashboard",
   summary: "Live cockpit — now playing, timer, mail, GitHub. Leave it open.",
+  labels: ["overview"],
+  notifications: {
+    "github.new": { summary: "a PR or issue involving you shows up", default: true },
+  },
+  configSample: `[applets.dash]
+accent = "#1db954"`,
   ephemeral: true,
   initialState: { np: null, timer: null, unread: 0, emailAuthed: false, webex: null, flows: null, gh: [], ghError: null, cursor: 0 },
 

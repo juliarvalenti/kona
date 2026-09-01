@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import type { AppletCtx, ViewNode } from "../sdk/index.ts";
-import notes from "../applets/notes/index.ts";
+import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
+import notes from "./index.ts";
 
 /**
  * The notes applet is a reducer over a persisted list. These drive it exactly

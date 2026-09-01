@@ -76,6 +76,7 @@ export default defineApplet<NotesState>({
   id: "notes",
   title: "Notes",
   summary: "A scratchpad that survives restarts. Agents jot lines too.",
+  labels: ["scratch"],
   initialState: { notes: [], cursor: 0, history: [] },
 
   docs: {

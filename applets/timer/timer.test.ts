@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { theme, type AppletCtx, type ViewNode } from "../sdk/index.ts";
-import timer from "../applets/timer/index.ts";
+import { theme, type AppletCtx, type ViewNode } from "../../sdk/index.ts";
+import timer from "./index.ts";
 
 /**
  * The timer applet is a pure reducer over its state: verbs and tick mutate the
@@ -194,7 +194,7 @@ test("up/down move the cursor and clamp at the ends", () => {
 test("keymap exposes the 5/15/25m presets", () => {
   const presets = Object.entries(timer.keymap!).filter(([, b]) => typeof b === "object" && b.verb === "start");
   expect(presets.map(([k]) => k)).toEqual(["1", "2", "3"]);
-  expect(presets.map(([, b]) => (b as { args: { seconds: number } }).args.seconds)).toEqual([300, 900, 1500]);
+  expect(presets.map(([, b]) => (b as unknown as { args: { seconds: number } }).args.seconds)).toEqual([300, 900, 1500]);
 
   // ...and the preset keys really do start a fresh countdown.
   const h = harness();

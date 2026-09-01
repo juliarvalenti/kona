@@ -171,6 +171,11 @@ export default defineApplet<SpotifyState>({
   id: "spotify",
   title: "Spotify",
   summary: "Now playing + transport control.",
+  labels: ["music", "network"],
+  requires: ["a Spotify account: `kona login spotify`"],
+  auth: { spotify: () => import("../../server/spotify.ts") },
+  configSample: `[applets.spotify]
+accent = "#1db954"   # Spotify green`,
   ephemeral: true,
   initialState: {
     playing: false,

@@ -2,3 +2,9 @@ node_modules/
 *.log
 .DS_Store
 dist/
+
+# The agent skill is GENERATED from the applets the loader finds
+# (`bun run skill`, or the SessionStart hook in .claude/settings.json).
+# Committing it would make every new applet a diff against a shared file — the
+# exact merge tax the plugin boundary exists to remove.
+.claude/skills/kona/SKILL.md
