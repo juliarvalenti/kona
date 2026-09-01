@@ -33,3 +33,15 @@ test("extractBody returns empty when there is no text part", () => {
   expect(extractBody({ mimeType: "image/png", body: { data: "x" } })).toBe("");
   expect(extractBody(undefined)).toBe("");
 });
+
+test("extractBody falls back to HTML->text when there is no plain part", () => {
+  const html = "<h1>Hi</h1><p>Your order is <b>ready</b>.</p>";
+  const payload = {
+    mimeType: "text/html",
+    body: { data: Buffer.from(html, "utf8").toString("base64url") },
+  };
+  const out = extractBody(payload);
+  expect(out).toMatch(/hi/i); // heading text present (html-to-text upcases h1)
+  expect(out).toContain("Your order is ready.");
+  expect(out).not.toContain("<"); // tags stripped
+});

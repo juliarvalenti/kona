@@ -71,6 +71,18 @@ export async function startDaemon(port = DEFAULT_PORT) {
     };
   }
 
+  // --- init: one-shot on boot (e.g. email's first inbox load). Survives
+  // --watch restarts, so applets don't sit in their empty initial state.
+  for (const a of applets) {
+    if (a.init) {
+      try {
+        a.init(ctxFor(a.id));
+      } catch (e) {
+        console.error(`[init:${a.id}]`, e);
+      }
+    }
+  }
+
   // --- the tick: internal caller, same state, same emit
   for (const a of applets) {
     if (a.tick && a.tickMs) {

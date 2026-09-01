@@ -112,19 +112,34 @@ export default defineApplet<EmailState>({
     },
   },
 
-  // Quietly keep the inbox fresh while it's open and idle.
-  tickMs: 60_000,
-  tick({ state, emit }) {
-    if (state.authed && !state.loading && !state.open) void loadInbox(state, emit);
+  // Load the inbox as soon as the daemon boots (survives --watch restarts).
+  init({ state, emit }) {
+    void loadInbox(state, emit);
   },
 
+  // Keep the inbox fresh while idle; also recovers if you sign in later.
+  tickMs: 60_000,
+  tick({ state, emit }) {
+    if (!state.loading && !state.open) void loadInbox(state, emit);
+  },
+
+  // Navigation is handled by the platform (arrows + vim). Only the non-nav
+  // action lives in the keymap.
   keymap: {
-    j: { verb: "down", label: "down" },
-    k: { verb: "up", label: "up" },
-    l: { verb: "open", label: "open" },
-    h: { verb: "back", label: "back" },
     r: { verb: "refresh", label: "refresh" },
   },
+
+  nav: {
+    up: "up",
+    down: "down",
+    select: "open",
+    selectLabel: "open",
+    back: "back",
+    backLabel: "list",
+    canBack: (s) => !!s.open,
+  },
+
+  crumb: (s) => (s.open ? truncate(s.open.subject, 40) : null),
 
   accent(state) {
     if (state.error && !state.authed) return AMBER;
@@ -155,10 +170,11 @@ export default defineApplet<EmailState>({
         body.push(keyValue("from", truncate(m.from, 40), { color: FG }));
         body.push(text(m.date, { dim: true }));
         body.push(spacer());
-        for (const line of m.body.split("\n").slice(0, 24)) body.push(text(line || " ", { color: FG }));
+        // Keep whole lines (they word-wrap in the host); cap total for now.
+        for (const line of m.body.split("\n").slice(0, 60)) body.push(text(line || " ", { color: FG }));
         body.push(spacer());
       }
-      return [col(body, { align: "start" })];
+      return [col(body)];
     }
 
     // The inbox list
@@ -178,6 +194,6 @@ export default defineApplet<EmailState>({
       rows.push(text("(empty — press r to refresh)", { dim: true }));
     }
 
-    return [col([header, divider(56), ...rows], { align: "start" })];
+    return [col([header, divider(56), ...rows])];
   },
 });

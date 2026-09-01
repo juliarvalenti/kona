@@ -115,32 +115,59 @@ export async function runHost(startAppletId: string | null) {
     (attempt) => stage.footerNote(`reconnecting… (${attempt})`),
   );
 
+  // Canonical navigation intents, each matched by an arrow key AND a vim key.
+  const isUp = (n: string) => n === "up" || n === "k";
+  const isDown = (n: string) => n === "down" || n === "j";
+  const isSelect = (n: string) => n === "return" || n === "right" || n === "l";
+  const isBack = (n: string) => n === "escape" || n === "left" || n === "backspace" || n === "h";
+
   renderer.keyInput.on("keypress", async (k: { name: string; ctrl: boolean }) => {
+    const n = k.name;
     // ctrl+c is handled by exitOnCtrlC.
+
     if (current === null) {
       // launcher navigation
-      if (k.name === "up" || k.name === "k") cursor = (cursor - 1 + applets.length) % applets.length;
-      else if (k.name === "down" || k.name === "j") cursor = (cursor + 1) % applets.length;
-      else if (k.name === "return" || k.name === "right" || k.name === "l") {
-        current = applets[cursor]?.id ?? null;
-      }
+      if (isUp(n)) cursor = (cursor - 1 + applets.length) % applets.length;
+      else if (isDown(n)) cursor = (cursor + 1) % applets.length;
+      else if (isSelect(n)) current = applets[cursor]?.id ?? null;
       render();
       return;
     }
 
-    // inside an applet
-    if (k.name === "escape" || k.name === "q") {
+    const def = byId.get(current);
+    if (!def) {
       current = null;
       render();
       return;
     }
-    const def = byId.get(current);
-    const binding = def?.keymap?.[k.name];
-    if (def && binding) {
+    const state = (states[def.id] ?? def.initialState) as AppletState;
+    const nav = def.nav;
+
+    // Back is browser-like: pop an internal view if the applet has one,
+    // otherwise return to the launcher.
+    if (isBack(n)) {
+      if (nav?.back && nav.canBack?.(state)) await callVerb(def.id, nav.back).catch(() => {});
+      else {
+        current = null;
+        render();
+      }
+      return;
+    }
+
+    // Directional intents route to the applet's nav verbs.
+    if (nav) {
+      const intent = isUp(n) ? nav.up : isDown(n) ? nav.down : isSelect(n) ? nav.select : undefined;
+      if (intent) {
+        await callVerb(def.id, intent).catch(() => {});
+        return;
+      }
+    }
+
+    // Non-nav actions from the keymap (letters like r).
+    const binding = def.keymap?.[n];
+    if (binding) {
       const { verb, args } = resolveBinding(binding);
-      // Fire the verb at the daemon — identical to what the agent does.
       await callVerb(def.id, verb, args).catch(() => {});
-      // state update arrives via SSE and repaints; no local mutation.
     }
   });
 

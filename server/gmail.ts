@@ -1,4 +1,5 @@
 import { gapi } from "./google.ts";
+import { convert as htmlToText } from "html-to-text";
 
 /**
  * A thin Gmail layer: fetch inbox threads and full threads, normalized into
@@ -55,15 +56,36 @@ export function displayName(from: string): string {
   return from.trim();
 }
 
-/** Depth-first search for the first text/plain part, base64url-decoded. */
-export function extractBody(payload: GPayload | undefined): string {
-  if (!payload) return "";
-  if (payload.mimeType === "text/plain" && payload.body?.data) {
-    return Buffer.from(payload.body.data, "base64url").toString("utf8").trim();
+function findPart(payload: GPayload | undefined, mime: string): string | null {
+  if (!payload) return null;
+  if (payload.mimeType === mime && payload.body?.data) {
+    return Buffer.from(payload.body.data, "base64url").toString("utf8");
   }
   for (const part of payload.parts ?? []) {
-    const b = extractBody(part);
-    if (b) return b;
+    const hit = findPart(part, mime);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Best-effort readable body: prefer text/plain, else convert the text/html part
+ * to text (most real mail — receipts, newsletters — is HTML-only). Links and
+ * images are flattened so the reader stays clean.
+ */
+export function extractBody(payload: GPayload | undefined): string {
+  const plain = findPart(payload, "text/plain");
+  if (plain) return plain.trim();
+
+  const html = findPart(payload, "text/html");
+  if (html) {
+    return htmlToText(html, {
+      wordwrap: false, // let the TUI wrap
+      selectors: [
+        { selector: "img", format: "skip" },
+        { selector: "a", options: { ignoreHref: true } },
+      ],
+    }).trim();
   }
   return "";
 }
@@ -75,25 +97,25 @@ function threadUnread(messages: GMessage[]): boolean {
 export async function listInbox(query = "in:inbox", max = 20): Promise<MailThread[]> {
   const list = await gapi("/gmail/v1/users/me/threads", { q: query, maxResults: String(max) });
   const stubs = (list.threads ?? []) as Array<{ id: string; snippet?: string }>;
-  const out: MailThread[] = [];
-  for (const t of stubs) {
-    // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
-    // passing a comma string silently returns zero headers. Just fetch all
-    // metadata headers and pick the three we want.
-    const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
-    const messages = (full.messages ?? []) as GMessage[];
-    const last = messages[messages.length - 1];
-    const h = last?.payload?.headers;
-    out.push({
-      id: t.id,
-      from: displayName(header(h, "From")),
-      subject: header(h, "Subject") || "(no subject)",
-      snippet: last?.snippet ?? t.snippet ?? "",
-      date: header(h, "Date"),
-      unread: threadUnread(messages),
-    });
-  }
-  return out;
+  // Fetch thread metadata in parallel (Promise.all preserves inbox order).
+  // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
+  // a comma string silently returns zero headers, so we fetch all metadata.
+  return Promise.all(
+    stubs.map(async (t) => {
+      const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
+      const messages = (full.messages ?? []) as GMessage[];
+      const last = messages[messages.length - 1];
+      const h = last?.payload?.headers;
+      return {
+        id: t.id,
+        from: displayName(header(h, "From")),
+        subject: header(h, "Subject") || "(no subject)",
+        snippet: last?.snippet ?? t.snippet ?? "",
+        date: header(h, "Date"),
+        unread: threadUnread(messages),
+      };
+    }),
+  );
 }
 
 export async function getThread(id: string): Promise<OpenThread> {

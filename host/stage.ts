@@ -64,12 +64,15 @@ export interface Stage {
 export function createStage(renderer: CliRenderer): Stage {
   const { DIM, FG, ACCENT, KEY } = COLORS;
 
+  // The frame fills the terminal (minus a 1-cell margin), with the hint bar
+  // pinned below. A bounded width is also what lets long lines word-wrap.
   renderer.root.flexDirection = "column";
   const stage = new BoxRenderable(renderer, {
     id: "stage",
     flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    padding: 1,
+    flexDirection: "column",
+    alignItems: "stretch",
   });
   const frame = new BoxRenderable(renderer, {
     id: "frame",
@@ -77,9 +80,9 @@ export function createStage(renderer: CliRenderer): Stage {
     borderStyle: "rounded",
     borderColor: ACCENT,
     padding: 1,
+    flexGrow: 1,
     flexDirection: "column",
     alignItems: "stretch", // children fill width; applets align themselves
-    minWidth: 44,
   });
   stage.add(frame);
   const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1 });
@@ -114,12 +117,12 @@ export function createStage(renderer: CliRenderer): Stage {
   }
 
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
-    if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG });
+    if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG, wrapMode: "word" });
     switch (node.kind) {
       case "big":
         return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG });
       case "text":
-        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG) });
+        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG), wrapMode: "word" });
       case "spacer":
         return new TextRenderable(renderer, { id, content: " " });
       case "row":
@@ -151,9 +154,18 @@ export function createStage(renderer: CliRenderer): Stage {
       const body = def.view(state);
       const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
       const accent = def.accent?.(state) ?? ACCENT;
-      setFrame(def.title, accent, nodes);
-      const hints: Hint[] = Object.entries(def.keymap ?? {}).map(([key, b]) => ({ key, label: bindingLabel(b) }));
-      hints.push({ key: "esc", label: "back" }, { key: "ctrl+c", label: "quit" });
+      const crumb = def.crumb?.(state);
+      setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes);
+
+      // Hint bar = navigation intents + non-nav keymap + meta back/quit.
+      const nav = def.nav;
+      const hints: Hint[] = [];
+      if (nav?.up || nav?.down) hints.push({ key: "↑↓", label: "move" });
+      if (nav?.select) hints.push({ key: "→", label: nav.selectLabel ?? "open" });
+      for (const [key, b] of Object.entries(def.keymap ?? {})) hints.push({ key, label: bindingLabel(b) });
+      const canBack = nav?.canBack?.(state) ?? false;
+      hints.push({ key: "←/esc", label: canBack ? (nav?.backLabel ?? "back") : "menu" });
+      hints.push({ key: "ctrl+c", label: "quit" });
       setFooter(hints);
     },
     renderLauncher(applets, cursor) {

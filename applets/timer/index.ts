@@ -131,7 +131,7 @@ export default defineApplet<TimerState>({
           spacer(),
           text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
         ],
-        { align: "center", width: "100%", gap: 0 },
+        { align: "center", justify: "center", grow: true },
       ),
     ];
   },

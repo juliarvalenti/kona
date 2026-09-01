@@ -111,6 +111,9 @@ export async function login(): Promise<string> {
   });
 
   const server = Bun.serve({
+    // Bind IPv4 explicitly: the redirect_uri is http://127.0.0.1, and Bun's
+    // default "localhost" can resolve to IPv6 ::1, which 127.0.0.1 can't reach.
+    hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
       const u = new URL(req.url);
@@ -151,6 +154,8 @@ export async function login(): Promise<string> {
   }
 
   const code = await codeP;
+  // Let the browser receive the success page before we tear the server down.
+  await Bun.sleep(400);
   server.stop(true);
 
   const res = await fetch(TOKEN_URL, {

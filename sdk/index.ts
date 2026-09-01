@@ -94,6 +94,25 @@ export const bar = (value: number, opts: { width?: number; color?: Color } = {})
   ...opts,
 });
 
+/**
+ * Navigation model. The host binds canonical intents to BOTH arrow keys and
+ * vim keys, so movement is first-class and uniform across applets:
+ *   up:    ↑ / k      down: ↓ / j
+ *   select:→ / enter / l      back: ← / esc / backspace / h
+ * `back` is browser-like: if `canBack(state)` is true the host fires the back
+ * verb (pop an internal view, e.g. close an open email); otherwise it returns
+ * to the launcher. Each field names a verb to fire.
+ */
+export interface Nav<S extends object = AppletState> {
+  up?: string;
+  down?: string;
+  select?: string;
+  selectLabel?: string;
+  back?: string;
+  backLabel?: string;
+  canBack?: (state: S) => boolean;
+}
+
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
@@ -111,11 +130,17 @@ export interface AppletDef<S extends object = AppletState> {
   view: (state: S) => View;
   /** Optional frame tint (border/title color) derived from state. */
   accent?: (state: S) => Color;
-  /** key -> verb. e.g. { space: "toggle", s: "stop" }. */
+  /** Navigation intents (arrows + vim + browser-like back). */
+  nav?: Nav<S>;
+  /** Breadcrumb for the current sub-view, shown in the title (e.g. open email). */
+  crumb?: (state: S) => string | null;
+  /** key -> verb for NON-navigation actions (e.g. { r: "refresh" }). */
   keymap?: Record<string, KeyBinding>;
   /** If set, the daemon calls tick every tickMs while the applet is "live". */
   tick?: (ctx: AppletCtx<S>) => void;
   tickMs?: number;
+  /** Called once when the daemon boots — good for an initial data load. */
+  init?: (ctx: AppletCtx<S>) => void;
 }
 
 /** Identity helper — gives you types and a stable shape. */

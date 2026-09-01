@@ -14,10 +14,12 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@opentui/core": "latest"
+    "@opentui/core": "latest",
+    "html-to-text": "^10.0.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/html-to-text": "^9.0.4",
     "typescript": "^7.0.2"
   }
 }
