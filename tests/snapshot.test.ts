@@ -136,3 +136,29 @@ test("clock's picker lists matching cities to add", async () => {
   expect(frame).toContain("UTC+5:30");
   expect(frame).not.toContain("Berlin"); // filtered out
 });
+
+test("notes lists jotted lines with a header count", async () => {
+  const frame = await snapshot(
+    "notes",
+    {
+      cursor: 1,
+      notes: [
+        { id: "a1", text: "ship the notes applet", at: Date.now() },
+        { id: "b2", text: "milk, eggs, coffee", at: Date.now() - 7_200_000 },
+      ],
+    },
+    72,
+    16,
+  );
+  expect(frame).toContain("SCRATCHPAD");
+  expect(frame).toContain("2 notes");
+  expect(frame).toContain("ship the notes applet");
+  expect(frame).toContain("milk, eggs, coffee");
+});
+
+test("an empty notes pad shows how to jot the first line", async () => {
+  const frame = await snapshot("notes", {}, 72, 14);
+  expect(frame).toContain("0 notes");
+  expect(frame).toContain("nothing jotted yet");
+  expect(frame).toContain("notes.add");
+});
