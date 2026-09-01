@@ -309,7 +309,7 @@ export default defineApplet<TickerState>({
         : [
             { text: symbol, width: 10 },
             { text: q?.name ?? "…", grow: true },
-            { text: q ? sparkText(q.spark, sparkW) : "", width: sparkW },
+            { text: q ? sparkText(q.spark, { width: sparkW, fit: "bucket" }) : "", width: sparkW },
             { text: q ? price(q.price, q.currency) : "—", width: 12, align: "right" as const },
             { text: q ? pct(q.changePct) : "", width: 9, align: "right" as const },
           ];
@@ -346,7 +346,7 @@ function detail(state: TickerState, W: number): ViewNode[] {
       text(`   ${arrow} ${q.change > 0 ? "+" : ""}${q.change.toFixed(2)} (${pct(q.changePct)})`, { color }),
     ]),
     spacer(),
-    text(sparkText(q.spark, Math.max(16, W - 8)), { color }),
+    text(sparkText(q.spark, { width: Math.max(16, W - 8), fit: "bucket" }), { color }),
     spacer(),
     divider(W - 1),
     keyValue("prev close ", price(q.prevClose, q.currency)),

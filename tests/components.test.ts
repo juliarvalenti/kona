@@ -11,6 +11,7 @@ import {
   recordRow,
   field,
   sparkline,
+  sparkText,
   tabs,
   toast,
   card,
@@ -171,6 +172,30 @@ test("sparkline renders gaps for non-finite samples and survives an empty series
   }
   const empty = sparkline([]);
   expect(empty).toMatchObject({ kind: "text", text: "" });
+});
+
+test("sparkText fits a long series by bucketing or by keeping the tail", () => {
+  const series = [0, 100, 0, 100, 1, 2, 3, 4];
+  // bucket keeps the whole session's shape (the spikes average out high);
+  // tail keeps only what just happened, rescaled to itself.
+  expect(sparkText(series, { width: 4, fit: "bucket" })).toBe("██▁▁");
+  expect(sparkText(series, { width: 4, fit: "tail" })).toBe("▁▃▆█");
+  // No width means every sample; a short series is never padded or clipped.
+  expect(sparkText([1, 2, 3, 4])).toBe("▁▃▆█");
+  expect(sparkText([])).toBe("");
+});
+
+test("sparkText widens each sample by `cell` so labels can sit underneath", () => {
+  expect(sparkText([1, 5], { cell: 3 })).toBe("▁▁▁███");
+  expect(sparkText([1, NaN, 5], { cell: 2 })).toBe("▁▁  ██"); // a hole keeps its columns
+});
+
+test("sparkline and sparkText draw the same series the same way", () => {
+  const series = [3, 1, 4, 1, 5, 9, 2, 6];
+  const n = sparkline(series, { width: 4 });
+  if (typeof n !== "string" && n.kind === "text") {
+    expect(n.text).toBe(sparkText(series, { width: 4 }));
+  }
 });
 
 test("tabs fills the active tab and dims the rest", () => {

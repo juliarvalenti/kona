@@ -1,6 +1,6 @@
 import { test, expect, afterEach } from "bun:test";
 import type { AppletCtx, ViewNode } from "../../sdk/index.ts";
-import weather, { sparkline } from "./index.ts";
+import weather from "./index.ts";
 import { describeCode, iconForCode, isWet, parseForecast, placeLabel, windArrow } from "../../server/weather.ts";
 import { renderApplet } from "../../sdk/testing.ts";
 import { fakeProviders, type FakeProviders } from "../../sdk/fake.ts";
@@ -151,13 +151,6 @@ test("windArrow points around the compass", () => {
   expect(windArrow(180)).toBe("↑");
   expect(windArrow(270)).toBe("→");
   expect(windArrow(-90)).toBe("→"); // negatives wrap
-});
-
-test("sparkline maps the series onto block heights", () => {
-  expect(sparkline([1, 2, 3, 4, 5, 6, 7, 8])).toBe("▁▂▃▄▅▆▇█");
-  expect(sparkline([])).toBe("");
-  expect(sparkline([5, 5, 5])).toBe("▅▅▅"); // flat sits mid-height, not on the floor
-  expect(sparkline([1, 5], 3)).toBe("▁▁▁███"); // cell widens each sample
 });
 
 test("placeLabel prefers the region, falls back to the country", () => {

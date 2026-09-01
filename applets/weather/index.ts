@@ -1,5 +1,5 @@
 import { defineApplet, big, text, spacer, col, row, type ViewNode, type Color } from "../../sdk/index.ts";
-import { divider, keyValue, progress, recordRow } from "../../sdk/components.ts";
+import { divider, keyValue, progress, recordRow, sparkText } from "../../sdk/components.ts";
 import {
   configuredLocation,
   describeCode,
@@ -66,27 +66,6 @@ const TICK_MS = 60_000;
 const STALE_MS = 15 * 60_000;
 // bun test / KONA_NO_NET: never let a background tick hit the network.
 const OFFLINE = !!process.env.KONA_NO_NET || process.env.NODE_ENV === "test";
-
-const SPARK = "▁▂▃▄▅▆▇█";
-
-/**
- * A row of block glyphs whose heights track the values — the hourly
- * temperature curve in one line. `cell` widens each sample so hour labels can
- * be written underneath at the same offsets.
- */
-export function sparkline(values: number[], cell = 1): string {
-  if (values.length === 0) return "";
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min;
-  return values
-    .map((v) => {
-      // A flat series sits mid-height rather than collapsing to the floor.
-      const t = span === 0 ? 0.5 : (v - min) / span;
-      return SPARK[Math.min(SPARK.length - 1, Math.round(t * (SPARK.length - 1)))]!.repeat(cell);
-    })
-    .join("");
-}
 
 /** Chance-of-rain shading under the temperature curve. */
 function precipStrip(probs: number[], cell = 1): string {
@@ -540,7 +519,7 @@ export default defineApplet<WeatherState>({
         spacer(),
         // The sparkline has no axis, so the heading carries its range.
         text(`NEXT ${slice.length} HOURS   ${T(lo)} – ${T(hi)}`, { color: DIM }),
-        text(sparkline(slice.map((h) => h.temp), cell), { color: tint }),
+        text(sparkText(slice.map((h) => h.temp), { cell }), { color: tint }),
         text(labelStrip(slice.map((h, i) => (i % every === 0 ? hourLabel(h.time) : null)), cell, stripW), { dim: true }),
       );
       if (slice.some((h) => h.precipProb >= 10)) {
