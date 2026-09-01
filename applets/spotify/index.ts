@@ -659,6 +659,20 @@ accent = "#1db954"   # Spotify green`,
     return state.playing ? GREEN : DIM;
   },
 
+  /**
+   * The dash headline. A paused track still counts — it just sits below
+   * anything that is actually moving rather than vanishing mid-album.
+   */
+  dash: (s) =>
+    s.track
+      ? {
+          priority: s.playing ? 45 : 18,
+          text: `♪ ${s.track}${s.artist ? ` — ${s.artist}` : ""}`,
+          note: `${s.playing ? "▶" : "⏸"}${s.shuffle ? " ⤮" : ""}`,
+          color: palette().GREEN,
+        }
+      : null,
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
     const { GREEN, FG, AMBER, DIM } = palette();

@@ -121,9 +121,19 @@ test("a select verb given an index selects that row before acting", async () => 
   const dash = applets.find((a) => a.id === "dash")!;
   const state = {
     ...dash.initialState,
-    np: { track: "Rave Green", artist: "Sounders FC", playing: true, shuffle: false },
+    cards: [
+      {
+        applet: "spotify",
+        key: "spotify",
+        text: "♪ Rave Green — Sounders FC",
+        note: "▶",
+        color: "#1db954",
+        priority: 45,
+        navigate: "spotify",
+      },
+    ],
     gh: [{ type: "Issue", title: "mouse support", repo: "kona", url: "http://example.test/9", age: "1d" }],
-    cursor: 1, // cursor is on the GitHub row; the click lands on now-playing
+    cursor: 1, // cursor is on the GitHub row; the click lands on the spotify card
   } as AppletState;
 
   const result = await dash.verbs.open!({ index: 0 }, { state, emit: () => {} });

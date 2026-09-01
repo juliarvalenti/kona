@@ -1,4 +1,4 @@
-import { defineApplet, text, spacer, col, row, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, row, type ViewNode, type DashCard } from "../../sdk/index.ts";
 import { divider, meter, sparkline } from "../../sdk/components.ts";
 import { sample, type Battery, type DiskUsage, type Usage } from "../../server/sys.ts";
 
@@ -223,6 +223,44 @@ export default defineApplet<SysState>({
     const worst = Math.max(state.cpu, frac(state.mem), frac(state.disk));
     const low = state.battery && !state.battery.plugged && state.battery.level <= 0.1;
     return low ? RED : heat(worst);
+  },
+
+  /**
+   * The machine only speaks up when something is wrong with it: a pegged CPU,
+   * a battery about to die, a disk about to fill. A healthy box is silent.
+   */
+  dash: (s) => {
+    const cards: DashCard[] = [];
+    if (s.cpu >= 0.85) {
+      cards.push({
+        id: "cpu",
+        priority: 70,
+        text: `▲ CPU ${Math.round(s.cpu * 100)}%${s.load[0] ? `  ·  load ${s.load[0].toFixed(2)}` : ""}`,
+        note: `${s.cores} cores`,
+        color: heat(s.cpu),
+      });
+    }
+    const b = s.battery;
+    if (b && !b.plugged && b.level <= 0.2) {
+      cards.push({
+        id: "battery",
+        priority: 85,
+        text: `□ battery ${Math.round(b.level * 100)}%  ·  ${batteryNote(b)}`,
+        note: "unplugged",
+        color: charge(b),
+      });
+    }
+    const d = s.disk;
+    if (d && frac(d) >= 0.92) {
+      cards.push({
+        id: "disk",
+        priority: 60,
+        text: `■ ${d.mount} ${Math.round(frac(d) * 100)}% full  ·  ${amount(d)}`,
+        note: "low space",
+        color: heat(frac(d)),
+      });
+    }
+    return cards;
   },
 
   view(state, ctx): ViewNode[] {

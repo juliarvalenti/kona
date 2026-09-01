@@ -25,8 +25,8 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <br><sub><a href="applets/clock/README.md"><code>clock</code></a> — Every city you care about, at a glance. Add zones by hand or by agent.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/shots/dash.svg" width="100%" alt="Dashboard — the cockpit: song, countdown, mail, spaces, workflows, GitHub">
-<br><sub><a href="applets/dash/README.md"><code>dash</code></a> — Live cockpit — now playing, timer, mail, GitHub. Leave it open.</sub>
+<img src="docs/shots/dash.svg" width="100%" alt="Dashboard — the cockpit: one card per applet with something live, urgent first">
+<br><sub><a href="applets/dash/README.md"><code>dash</code></a> — Live cockpit — whatever your applets say is happening right now.</sub>
 </td>
 </tr>
 <tr>
@@ -611,8 +611,10 @@ have sent rather than sending them.
 The definition is also the manifest: `docs`/`recipes` feed the agent skill,
 `notifications` register the applet's desktop banners, `auth` adds a
 `kona login <service>`, `cli` gives it arguments (`kona timer 5m`),
-`configSample` contributes to `kona config init`. Nothing central to append to,
-so two people adding two applets never conflict.
+`configSample` contributes to `kona config init`, and `dash` is the line the
+applet puts on the [dashboard](applets/dash/README.md) when something of its own
+is live. Nothing central to append to, so two people adding two applets never
+conflict.
 
 Applets load from `applets/*/` in this repo, from `~/.config/kona/plugins/*/`,
 and from anything named by `plugins` in config.toml or `KONA_PLUGINS`. The

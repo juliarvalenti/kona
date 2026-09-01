@@ -38,6 +38,10 @@ const FG = "#d0d0d0";
 const AMBER = "#f0b000";
 const DIM = "#6a6a6a";
 
+// What counts as a MOVER on someone else's dashboard. Below this the tape is
+// just noise and the ticker keeps it to itself.
+const MOVE_PCT = 2;
+
 // Quotes come from a courtesy endpoint, so poll politely: at most every 45s,
 // and back off for 5 minutes when the whole fetch fails (rate limit, offline) —
 // the same discipline dash applies to GitHub.
@@ -265,6 +269,24 @@ export default defineApplet<TickerState>({
     if (state.error) return AMBER;
     const q = quoteOf(state, state.open ?? selected(state));
     return tint(q);
+  },
+
+  /**
+   * Movers only. A tape where nothing has moved more than a couple of percent
+   * is not worth a line on someone else's screen.
+   */
+  dash: (s) => {
+    const movers = s.quotes
+      .filter((q) => !q.error && Number.isFinite(q.changePct) && Math.abs(q.changePct) >= MOVE_PCT)
+      .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+    const top = movers[0];
+    if (!top) return null;
+    return {
+      priority: 15,
+      text: `↕ ${movers.slice(0, 3).map((q) => `${q.symbol} ${pct(q.changePct)}`).join("   ")}`,
+      note: movers.length > 3 ? `+${movers.length - 3} more` : "",
+      color: tint(top),
+    };
   },
 
   view(state, ctx): ViewNode[] {

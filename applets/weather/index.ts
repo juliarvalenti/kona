@@ -408,6 +408,24 @@ export default defineApplet<WeatherState>({
     return tintFor(s.current.code, s.current.isDay);
   },
 
+  /**
+   * The calm line on the board: conditions where you are. It stays near the
+   * bottom unless the sky is doing something — falling water now, or a wet
+   * hour coming up — which is the only time weather interrupts anything.
+   */
+  dash: (s) => {
+    const c = s.current;
+    if (!c) return null;
+    const wet = isWet(c.code);
+    const soon = s.hourly.slice(nowIndex(s), nowIndex(s) + 4).find((h) => h.precipProb >= 60);
+    return {
+      priority: wet ? 30 : soon ? 25 : 5,
+      text: `${iconForCode(c.code, c.isDay)} ${deg(c.temp, s.tempUnit)}  ${describeCode(c.code)}${s.place ? `  ·  ${s.place}` : ""}`,
+      note: soon ? `${soon.precipProb}% ${hourLabel(soon.time)}` : "",
+      color: tintFor(c.code, c.isDay),
+    };
+  },
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
 

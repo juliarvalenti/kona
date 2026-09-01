@@ -1,59 +1,56 @@
-import { defineApplet, text, spacer, col, row, theme, appletAccent, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, theme, appletAccent, type AppletCtx, type ViewNode } from "../../sdk/index.ts";
 import { divider, recordRow } from "../../sdk/components.ts";
 import { openItems, type GhItem } from "../../server/github.ts";
-import { nextRun } from "../../server/cron.ts";
 import { notify, freshIds } from "../../server/notify.ts";
+import { collectCards, ghLimit, type DashRow } from "./cards.ts";
 
 /**
- * dash — an always-open cockpit. It doesn't own much data of its own; it PEEKS
- * the other applets' live state (spotify, timer, email, webex — their ticks run
- * in the daemon regardless of what's on screen) and adds GitHub notifications.
- * Leave it open and it stays current: the song, the countdown, new PRs/issues.
+ * dash — an always-open cockpit, assembled from whatever else is installed.
+ *
+ * It owns almost no data. Every applet answers `dash(state)` about itself — a
+ * song, a countdown, unread mail, a workflow about to fire — and the dash
+ * collects those cards from the applets the daemon actually loaded
+ * (`ctx.applets()` + `ctx.peek(id)`), keeps the ones that say they have
+ * something LIVE, and sorts them by urgency. An applet with nothing going on
+ * contributes nothing, so the board is only ever what needs you right now.
+ *
+ * Adding an applet with a card puts it on this screen with no edit to this
+ * file. The one thing the dash fetches for itself is GitHub, below the cards.
  */
 
 interface DashState {
-  np: { track: string; artist: string; playing: boolean; shuffle: boolean } | null;
-  timer: { remaining: number; running: boolean; label: string; more: number } | null;
-  unread: number;
-  emailAuthed: boolean;
-  webex: { unread: number; spaces: number } | null;
-  flows: { defined: number; scheduled: number; next: { name: string; at: number } | null; last: { name: string; ok: boolean; at: number } | null } | null;
+  /** The contributed rows, already filtered and ordered. See ./cards.ts. */
+  cards: DashRow[];
   gh: GhItem[];
   ghError: string | null;
-  cursor: number; // index into the selectable targets (now-playing + gh rows)
+  cursor: number; // index into the selectable targets (cards, then gh rows)
 }
 
 /** The selectable things on the dash, in render order. */
-type Target = { kind: "spotify" } | { kind: "gh"; url: string };
+type Target = { kind: "card"; navigate: string } | { kind: "gh"; url: string };
 function targets(s: DashState): Target[] {
-  return [...(s.np ? [{ kind: "spotify" as const }] : []), ...s.gh.map((g) => ({ kind: "gh" as const, url: g.url }))];
+  return [
+    ...s.cards.map((c) => ({ kind: "card" as const, navigate: c.navigate })),
+    ...ghRows(s).map((g) => ({ kind: "gh" as const, url: g.url })),
+  ];
+}
+
+/** The GitHub rows actually drawn — density decides, and `open` agrees. */
+function ghRows(s: DashState): GhItem[] {
+  return s.gh.slice(0, ghLimit());
 }
 
 /**
- * The dash's own tint. It defaults to the Spotify green it has always worn (the
- * now-playing row is the headline), and `[applets.dash] accent = "#..."` in
- * ~/.config/kona/config.toml overrides it. Everything else names a theme role.
+ * The dash's own tint. It defaults to the Spotify green it has always worn, and
+ * `[applets.dash] accent = "#..."` in ~/.config/kona/config.toml overrides it.
+ * Everything else names a theme role — a CARD's color comes from the applet
+ * that contributed it.
  */
 const BRAND = "#1db954";
 const palette = () => {
   const t = theme();
-  return { GREEN: appletAccent("dash", BRAND), BLUE: t.accent, AMBER: t.warn, FG: t.fg, DIM: t.dim };
+  return { GREEN: appletAccent("dash", BRAND), AMBER: t.warn, FG: t.fg, DIM: t.dim };
 };
-
-/** "in 12m" / "in 3h" — how long until a scheduled workflow fires. */
-function countdown(at: number, now = Date.now()): string {
-  const d = Math.max(0, at - now);
-  if (d < 60_000) return `in ${Math.round(d / 1000)}s`;
-  if (d < 3_600_000) return `in ${Math.round(d / 60_000)}m`;
-  if (d < 86_400_000) return `in ${Math.round(d / 3_600_000)}h`;
-  return `in ${Math.round(d / 86_400_000)}d`;
-}
-
-function fmt(sec: number): string {
-  const s = Math.max(0, sec);
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
 
 // Which GitHub items we have already announced. null until the first fetch
 // lands: a daemon boot ADOPTS whatever is open rather than bannering twelve
@@ -109,61 +106,19 @@ async function refreshGh(state: DashState, emit: () => void) {
   }
 }
 
-// Pull the live bits out of the other applets' state.
-function aggregate(state: DashState, peek?: (id: string) => Record<string, unknown> | undefined) {
-  const sp = peek?.("spotify") as { track?: string; artist?: string; playing?: boolean; shuffle?: boolean } | undefined;
-  state.np = sp?.track ? { track: sp.track, artist: sp.artist ?? "", playing: !!sp.playing, shuffle: !!sp.shuffle } : null;
-
-  // The timer applet holds a LIST now; surface the one that expires soonest
-  // (running beats paused) and how many others are still on the clock.
-  const tm = peek?.("timer") as { timers?: Array<{ remaining: number; running: boolean; label: string }> } | undefined;
-  const live = (tm?.timers ?? []).filter((t) => t.running || t.remaining > 0);
-  const soonest = [...live].sort((a, b) => Number(b.running) - Number(a.running) || a.remaining - b.remaining)[0];
-  state.timer = soonest
-    ? { remaining: soonest.remaining, running: soonest.running, label: soonest.label, more: live.length - 1 }
-    : null;
-
-  const em = peek?.("email") as { threads?: Array<{ unread?: boolean }>; authed?: boolean } | undefined;
-  state.emailAuthed = !!em?.authed;
-  state.unread = (em?.threads ?? []).filter((t) => t.unread).length;
-
-  // Webex sits beside mail: the same "how much is waiting for me" question.
-  const wx = peek?.("webex") as { unread?: number; spaces?: unknown[]; authed?: boolean } | undefined;
-  state.webex = wx?.authed ? { unread: wx.unread ?? 0, spaces: (wx.spaces ?? []).length } : null;
-
-  // Workflows: what the daemon will fire next, and how the last one went. The
-  // scheduler runs whether or not anyone has the applet open, so this is the
-  // only place a human sees it coming.
-  const wf = peek?.("workflows") as
-    | { workflows?: Array<{ name: string; cron?: string | null; enabled?: boolean }>; runs?: Array<{ name: string; ok: boolean; at: number }> }
-    | undefined;
-  const defined = wf?.workflows ?? [];
-  const upcoming = defined
-    .filter((w) => w.cron && w.enabled)
-    .map((w) => {
-      try {
-        return { name: w.name, at: nextRun(w.cron!) };
-      } catch {
-        return null;
-      }
-    })
-    .filter((x): x is { name: string; at: number } => !!x)
-    .sort((a, b) => a.at - b.at)[0];
-  const last = wf?.runs?.[0];
-  state.flows = defined.length
-    ? {
-        defined: defined.length,
-        scheduled: defined.filter((w) => w.cron && w.enabled).length,
-        next: upcoming ?? null,
-        last: last ? { name: last.name, ok: last.ok, at: last.at } : null,
-      }
-    : null;
+/**
+ * Rebuild the board from the applets this daemon loaded. The whole aggregation
+ * is now this: ask everyone, keep what's live. Nothing here names an applet.
+ */
+function aggregate(state: DashState, ctx: Pick<AppletCtx<DashState>, "peek" | "applets">) {
+  state.cards = collectCards(ctx.applets?.() ?? [], ctx.peek ?? (() => undefined));
+  state.cursor = Math.max(0, Math.min(state.cursor, Math.max(0, targets(state).length - 1)));
 }
 
 export default defineApplet<DashState>({
   id: "dash",
   title: "Dashboard",
-  summary: "Live cockpit — now playing, timer, mail, GitHub. Leave it open.",
+  summary: "Live cockpit — whatever your applets say is happening right now.",
   icon: "▦",
   tint: "#7dcfff", // cockpit cyan
   labels: ["overview"],
@@ -171,19 +126,33 @@ export default defineApplet<DashState>({
     "github.new": { summary: "a PR or issue involving you shows up", default: true },
   },
   configSample: `[applets.dash]
-accent = "#1db954"`,
+accent = "#1db954"
+# density = "compact"        # only the cards that want something from you
+# pin = ["timer", "email"]   # these first, in this order
+# hide = ["weather", "timer:pomodoro"]`,
   ephemeral: true,
-  initialState: { np: null, timer: null, unread: 0, emailAuthed: false, webex: null, flows: null, gh: [], ghError: null, cursor: 0 },
+  initialState: { cards: [], gh: [], ghError: null, cursor: 0 },
 
   docs: {
-    refresh: "Re-aggregate the dashboard from the other applets' live state, and refetch GitHub.",
-    open: { doc: "Open a row: a GitHub PR/issue in the browser, or jump to the Spotify applet.", args: { index: 0 } },
+    refresh: "Rebuild the board from every applet's live state, and refetch GitHub.",
+    open: { doc: "Open a row: a GitHub PR/issue in the browser, or jump into the applet that contributed the card.", args: { index: 0 } },
   },
 
+  recipes: [
+    {
+      title: "Ask what needs attention right now",
+      steps: [
+        "kona state dash",
+        `kona call dash open '{"index":0}'`,
+      ],
+      note: "`cards` is exactly what is on the human's screen: one row per applet with something live, most urgent first.",
+    },
+  ],
+
   verbs: {
-    refresh(_a, { state, emit, peek }) {
-      aggregate(state, peek);
-      void refreshGh(state, emit);
+    refresh(_a, ctx) {
+      aggregate(ctx.state, ctx);
+      void refreshGh(ctx.state, ctx.emit);
     },
     up(_a, { state, emit }) {
       state.cursor = Math.max(0, state.cursor - 1);
@@ -193,9 +162,9 @@ accent = "#1db954"`,
       state.cursor = Math.min(Math.max(0, targets(state).length - 1), state.cursor + 1);
       emit();
     },
-    // open the selected target: now-playing jumps to the Spotify applet;
-    // a GitHub row opens the PR/issue in the browser. A mouse click passes the
-    // clicked row's index — select it first, then open it.
+    // open the selected target: a card jumps into the applet that contributed
+    // it; a GitHub row opens the PR/issue in the browser. A mouse click passes
+    // the clicked row's index — select it first, then open it.
     open(a, { state, emit }) {
       if (typeof a.index === "number") {
         state.cursor = Math.max(0, Math.min(targets(state).length - 1, a.index));
@@ -203,28 +172,28 @@ accent = "#1db954"`,
       }
       const t = targets(state)[state.cursor];
       if (!t) return {};
-      if (t.kind === "spotify") return { navigate: "spotify" };
+      if (t.kind === "card") return { navigate: t.navigate };
       Bun.spawn(["open", t.url]);
       return { opened: t.url };
     },
   },
 
-  init({ state, emit, peek }) {
-    aggregate(state, peek);
+  init(ctx) {
+    aggregate(ctx.state, ctx);
     nextGhAt = 0; // fetch on boot
-    void refreshGh(state, emit);
+    void refreshGh(ctx.state, ctx.emit);
   },
 
   // Cheap peeks every second (song position, countdown); GitHub on its own
   // rate-limited schedule (>=60s, 5min backoff on error).
   tickMs: 1000,
-  tick({ state, emit, peek }) {
-    aggregate(state, peek);
+  tick(ctx) {
+    aggregate(ctx.state, ctx);
     if (Date.now() >= nextGhAt && !ghInFlight) {
       nextGhAt = Date.now() + 60_000; // tentative; refreshGh sets the real time
-      void refreshGh(state, emit);
+      void refreshGh(ctx.state, ctx.emit);
     }
-    emit();
+    ctx.emit();
   },
 
   keymap: {
@@ -240,67 +209,41 @@ accent = "#1db954"`,
 
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
-    const { GREEN, BLUE, AMBER, FG, DIM } = palette();
+    const { GREEN, AMBER, FG, DIM } = palette();
     const nodes: ViewNode[] = [];
+    const gh = ghRows(state);
 
-    // Now playing (selectable — jumps into the Spotify applet). Target 0.
-    if (state.np) {
-      const flags = `${state.np.playing ? "▶" : "⏸"}${state.np.shuffle ? " ⤮" : ""}`;
+    // The contributed cards, most urgent first. Each is selectable: -> (or a
+    // click) jumps into the applet that put it there.
+    state.cards.forEach((card, i) => {
       nodes.push(
         recordRow(
           [
-            { text: `♪ ${state.np.track} — ${state.np.artist}`, grow: true },
-            { text: flags, width: 6, align: "right" },
+            { text: card.text, grow: true },
+            ...(card.note ? [{ text: card.note, width: Math.min(14, Math.floor(W * 0.2)), align: "right" as const }] : []),
           ],
-          { width: W, selected: state.cursor === 0, accent: GREEN, color: FG, index: 0 },
+          { width: W, selected: state.cursor === i, accent: card.color, color: FG, index: i },
         ),
       );
-    } else {
-      nodes.push(text("♪ nothing playing", { dim: true }));
+    });
+
+    // Nothing live anywhere, and nothing open on GitHub: say so and stop.
+    if (!state.cards.length && !gh.length && !state.ghError) {
+      nodes.push(text("all quiet", { color: GREEN }), text("nothing needs you right now", { dim: true }));
+      return [col(nodes)];
     }
 
-    // Timer (only when active)
-    if (state.timer) {
-      const t = state.timer;
-      const extra = t.more > 0 ? `  +${t.more} more` : "";
-      nodes.push(text(`⏲ ${fmt(t.remaining)}${t.label ? `  ${t.label}` : ""}${t.running ? "" : "  (paused)"}${extra}`, { color: AMBER }));
-    }
+    if (!state.cards.length) nodes.push(text("all quiet across your applets", { dim: true }));
 
-    // Mail
-    nodes.push(
-      state.emailAuthed
-        ? text(`✉ ${state.unread} unread`, { color: state.unread ? BLUE : DIM })
-        : text("✉ mail not connected", { dim: true }),
-    );
-
-    // Webex — spaces with something new in them.
-    if (state.webex) {
-      const { unread, spaces } = state.webex;
-      nodes.push(
-        text(`◇ ${unread} space${unread === 1 ? "" : "s"} with new messages  ·  ${spaces} total`, {
-          color: unread ? BLUE : DIM,
-        }),
-      );
-    }
-
-    // Workflows — the next scheduled run, and how the last one went.
-    if (state.flows) {
-      const f = state.flows;
-      const bits = [`⚙ ${f.defined} workflow${f.defined === 1 ? "" : "s"}`];
-      if (f.next) bits.push(`next “${f.next.name}” ${countdown(f.next.at)}`);
-      if (f.last) bits.push(`last ${f.last.ok ? "✓" : "✗"} ${f.last.name}`);
-      nodes.push(text(bits.join("  ·  "), { color: f.last && !f.last.ok ? AMBER : f.scheduled ? BLUE : DIM }));
-    }
-
-    // GitHub
-    nodes.push(spacer(), divider(W - 1), text(`GITHUB  ·  ${state.gh.length} open, involving you`, { color: GREEN }));
-    if (state.ghError) {
-      nodes.push(text(state.ghError, { color: AMBER }));
-    } else if (!state.gh.length) {
-      nodes.push(text("nothing open involving you", { dim: true }));
-    } else {
-      const base = state.np ? 1 : 0; // gh targets start after the now-playing row
-      state.gh.forEach((n, i) => {
+    // GitHub — the one source the dash fetches for itself. Hidden when there is
+    // nothing open and nothing went wrong.
+    if (gh.length || state.ghError) {
+      const base = state.cards.length; // gh targets start after the cards
+      nodes.push(spacer(), divider(W - 1), text(`GITHUB  ·  ${state.gh.length} open, involving you`, { color: GREEN }));
+      if (state.ghError) {
+        nodes.push(text(state.ghError, { color: AMBER }));
+      }
+      gh.forEach((n, i) => {
         nodes.push(
           recordRow(
             [
@@ -312,6 +255,9 @@ accent = "#1db954"`,
           ),
         );
       });
+      if (state.gh.length > gh.length) {
+        nodes.push(text(`  +${state.gh.length - gh.length} more`, { color: DIM }));
+      }
     }
 
     return [col(nodes)];

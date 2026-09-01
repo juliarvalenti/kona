@@ -1227,6 +1227,23 @@ page = 20            # threads per fetch`,
     };
   },
 
+  /**
+   * Unread mail, and who the newest one is from. A read inbox says nothing —
+   * "0 unread" is not news.
+   */
+  dash: (s) => {
+    if (!s.authed) return null;
+    const unread = s.threads.filter((t) => t.unread);
+    if (!unread.length) return null;
+    const top = unread[0]!;
+    return {
+      priority: 50,
+      text: `✉ ${unread.length} unread  ·  ${top.from}: ${top.subject}`,
+      note: shortDate(top.ts, top.date),
+      color: palette().UNREAD,
+    };
+  },
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, (ctx?.width ?? 80)); // usable inner width
     const { ACCENT, FG, DIM, AMBER, UNREAD } = palette();

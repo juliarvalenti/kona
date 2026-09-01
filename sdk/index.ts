@@ -27,6 +27,13 @@ export interface AppletCtx<S = AppletState> {
    */
   peek?: (appletId: string) => AppletState | undefined;
   /**
+   * Every applet loaded on THIS machine, definitions and all. An applet that
+   * composes the others (the dash) discovers them here instead of carrying a
+   * hardcoded list, so installing an applet is the only step there is: pair
+   * each definition with `peek(id)` for its live state.
+   */
+  applets?: () => AnyApplet[];
+  /**
    * Fire another applet's verb — the SAME entry point an agent's POST and a
    * keypress land on, so an applet composing others is just one more caller.
    * This is what makes `workflows` possible without the engine knowing HTTP.
@@ -110,6 +117,7 @@ export {
   appletString,
   appletNumber,
   appletBool,
+  appletList,
   type Theme,
 } from "../core/config.ts";
 
@@ -352,6 +360,43 @@ export interface NotificationSpec {
   default?: boolean;
 }
 
+/**
+ * A row an applet contributes to the dashboard.
+ *
+ * The dash does not know what a song or a countdown is: every applet answers
+ * "is anything of mine worth a line right now?" from its own state, and the
+ * cockpit is whatever comes back. An applet with nothing live returns null and
+ * takes up no room — that is what keeps the dash free of "0 unread" clutter.
+ *
+ * Cards are DATA, not nodes: they cross the daemon->host seam inside the dash's
+ * own state (so `kona state dash` is exactly what is on screen), and the dash
+ * draws the row — selection bar, click target, column alignment — the same way
+ * for everyone.
+ */
+export interface DashCard {
+  /**
+   * Distinguishes several cards from one applet ("countdown", "pomodoro").
+   * It is also what `[applets.dash] hide`/`pin` name: `<applet>:<id>`.
+   */
+  id?: string;
+  /** Is this worth showing right now? Default true — return null for "no". */
+  show?: boolean;
+  /**
+   * Urgency, 0..100, highest first. Landmarks: 80+ something is wrong or about
+   * to fire, 60 live and moving, 40 waiting on you, 20 ambient, 5 calm. Ties
+   * break on the card's key, so the board is stable between ticks.
+   */
+  priority?: number;
+  /** The line itself, glyph and all: "♪ Rave Green — Sounders FC". */
+  text: string;
+  /** A short right-aligned trailing cell — a count, a countdown, a flag. */
+  note?: string;
+  /** Row color. Defaults to the contributing applet's tint. */
+  color?: Color;
+  /** Where -> / a click goes. Defaults to the contributing applet. */
+  navigate?: string;
+}
+
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
@@ -387,6 +432,12 @@ export interface AppletDef<S extends object = AppletState> {
   view: (state: S, ctx?: ViewCtx) => View;
   /** Optional frame tint (border/title color) derived from state. */
   accent?: (state: S) => Color;
+  /**
+   * What this applet is worth saying on the DASHBOARD right now — one card, a
+   * few, or nothing at all. Pure, like `view`: the dash calls it with your live
+   * state on every tick. See `DashCard`.
+   */
+  dash?: (state: S) => DashCard | DashCard[] | null | undefined;
   /** Navigation intents (arrows + vim + browser-like back). */
   nav?: Nav<S>;
   /**

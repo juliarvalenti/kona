@@ -74,6 +74,28 @@ test("a verb call mutates shared state, readable by the next client", async () =
   expect(paused.state.timers[0].running).toBe(false);
 });
 
+test("the dash picks up another applet's card without knowing about it", async () => {
+  // The seam under test is ctx.applets(): dash asks every LOADED applet what it
+  // has to say and draws the answers, so a countdown started over HTTP puts a
+  // row on the cockpit with nothing in applets/dash naming the timer.
+  const started = await call("timer", "start", { seconds: 300, label: "e2e" });
+  await call("dash", "refresh", {});
+  const dash = await get("/applets/dash/state");
+  const card = (dash.cards as Array<{ applet: string; text: string; navigate: string }>).find(
+    (c) => c.applet === "timer",
+  );
+  expect(card?.text).toContain("e2e");
+  expect(card?.navigate).toBe("timer");
+
+  // ...and it stops saying so the moment the countdowns are gone (including
+  // the paused one an earlier test left on the clock — paused still counts).
+  expect(started.ok).toBe(true);
+  await call("timer", "stop", { all: true });
+  await call("dash", "refresh", {});
+  const quiet = await get("/applets/dash/state");
+  expect((quiet.cards as Array<{ applet: string }>).some((c) => c.applet === "timer")).toBe(false);
+});
+
 test("unknown applet and verb 404 cleanly", async () => {
   const a = await fetch(`${url}/applets/nope/state`);
   expect(a.status).toBe(404);

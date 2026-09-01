@@ -34,6 +34,8 @@ const RED = "#ff5c57";
 const UNREAD = "#00d488";
 
 const PAGE = 25;
+// How recent an unread item has to be to be worth a line on the dashboard.
+const FRESH_MS = 6 * 3_600_000;
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
@@ -208,6 +210,21 @@ export default defineApplet<RssState>({
     if (!state.configured) return AMBER;
     if (state.error) return RED;
     return ACCENT;
+  },
+
+  /** Items that arrived recently and you haven't read. A stale river is quiet. */
+  dash: (s) => {
+    const fresh = s.items.filter(
+      (it) => !s.read.includes(it.id) && it.published > Date.now() - FRESH_MS,
+    );
+    const top = fresh[0];
+    if (!top) return null;
+    return {
+      priority: 12,
+      text: `◉ ${fresh.length} new  ·  ${truncate(top.title, 60)}`,
+      note: top.feed,
+      color: UNREAD,
+    };
   },
 
   view(state, ctx): ViewNode[] {

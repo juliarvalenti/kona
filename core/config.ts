@@ -256,6 +256,17 @@ export function appletNumber(id: string, key: string, fallback: number): number 
 }
 
 /**
+ * A list-of-strings setting from an applet's block. A bare string counts as a
+ * one-entry list, since `hide = "weather"` is what people type.
+ */
+export function appletList(id: string, key: string, fallback: string[] = []): string[] {
+  const v = appletConfig(id)[key];
+  if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string").map((x) => x.trim());
+  return fallback;
+}
+
+/**
  * A boolean setting from an applet's block. TOML `true`/`false`, and the
  * strings people type anyway ("yes", "off"), both count.
  */

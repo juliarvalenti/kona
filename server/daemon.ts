@@ -122,6 +122,10 @@ export async function startDaemon(port = DEFAULT_PORT) {
         persist();
       },
       peek: (other) => states[other], // read another applet's live state
+      // ...and what there IS to peek at. The array is the daemon's live one, so
+      // an applet registered a second ago is in it; `dash` reads this instead
+      // of naming the applets it knows how to summarise.
+      applets: () => applets,
       // Fire another applet's verb through the SAME entry point HTTP uses, so
       // an applet composing others (workflows) is just one more caller. The
       // HTTP layer's 404 Response becomes a plain rejection here — a caller in

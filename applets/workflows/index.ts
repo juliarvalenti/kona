@@ -1,4 +1,4 @@
-import { defineApplet, text, spacer, col, input, theme, type AppletCtx, type ViewNode } from "../../sdk/index.ts";
+import { defineApplet, text, spacer, col, input, theme, type AppletCtx, type ViewNode, type DashCard } from "../../sdk/index.ts";
 import { divider, recordRow, modal, field as labelled, heading } from "../../sdk/components.ts";
 import { describeCron, nextRun, validateCron } from "../../server/cron.ts";
 import {
@@ -315,6 +315,20 @@ async function execute(ctx: Ctx, wf: Workflow, args: Result): Promise<Result> {
     state.running = state.running.filter((id) => id !== wf.id);
     emit();
   }
+}
+
+/**
+ * The scheduled workflow that fires next, or null when none is. The list view
+ * and the dash card ask the same question, so they ask it in one place.
+ */
+function upcoming(state: WorkflowsState): { w: Workflow; at: number } | null {
+  return (
+    state.workflows
+      .filter((w) => w.cron && w.enabled)
+      .map((w) => ({ w, at: safeNext(w.cron!) }))
+      .filter((x): x is { w: Workflow; at: number } => x.at !== null)
+      .sort((a, b) => a.at - b.at)[0] ?? null
+  );
 }
 
 export default defineApplet<WorkflowsState>({
@@ -777,6 +791,45 @@ export default defineApplet<WorkflowsState>({
     };
   },
 
+  /**
+   * The scheduler runs whether or not anyone has this applet open, so the dash
+   * is the only place a human sees a run coming — or sees that the last one
+   * failed. A pile of workflows that are merely DEFINED is not news.
+   */
+  dash: (s) => {
+    const cards: DashCard[] = [];
+    const { OK, ERR, ACCENT } = palette();
+    if (s.running.length) {
+      cards.push({
+        id: "running",
+        priority: 60,
+        text: `⚙ running ${s.running.join(", ")}`,
+        color: OK,
+      });
+    }
+    const last = s.runs[0];
+    if (last && !last.ok) {
+      cards.push({
+        id: "failed",
+        priority: 75,
+        text: `⚙ ${last.name} failed${last.error ? `  ·  ${last.error}` : ""}`,
+        note: "failed",
+        color: ERR,
+      });
+    }
+    const next = upcoming(s);
+    // Only once it is close enough to plan around.
+    if (next && next.at - Date.now() < 3_600_000) {
+      cards.push({
+        id: "next",
+        priority: 30,
+        text: `⚙ next “${next.w.name}” ${until(next.at)}`,
+        color: ACCENT,
+      });
+    }
+    return cards;
+  },
+
   view(state, ctx): ViewNode[] {
     const W = Math.max(40, ctx?.width ?? 80);
     const { ACCENT, OK, WARN, ERR, FG, DIM, MUTED } = palette();
@@ -829,15 +882,11 @@ export default defineApplet<WorkflowsState>({
 
       if (state.error) nodes.push(spacer(), text(state.error, { color: ERR }));
 
-      const upcoming = state.workflows
-        .filter((w) => w.cron && w.enabled)
-        .map((w) => ({ w, at: safeNext(w.cron!) }))
-        .filter((x): x is { w: Workflow; at: number } => x.at !== null)
-        .sort((a, b) => a.at - b.at)[0];
-      if (upcoming) {
+      const next = upcoming(state);
+      if (next) {
         nodes.push(
           spacer(),
-          text(`next: ${upcoming.w.name} ${until(upcoming.at, now)}  (${clock(upcoming.at)})`, { color: DIM }),
+          text(`next: ${next.w.name} ${until(next.at, now)}  (${clock(next.at)})`, { color: DIM }),
         );
       }
       return [col(nodes)];
