@@ -118,13 +118,18 @@ export async function heroText(pkg: AppletPackage, hero: AppletSnapshot): Promis
  * Run `fn` at `SHOT_EPOCH`, in `tz`, against the default theme. Applets read
  * the wall clock freely (`ago()`, countdowns) and the theme comes from the
  * developer's own config.toml — neither may leak into a committed image.
+ *
+ * The whole `Date` is swapped, not just `Date.now`: a stamp that asks "is this
+ * today?" writes `new Date()`, which a `Date.now` stub leaves pointing at the
+ * real clock — and that is exactly how the gallery used to rot overnight
+ * (#66). `new Date(value)` and the statics keep working as they always did.
  */
 export async function pinned<T>(tz: string, fn: () => Promise<T>): Promise<T> {
-  const realNow = Date.now;
+  const realDate = globalThis.Date;
   const oldTz = process.env.TZ;
   const oldCfg = process.env.KONA_CONFIG_DIR;
   const oldPlugins = process.env.KONA_NO_PLUGINS;
-  Date.now = () => SHOT_EPOCH;
+  globalThis.Date = frozen(realDate, SHOT_EPOCH);
   process.env.TZ = tz;
   process.env.KONA_CONFIG_DIR = join(REPO_ROOT, ".kona-no-such-config");
   process.env.KONA_NO_PLUGINS = "1";
@@ -132,12 +137,29 @@ export async function pinned<T>(tz: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } finally {
-    Date.now = realNow;
+    globalThis.Date = realDate;
     restore("TZ", oldTz);
     restore("KONA_CONFIG_DIR", oldCfg);
     restore("KONA_NO_PLUGINS", oldPlugins);
     resetConfig();
   }
+}
+
+/**
+ * `Date`, stopped at `at`: the argument-less constructor and `now()` answer the
+ * fixed instant, everything else (parsing, arithmetic, the statics) is the real
+ * one. `instanceof Date` still holds, since this extends it.
+ */
+function frozen(real: DateConstructor, at: number): DateConstructor {
+  return class FrozenDate extends real {
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(at);
+      else super(...(args as ConstructorParameters<DateConstructor>));
+    }
+    static override now(): number {
+      return at;
+    }
+  } as DateConstructor;
 }
 
 function restore(key: string, value: string | undefined): void {
