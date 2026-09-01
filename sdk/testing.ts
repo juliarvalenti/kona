@@ -1,5 +1,6 @@
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage } from "../host/stage.ts";
+import { filterApplets } from "../core/catalog.ts";
 import { loadApplets } from "../core/load.ts";
 import type { AnyApplet, AppletDef, AppletState } from "./index.ts";
 
@@ -76,15 +77,23 @@ export async function renderApplet(
   });
 }
 
-/** Render the launcher — the one screen that belongs to no applet. */
+/**
+ * Render the launcher — the one screen that belongs to no applet. `query` runs
+ * the same filter the host runs, so a fixture can pin what typing narrows the
+ * list to, and `cursor` indexes what is left after it.
+ */
 export async function renderLauncher(
   applets?: AnyApplet[],
   cursor = 0,
   width = DEFAULT_SIZE.width,
   height = DEFAULT_SIZE.height,
+  query = "",
 ): Promise<string> {
-  const list = applets ?? ((await loadApplets()) as unknown as AnyApplet[]);
-  return frame(width, height, (stage) => stage.renderLauncher(list, cursor));
+  const all = applets ?? ((await loadApplets()) as unknown as AnyApplet[]);
+  const list = filterApplets(all, query);
+  return frame(width, height, (stage) =>
+    stage.renderLauncher(list, cursor, { query, total: all.length }),
+  );
 }
 
 /** Run one fixture; resolves with the failures, empty when it passes. */

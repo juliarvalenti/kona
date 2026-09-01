@@ -280,8 +280,9 @@ export function defaultConfigToml(appletBlocks: string[] = []): string {
   const blocks = appletBlocks.map((b) => b.trim()).filter(Boolean);
   const applets = blocks.length
     ? `
-# Per-applet settings. \`accent\` works for any applet; the rest are the
-# applet's own knobs, declared by the applet itself.
+# Per-applet settings. \`accent\` (frame + launcher row) and \`icon\` (its glyph
+# in the launcher) work for any applet; the rest are the applet's own knobs,
+# declared by the applet itself.
 ${blocks.join("\n\n")}
 `
     : "";

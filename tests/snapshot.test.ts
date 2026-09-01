@@ -21,18 +21,24 @@ import type { AnyApplet } from "../sdk/index.ts";
 
 const packages = await loadPackages();
 
-test("the launcher lists applets with a cursor and title", async () => {
-  // Tall enough to show the whole launcher list as the applet count grows.
-  const frame = await renderLauncher(
-    packages.map((p) => p.def),
-    0,
-    62,
-    40,
-  );
+test("the launcher lists the applets this machine has, as a menu", async () => {
+  const defs = packages.map((p) => p.def);
+  // An ORDINARY viewport, not one sized to the list: the launcher scrolls and
+  // filters now, so a growing applet count is not this test's problem. What is
+  // reachable however long the list gets is tests/launcher.test.ts.
+  const frame = await renderLauncher(defs, 0);
   expect(frame).toContain("kona");
-  expect(frame).toContain("Timer");
-  expect(frame).toContain("Storybook");
+  expect(frame).toContain(defs[0]!.title);
+  expect(frame).toContain(defs[0]!.summary!.slice(0, 24)); // titles AND what they are
   expect(frame).toContain("▸"); // cursor marker
+});
+
+test("every installed applet can be reached by cursor or by typing its name", async () => {
+  const defs = packages.map((p) => p.def);
+  const timer = defs.findIndex((d) => d.id === "timer");
+  expect(timer).toBeGreaterThanOrEqual(0);
+  expect(await renderLauncher(defs, timer)).toContain("Timer");
+  expect(await renderLauncher(defs, 0, 62, 30, "storybook")).toContain("Storybook");
 });
 
 for (const pkg of packages) {

@@ -103,9 +103,17 @@ test("the clipboard helper is chosen per platform, and overridable", () => {
   }
 });
 
-test("the copy-prompt key is advertised on the launcher and on an applet", async () => {
-  expect(await renderLauncher([demo, other], 0, 80, 12)).toContain("y prompt");
+test("the copy-prompt key is advertised on an applet", async () => {
   expect(await renderApplet(demo, {}, 80, 12)).toContain("y prompt");
+});
+
+test("the launcher advertises filter, not copy-prompt (type-to-filter owns bare keys)", async () => {
+  // The launcher starts a filter on any printable key (#40), so it can't also
+  // bind a bare letter to copy-prompt. Copy-prompt lives on applets; the whole
+  // launcher set is not copyable from a keystroke (see follow-up).
+  const frame = await renderLauncher([demo, other], 0, 80, 12);
+  expect(frame).toContain("filter");
+  expect(frame).not.toContain("y prompt");
 });
 
 test("an applet that binds the key keeps it — the platform hint is a default", async () => {

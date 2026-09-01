@@ -224,6 +224,8 @@ export default defineApplet<WeatherState>({
   id: "weather",
   title: "Weather",
   summary: "Current conditions and the week ahead, from open-meteo.",
+  icon: "☀",
+  tint: RAIN,
   labels: ["weather", "network"],
   initialState: {
     place: "",

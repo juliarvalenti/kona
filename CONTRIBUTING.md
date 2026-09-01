@@ -77,6 +77,8 @@ export default defineApplet<PomodoroState>({
   id: "pomodoro",
   title: "Pomodoro",
   summary: "One line for the launcher.",
+  icon: "◕",            // your glyph in the launcher — ONE cell, no emoji
+  tint: "#ff5c57",      // your brand color there (accent(state) stays the live frame tint)
   labels: ["focus"],
   requires: ["nothing"],
   initialState: { round: 0 },

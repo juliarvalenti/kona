@@ -26,7 +26,7 @@ just another client.
 
 ```
 server/    konad — owns state (KV, persisted), runs the cron scheduler, streams SSE
-host/      OpenTUI client — launcher ("pick an app") → applet view → keymap
+host/      OpenTUI client — launcher (scrolls, filters) → applet view → keymap
 sdk/       defineApplet({ view, verbs, keymap, tick }), the tool manifest,
            and sdk/testing.ts — the whole plugin ABI
 core/      loader, config/theme, HTTP client, skill + catalog generators
@@ -73,6 +73,11 @@ In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes
 `/` searches, and `y` copies an agent prompt for whatever is on screen (below).
 The mouse works the same way: click a row to select and open it, scroll the
 wheel to scroll.
+
+The launcher is that same list, one level up: it scrolls to keep the cursor on
+screen however many applets are installed, and typing (or `/`) filters by name,
+id or summary — `enter` opens the match you land on, `esc` clears the filter.
+Each row wears its applet's glyph and color, with its one-liner underneath.
 
 ### Desktop notifications
 
@@ -466,7 +471,8 @@ bg     = "#0b0b0b"    # text on an accent fill
 plugins = ["~/src/my-applet"]   # load applets from outside this repo
 
 [applets.spotify]     # per-applet blocks
-accent = "#1db954"    # `accent` retints any applet's frame
+accent = "#1db954"    # `accent` retints any applet's frame — and its launcher row
+icon   = "♫"          # `icon` is its glyph in the launcher (one cell)
 ```
 
 Concrete per-applet blocks are not listed by hand here — each applet ships its
@@ -477,7 +483,7 @@ email contributes `[applets.email] page`/`autoRead`, and mycelium contributes
 
 The per-applet blocks are contributed by the applets: each one ships a commented
 `configSample`, `kona config init` composes them, and `kona docs <id>` explains
-what they mean. `[applets.<id>] accent` works for every applet.
+what they mean. `[applets.<id>] accent` and `icon` work for every applet.
 
 Ten roles retheme all of kona because no applet hardcodes a color: they call
 `theme().ok` and the stage paints from the same table.

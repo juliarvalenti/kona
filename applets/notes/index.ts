@@ -166,6 +166,8 @@ export default defineApplet<NotesState>({
   id: "notes",
   title: "Notes",
   summary: "A notepad: titled, multi-line notes that survive restarts.",
+  icon: "✎",
+  tint: PAPER,
   labels: ["scratch"],
   initialState: { notes: [], cursor: 0, query: "", open: null, draft: null, history: [] },
 
