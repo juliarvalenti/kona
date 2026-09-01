@@ -297,23 +297,34 @@ export interface SearchPage {
 /** Typed catalog search: artists, then albums, then a first page of tracks. */
 export async function search(query: string): Promise<SearchPage> {
   if (!query.trim()) return { rows: [], trackOffset: 0, trackTotal: 0 };
-  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "artist,album,track", limit: "6" })}`);
-  const artists: Row[] = ((r?.artists?.items ?? []) as any[]).slice(0, 4).map((a) => ({
+  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "artist,album,track,playlist", limit: "6" })}`);
+  const artists: Row[] = ((r?.artists?.items ?? []) as any[]).filter(Boolean).slice(0, 3).map((a) => ({
     kind: "artist",
     id: a.id,
     uri: a.uri,
     name: a.name ?? "",
     subtitle: (a.genres ?? []).slice(0, 2).join(", "),
   }));
-  const albums: Row[] = ((r?.albums?.items ?? []) as any[]).slice(0, 4).map((a) => ({
+  const playlists: Row[] = ((r?.playlists?.items ?? []) as any[]).filter(Boolean).slice(0, 4).map((p) => ({
+    kind: "playlist",
+    id: p.id,
+    uri: p.uri,
+    name: p.name ?? "",
+    subtitle: p.owner?.display_name ?? "playlist",
+  }));
+  const albums: Row[] = ((r?.albums?.items ?? []) as any[]).filter(Boolean).slice(0, 3).map((a) => ({
     kind: "album",
     id: a.id,
     uri: a.uri,
     name: a.name ?? "",
     subtitle: artistsOf(a),
   }));
-  const tracks: Row[] = ((r?.tracks?.items ?? []) as any[]).map(trackRow);
-  return { rows: [...artists, ...albums, ...tracks], trackOffset: tracks.length, trackTotal: r?.tracks?.total ?? tracks.length };
+  const tracks: Row[] = ((r?.tracks?.items ?? []) as any[]).filter(Boolean).map(trackRow);
+  return {
+    rows: [...artists, ...playlists, ...albums, ...tracks],
+    trackOffset: tracks.length,
+    trackTotal: r?.tracks?.total ?? tracks.length,
+  };
 }
 
 /** Next page of TRACK results (for viewport fill / infinite scroll). */
