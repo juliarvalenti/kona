@@ -29,11 +29,21 @@ test("timer shows status, label, and a partly-filled bar", async () => {
 });
 
 test("storybook renders every component; bars fill mid-sweep", async () => {
-  const frame = await snapshot("storybook", { frame: 45 }, 62, 30);
+  const frame = await snapshot("storybook", { frame: 45 }, 62, 34);
   for (const expected of ["kona components", "[LIVE]", "host", "inbox", "pause/resume"]) {
     expect(frame).toContain(expected);
   }
   expect(frame).toContain("█"); // progress/gauge have fill at frame 45
+});
+
+test("an empty text field shows its placeholder; a filled one shows the value", async () => {
+  const empty = await snapshot("storybook", { frame: 0, name: "", editing: false }, 62, 34);
+  expect(empty).toContain("type a name…");
+
+  const filled = await snapshot("storybook", { frame: 0, name: "ada", editing: false }, 62, 34);
+  expect(filled).toContain("ada");
+  expect(filled).toContain("hi, ada!");
+  expect(filled).not.toContain("type a name…"); // placeholder yields to the value
 });
 
 test("email inbox list shows senders, subjects, and a cursor", async () => {

@@ -5,12 +5,14 @@ import {
   ScrollBoxRenderable,
   StyledText,
   fg,
+  bg,
   bold,
   type CliRenderer,
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding, ViewNode, LayoutOpts } from "../sdk/index.ts";
+import type { AppletDef, AppletState, KeyBinding, ViewNode, LayoutOpts, InputNode } from "../sdk/index.ts";
+import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
 
 /**
  * The stage: everything that turns applet view-nodes into OpenTUI renderables —
@@ -25,6 +27,10 @@ export const COLORS = {
   ACCENT: "#7aa2f7",
   RED: "#ff5c57",
   KEY: "#e6e6e6",
+  FIELD: "#20222c", // text-field trough
+  FIELD_FOCUS: "#2b2e3d", // ...brighter while it has the keyboard
+  CARET: "#7aa2f7",
+  CARET_FG: "#0b0b0b",
 };
 
 export interface Hint {
@@ -56,6 +62,10 @@ function bindingLabel(b: KeyBinding): string {
   return typeof b === "string" ? b : (b.label ?? b.verb);
 }
 
+/** Focusable leaves: a selected list row, or the text field with the keyboard. */
+const isFocused = (n: ViewNode): boolean =>
+  typeof n === "object" && (n.kind === "text" || n.kind === "input") && !!n.focus;
+
 /**
  * Line offset of the focused node (the selected list row), so the host can
  * scroll it into view. Approximate heights in lines — good enough because focus
@@ -72,7 +82,8 @@ function focusLineOf(nodes: ViewNode[]): number | null {
     }
     switch (n.kind) {
       case "text":
-        if (n.focus) found = line;
+      case "input":
+        if (isFocused(n)) found = line;
         line += 1;
         break;
       case "spacer":
@@ -83,7 +94,7 @@ function focusLineOf(nodes: ViewNode[]): number | null {
         line += 6;
         break;
       case "row":
-        for (const c of n.children) if (typeof c === "object" && c.kind === "text" && c.focus) found = line;
+        for (const c of n.children) if (isFocused(c)) found = line;
         line += 1;
         break;
       case "col":
@@ -95,11 +106,34 @@ function focusLineOf(nodes: ViewNode[]): number | null {
   return found;
 }
 
+/** The focused `input` node anywhere in the tree — the field with the keyboard. */
+function findFocusedInput(nodes: ViewNode[]): InputNode | null {
+  for (const n of nodes) {
+    if (typeof n === "string") continue;
+    if (n.kind === "input" && n.focus) return n;
+    if (n.kind === "row" || n.kind === "col") {
+      const hit = findFocusedInput(n.children);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** The keystrokes a focused field has taken but not yet submitted. */
+export interface Draft {
+  id: string;
+  edit: Edit;
+}
+
 export interface Stage {
   renderApplet(def: AppletDef, state: AppletState): void;
   renderLauncher(applets: AppletDef[], cursor: number): void;
   footerNote(text: string, color?: string): void;
-  searchBar(query: string, placeholder?: string): void;
+  searchBar(buf: Edit, placeholder?: string): void;
+  /** The `input` node currently holding the keyboard, if any. */
+  focusedInput(): InputNode | null;
+  /** In-flight keystrokes for a focused field; the host owns them. */
+  setDraft(draft: Draft | null): void;
   scrollBy(lines: number): void;
   scrollTop(): number;
   viewportHeight(): number;
@@ -166,6 +200,11 @@ export function createStage(renderer: CliRenderer): Stage {
   // buffers (ASCII fonts) don't leak.
   let seq = 0;
   let hasFocus = false;
+  // The field with the keyboard, and the keystrokes it has taken but not yet
+  // submitted. The draft lives here (not in daemon state) so typing is instant
+  // and a background state push mid-word can't clobber what you typed.
+  let focused: InputNode | null = null;
+  let draft: Draft | null = null;
   function setFrame(title: string, titleColor: string, nodes: ViewNode[]) {
     frame.title = ` ${title} `;
     frame.titleAlignment = "center";
@@ -178,6 +217,7 @@ export function createStage(renderer: CliRenderer): Stage {
       scroll.content.remove(child);
       (child as { destroy?: () => void }).destroy?.();
     }
+    focused = findFocusedInput(nodes);
     const gen = seq++;
     nodes.forEach((node, i) => scroll.content.add(nodeToRenderable(node, `n${gen}-${i}`)));
 
@@ -193,6 +233,38 @@ export function createStage(renderer: CliRenderer): Stage {
     }
     scroll.scrollTop = Math.max(0, top);
     renderer.requestRender();
+  }
+
+  /**
+   * A text field as styled cells: a padded trough so the highlight spans the
+   * whole field, with the caret drawn as an inverted cell inside it (OpenTUI
+   * paints through its own buffer, so there is no real terminal cursor to move).
+   */
+  function inputChunks(node: InputNode): TextChunk[] {
+    const width = Math.max(1, node.width ?? 32);
+    const live = node.focus && draft?.id === node.id ? draft.edit : mkEdit(node.value);
+    const buf: Edit = node.mask ? mkEdit("•".repeat(live.value.length), live.cursor) : live;
+    const trough = node.focus ? COLORS.FIELD_FOCUS : COLORS.FIELD;
+    const ink = node.color ?? FG;
+    const paint = (t: string) => fg(ink)(bg(trough)(t));
+    const hint = (t: string) => fg(DIM)(bg(trough)(t));
+
+    if (!node.focus) {
+      const empty = buf.value.length === 0;
+      const shown = empty ? (node.placeholder ?? "") : buf.value;
+      const body = (shown.length > width ? shown.slice(0, width - 1) + "…" : shown).padEnd(width);
+      return [empty ? hint(body) : paint(body)];
+    }
+
+    const win = windowOf(buf, width);
+    const line = win.text.padEnd(width);
+    const caret = fg(COLORS.CARET_FG)(bg(COLORS.CARET)(line.slice(win.cursor, win.cursor + 1) || " "));
+    // An empty focused field still advertises what it wants, to the caret's right.
+    const tail =
+      buf.value.length === 0 && node.placeholder
+        ? hint(node.placeholder.slice(0, width - 1).padEnd(width - 1))
+        : paint(line.slice(win.cursor + 1));
+    return [paint(line.slice(0, win.cursor)), caret, tail].filter((c) => c.text.length > 0);
   }
 
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
@@ -235,6 +307,13 @@ export function createStage(renderer: CliRenderer): Stage {
         node.children.forEach((child, i) => box.add(nodeToRenderable(child, `${id}.${i}`)));
         return box;
       }
+      case "input":
+        return new TextRenderable(renderer, {
+          id,
+          content: new StyledText(inputChunks(node)),
+          wrapMode: "none",
+          flexShrink: 0,
+        });
       case "bar": {
         const width = node.width ?? 24;
         // Sub-cell resolution: full blocks + one fractional block = 8x smoother,
@@ -256,6 +335,18 @@ export function createStage(renderer: CliRenderer): Stage {
       const accent = def.accent?.(state) ?? ACCENT;
       const crumb = def.crumb?.(state);
       setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes);
+
+      // A focused field owns the keyboard, so it owns the hint bar too —
+      // showing nav keys there would be a lie (← moves the caret, not the view).
+      if (focused) {
+        setFooter([
+          { key: "enter", label: focused.submit ? "save" : "done" },
+          { key: "esc", label: focused.cancel ? "cancel" : "back" },
+          { key: "←→", label: "move" },
+          { key: "ctrl+c", label: "quit" },
+        ]);
+        return;
+      }
 
       // Hint bar = navigation intents + non-nav keymap + meta back/quit.
       const nav = def.nav;
@@ -286,15 +377,29 @@ export function createStage(renderer: CliRenderer): Stage {
       footer.content = new StyledText([fg(color)(text)]);
       renderer.requestRender();
     },
-    searchBar(query, placeholder) {
-      const shown = query.length ? query : (placeholder ?? "");
-      footer.content = new StyledText([
-        fg(COLORS.ACCENT)(bold("search ")),
-        query.length ? fg(COLORS.FG)(shown) : fg(COLORS.DIM)(shown),
-        fg(COLORS.ACCENT)("█"),
-        fg(COLORS.DIM)("    enter apply · esc cancel"),
-      ]);
+    searchBar(buf, placeholder) {
+      // The same caret-in-the-text treatment as an `input` node, so the footer
+      // editor and a field in the view tree feel like one widget.
+      const chunks: TextChunk[] = [fg(ACCENT)(bold("search "))];
+      if (buf.value.length === 0) {
+        chunks.push(fg(COLORS.CARET)("█"), fg(DIM)(placeholder ?? ""));
+      } else {
+        const at = buf.value.slice(buf.cursor, buf.cursor + 1);
+        chunks.push(
+          fg(FG)(buf.value.slice(0, buf.cursor)),
+          at ? fg(COLORS.CARET_FG)(bg(COLORS.CARET)(at)) : fg(COLORS.CARET)("█"),
+          fg(FG)(buf.value.slice(buf.cursor + 1)),
+        );
+      }
+      chunks.push(fg(DIM)("    enter apply · esc cancel"));
+      footer.content = new StyledText(chunks.filter((c) => c.text.length > 0));
       renderer.requestRender();
+    },
+    focusedInput() {
+      return focused;
+    },
+    setDraft(next) {
+      draft = next;
     },
     scrollBy(lines) {
       // Clamp to [0, maxScroll] so a list that fits never scrolls into empty
