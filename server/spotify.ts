@@ -367,7 +367,7 @@ export async function artistDetail(id: string): Promise<Detail> {
 export async function home(): Promise<Row[]> {
   // Playlists is the primary section — let its error propagate (e.g. a scope
   // 403) so the applet can show a clear message; the others are best-effort.
-  const pls = await api("/v1/me/playlists?limit=20");
+  const pls = await api("/v1/me/playlists?limit=50");
   const [tops, recent] = await Promise.all([
     api("/v1/me/top/artists?limit=10").catch(() => null),
     api("/v1/me/player/recently-played?limit=15").catch(() => null),
