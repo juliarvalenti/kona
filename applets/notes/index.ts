@@ -1,5 +1,6 @@
 import { defineApplet, text, spacer, col, row, input, textarea, type ViewNode } from "../../sdk/index.ts";
 import { divider, recordRow, modal, field as labelled } from "../../sdk/components.ts";
+import { renderMarkdown } from "../../sdk/markdown.ts";
 
 /**
  * notes — a notepad. A note has a TITLE and a multi-line BODY: you create one,
@@ -500,16 +501,16 @@ export default defineApplet<NotesState>({
     if (note) {
       const written = `written ${stamp(note.at)}`;
       const edited = note.updated > note.at ? ` · edited ${stamp(note.updated)}` : "";
-      const body = note.body ? note.body.split("\n") : [];
+      // A note is markdown: a heading is a heading and a `- ` is a bullet, but
+      // `breaks` keeps a typed line a line — this is a notepad, not a blog.
+      const body = renderMarkdown(note.body, { width: W - 1, breaks: true, color: FG });
       return [
         col([
           text(heading(note.title, note.body), { color: PAPER }),
           text(`${written}${edited}`, { color: DIM }),
           divider(W - 1),
           spacer(),
-          ...(body.length
-            ? body.map((line) => (line.trim() ? text(line, { color: FG }) : spacer()))
-            : [text("(no body — press e to write one)", { dim: true })]),
+          ...(body.length ? body : [text("(no body — press e to write one)", { dim: true })]),
         ]),
       ];
     }

@@ -1,4 +1,5 @@
 import { defineApplet, text, spacer, col, row, input, appletString, type AppletCtx, type ViewNode } from "../../sdk/index.ts";
+import { renderMarkdown } from "../../sdk/markdown.ts";
 import { divider, recordRow, keyValue, modal, field as labelled, toast } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
 import {
@@ -731,15 +732,21 @@ agent = "kona"       # the name your messages are posted under`,
       const NAME_W = Math.min(14, Math.max(8, Math.floor(W * 0.16)));
       const GUTTER = 2 + 5 + 2 + NAME_W + 2;
       const body = Math.max(16, W - GUTTER - 1);
+      // A message is MARKDOWN: agents write it, and the room is where their
+      // lists and code fences land. `breaks` because enter means a new line in
+      // a chat, and the first rendered line sits beside the sender's name —
+      // the rest hang under it at the same gutter.
       const speech = (from: string, at: number, message: string, color: string, dim = false): ViewNode[] => {
-        const lines = wrap(message, body);
+        const said = renderMarkdown(message, { width: body, breaks: true, color: dim ? DIM : FG });
+        const [head = text("", { color: FG }), ...rest] = said;
         return [
           row([
             text(`  ${(at ? clock(at) : "·").padEnd(5)}`, { dim: true }),
             text(`  ${from.slice(0, NAME_W).padEnd(NAME_W)}`, { color }),
-            text(`  ${lines[0]}`, { color: dim ? DIM : FG, dim }),
+            text("  "),
+            head,
           ]),
-          ...lines.slice(1).map((line) => text(" ".repeat(GUTTER) + line, { color: dim ? DIM : FG, dim })),
+          ...rest.map((node) => row([text(" ".repeat(GUTTER)), node])),
         ];
       };
 
@@ -865,33 +872,3 @@ function clock(at: number): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-/**
- * Greedy word wrap. Chat is prose, so a long message wraps under its sender
- * instead of being truncated with an ellipsis the way a list row would be; a
- * single unbroken token (a URL) is hard-split rather than allowed to overflow.
- */
-export function wrap(body: string, width: number): string[] {
-  const w = Math.max(8, width);
-  const lines: string[] = [];
-  let line = "";
-  const flush = () => {
-    if (line) lines.push(line);
-    line = "";
-  };
-  for (const word of body.split(/\s+/).filter(Boolean)) {
-    let token = word;
-    while (token.length > w) {
-      flush();
-      lines.push(token.slice(0, w));
-      token = token.slice(w);
-    }
-    if (!line) line = token;
-    else if (line.length + 1 + token.length <= w) line += ` ${token}`;
-    else {
-      flush();
-      line = token;
-    }
-  }
-  flush();
-  return lines.length ? lines : [""];
-}

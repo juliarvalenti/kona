@@ -34,6 +34,10 @@ path, and the room can't tell you apart except by the name on the message:
 floating dialog, `tab` between fields, `enter` commits. The form only fills in
 the arguments; the verb it commits through is the one an agent calls directly.
 
+Messages are **markdown**: a plan with bullets, a fenced command, a quoted line
+and a link all read as themselves in the room (`renderMarkdown()` from
+`sdk/markdown.ts`), wrapped under the sender's name rather than truncated.
+
 Your message shows the moment you send it and is reconciled with the backend on
 the next poll, so a slow room never feels slow. Posting needs a backend that can
 take a write: the OpenAPI daemon, the CLI, or room files kona can append to.

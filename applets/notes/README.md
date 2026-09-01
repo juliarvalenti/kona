@@ -14,6 +14,11 @@ kona call notes remove '{"id":"a1b2c3d4"}'
 kona call notes undo '{}'
 ```
 
+The reader renders the body as **markdown** — headings, lists, quotes, links
+and fenced code, wrapped to your terminal (`renderMarkdown()` from
+`sdk/markdown.ts`). A line you typed stays a line, so a plain list of groceries
+still reads as a list of groceries.
+
 At the keyboard: `n` writes a new note, `enter` reads the selected one, `e`
 edits it, `d` deletes it, `u` undoes, and `/` **searches** titles and bodies
 (it never creates — that is what `n` is for). `esc` backs out one level: the

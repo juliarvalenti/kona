@@ -8,7 +8,7 @@ export default defineSnapshots([
     // component has to be on screen for this to be a real regression test.
     state: { frame: 45 },
     width: 62,
-    height: 60,
+    height: 74,
     contains: [
       "kona components", "[LIVE]", "host", "inbox", "pause/resume",
       "█", // progress/gauge have fill at frame 45
@@ -17,6 +17,10 @@ export default defineSnapshots([
       "rate limited", // warn toast
       "─ cpu ─", // card's titled border
       "press m", // the modal lives on the overlay layer
+      "a heading", // markdown: an ATX heading...
+      "• a bullet", // ...a list...
+      "│ and a quote", // ...a quote with its gutter...
+      "(https://kona.dev)", // ...and a link that keeps its URL
     ],
     excludes: ["╔"], // ...so it is NOT drawn inline in the gallery
   },

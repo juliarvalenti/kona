@@ -1,7 +1,8 @@
 # storybook
 
 A live gallery of every kona component — progress bars, gauges, sparklines,
-tabs, toasts, cards, a modal on the overlay layer, and a real text field.
+tabs, toasts, cards, a modal on the overlay layer, a real text field, and a
+markdown document rendered as view nodes.
 
 ```sh
 kona storybook
