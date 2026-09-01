@@ -93,16 +93,16 @@
 <text x="14" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">↑↓</text>
 <text x="30.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> move    </text>
 <text x="106.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">→</text>
-<text x="114.8" y="439" fill="#6a6a6a" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> space    </text>
-<text x="198.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">/</text>
-<text x="207.2" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> search    </text>
-<text x="299.6" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">r</text>
-<text x="308" y="439" fill="#6a6a6a" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> refresh    </text>
-<text x="408.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">a</text>
-<text x="417.2" y="439" fill="#6a6a6a" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> mark all read    </text>
-<text x="568.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">y</text>
-<text x="576.8" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> prompt    </text>
-<text x="669.2" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">←/</text>
+<text x="114.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> open    </text>
+<text x="190.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">/</text>
+<text x="198.8" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> search    </text>
+<text x="291.2" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">r</text>
+<text x="299.6" y="439" fill="#6a6a6a" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> refresh    </text>
+<text x="400.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">a</text>
+<text x="408.8" y="439" fill="#6a6a6a" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> mark all read    </text>
+<text x="560" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">y</text>
+<text x="568.4" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> prompt    </text>
+<text x="660.8" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">←/</text>
 <text x="14" y="457" fill="#e6e6e6" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">esc</text>
 <text x="39.2" y="457" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> menu    </text>
 <text x="114.8" y="457" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">ctrl+c</text>
