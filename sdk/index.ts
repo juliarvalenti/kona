@@ -30,8 +30,14 @@ export type Verb<S = AppletState> = (
   ctx: AppletCtx<S>,
 ) => unknown | Promise<unknown>;
 
-/** A key can fire a verb by name, or a verb with fixed args. */
-export type KeyBinding = string | { verb: string; args: Record<string, unknown> };
+/**
+ * A key can fire a verb by name, or a verb with fixed args and a display label.
+ * The `label` is what the host's keybind hint bar shows (falls back to the verb
+ * name), so keybinds document themselves.
+ */
+export type KeyBinding =
+  | string
+  | { verb: string; args?: Record<string, unknown>; label?: string };
 
 /** Hex color, e.g. "#00d488". */
 export type Color = string;

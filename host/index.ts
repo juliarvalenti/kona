@@ -3,10 +3,20 @@ import {
   TextRenderable,
   BoxRenderable,
   ASCIIFontRenderable,
+  StyledText,
+  fg,
+  bold,
   type CliRenderer,
   type Renderable,
+  type TextChunk,
 } from "@opentui/core";
 import type { AppletDef, AppletState, KeyBinding, ViewNode } from "../sdk/index.ts";
+
+/** A key + what it does, for the hint bar. */
+interface Hint {
+  key: string;
+  label: string;
+}
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb } from "../core/client.ts";
 
@@ -25,7 +35,12 @@ import { base, callVerb } from "../core/client.ts";
 type States = Record<string, AppletState>;
 
 function resolveBinding(b: KeyBinding): { verb: string; args: Record<string, unknown> } {
-  return typeof b === "string" ? { verb: b, args: {} } : b;
+  return typeof b === "string" ? { verb: b, args: {} } : { verb: b.verb, args: b.args ?? {} };
+}
+
+/** Human label for a binding in the hint bar (explicit label, else the verb). */
+function bindingLabel(b: KeyBinding): string {
+  return typeof b === "string" ? b : (b.label ?? b.verb);
 }
 
 /** Stream the daemon's SSE, invoking onState for every state change. */
@@ -67,11 +82,18 @@ export async function runHost(startAppletId: string | null) {
   const ACCENT = "#7aa2f7";
   const DONE_RED = "#ff5c57";
 
+  const KEY = "#e6e6e6"; // hint-bar key: bright. label stays DIM (opencode-style)
+
   const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: true });
 
-  // Center a single bordered frame on screen; its children are rebuilt per view.
-  renderer.root.alignItems = "center";
-  renderer.root.justifyContent = "center";
+  // Layout: a stage that centers the frame, with a keybind hint bar pinned below.
+  renderer.root.flexDirection = "column";
+  const stage = new BoxRenderable(renderer, {
+    id: "stage",
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  });
   const frame = new BoxRenderable(renderer, {
     id: "frame",
     border: true,
@@ -82,11 +104,26 @@ export async function runHost(startAppletId: string | null) {
     alignItems: "center",
     minWidth: 40,
   });
-  renderer.root.add(frame);
+  stage.add(frame);
+  const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1 });
+  renderer.root.add(stage);
+  renderer.root.add(footer);
 
   // null = launcher; otherwise the applet id currently open
   let current: string | null = startAppletId;
   let cursor = 0; // launcher selection
+
+  // opencode-style hint bar: each key bright+bold, its label dim, gap between.
+  function setFooter(hints: Hint[]) {
+    const chunks: TextChunk[] = [];
+    hints.forEach((h, i) => {
+      if (i) chunks.push(fg(DIM)("    "));
+      chunks.push(fg(KEY)(bold(h.key)));
+      chunks.push(fg(DIM)(` ${h.label}`));
+    });
+    footer.content = new StyledText(chunks);
+    renderer.requestRender();
+  }
 
   // Rebuild the frame's children from scratch each render. Cheap at our cadence
   // (~1Hz); destroy old nodes so native buffers (ASCII fonts) don't leak.
@@ -125,8 +162,12 @@ export async function runHost(startAppletId: string | null) {
       const sel = i === cursor;
       nodes.push({ kind: "text", text: `${sel ? "▸" : " "} ${a.title}`, color: sel ? ACCENT : FG });
     });
-    nodes.push({ kind: "spacer" }, { kind: "text", text: "↑/↓ move · enter open · ctrl+c quit", dim: true });
     setFrame("kona", ACCENT, nodes);
+    setFooter([
+      { key: "↑/↓", label: "move" },
+      { key: "enter", label: "open" },
+      { key: "ctrl+c", label: "quit" },
+    ]);
   }
 
   function renderApplet() {
@@ -136,7 +177,15 @@ export async function runHost(startAppletId: string | null) {
     const body = def.view(state);
     const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
     const accent = def.accent?.(state) ?? ACCENT;
-    setFrame(def.title, accent, [...nodes, { kind: "spacer" }, { kind: "text", text: "esc back · ctrl+c quit", dim: true }]);
+    setFrame(def.title, accent, nodes);
+
+    // The keybind hint bar IS the keymap — keys are first-class, self-documenting.
+    const hints: Hint[] = Object.entries(def.keymap ?? {}).map(([key, b]) => ({
+      key,
+      label: bindingLabel(b),
+    }));
+    hints.push({ key: "esc", label: "back" }, { key: "ctrl+c", label: "quit" });
+    setFooter(hints);
   }
 
   function render() {

@@ -104,11 +104,9 @@ export default defineApplet<TimerState>({
   },
 
   keymap: {
-    space: "toggle",
-    s: "stop",
-    r: "resume",
-    p: "pause",
-    a: { verb: "add", args: { seconds: 60 } },
+    space: { verb: "toggle", label: "pause/resume" },
+    a: { verb: "add", args: { seconds: 60 }, label: "+1m" },
+    s: { verb: "stop", label: "stop" },
   },
 
   accent: tint,
@@ -122,7 +120,6 @@ export default defineApplet<TimerState>({
       big(fmt(state.remaining), color, "block"),
       spacer(),
       text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
-      text("space pause/resume   ·   a +1m   ·   s stop", { dim: true }),
     ];
   },
 });
