@@ -62,6 +62,23 @@ use); kona picks the first available, else falls back to a JS converter:
 brew install w3m     # or: pandoc / lynx / elinks
 ```
 
+### RSS
+
+`rss` reads its feed list from `~/.config/kona/rss.toml` — a list of URLs, or
+tables when you want to name a feed:
+
+```toml
+feeds = ["https://news.ycombinator.com/rss"]
+
+[[feeds]]
+name = "xkcd"
+url  = "https://xkcd.com/atom.xml"
+```
+
+RSS 2.0 and Atom both work. Feeds are merged into one newest-first river,
+refreshed every five minutes; `/` filters it, `o` opens the selected item in a
+browser.
+
 ## Writing an applet
 
 Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its
