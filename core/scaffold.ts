@@ -134,10 +134,16 @@ export default defineApplet<${titleize(id).replace(/ /g, "")}State>({
 /**
  * Rendering regressions, discovered by tests/snapshot.test.ts because they sit
  * next to the applet — there is no central list to add them to.
+ *
+ * The HERO is this applet's portrait: \`bun run shots\` renders it into the
+ * README gallery, and \`bun run bin/snapshot.ts ${id} --hero\` prints it. It is
+ * the first fixture unless another says \`hero: true\`, so put your best frame
+ * first — the applet doing its job, not its empty state — and build any state
+ * from \`Date.now()\` in a state function so it renders the same tomorrow.
  */
 export default defineSnapshots([
+  { name: "shows a count", hero: true, state: { count: 42 }, contains: ["count: 42"] },
   { name: "starts at zero", contains: ["count: 0", "r to reset"] },
-  { name: "shows a count", state: { count: 42 }, contains: ["count: 42"] },
 ]);
 `;
 

@@ -36,6 +36,7 @@ export default defineSnapshots([
   },
   {
     name: "room view shows agents, messages, and shared memory",
+    hero: true, // being *in* a room is what the applet is
     state: () => ({
       source: "fs",
       open: {

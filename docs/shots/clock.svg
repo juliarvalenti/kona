@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="476" viewBox="0 0 700 476" font-family="ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace" font-size="14">
+<title>World Clock</title>
+<rect width="700" height="476" rx="10" fill="#0b0b0b"/>
+<rect x="0.5" y="0.5" width="699" height="475" rx="9.5" fill="none" stroke="#5a5a5a" stroke-opacity="0.35"/>
+<circle cx="20" cy="15" r="5" fill="#ff5f56"/>
+<circle cx="36" cy="15" r="5" fill="#ffbd2e"/>
+<circle cx="52" cy="15" r="5" fill="#27c93f"/>
+<text x="350" y="19" fill="#6a6a6a" font-size="12" text-anchor="middle">World Clock</text>
+<path d="M30.8 57H28.4M26.6 66V58.8M28.4 57Q26.6 57 26.6 58.8" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M30.8 57H291.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="291.2" y="61" fill="#7aa2f7" textLength="109.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> World Clock </text>
+<path d="M400.4 57H669.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M669.2 57H671.6M673.4 66V58.8M671.6 57Q673.4 57 673.4 58.8" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 66V84" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M673.4 66V84" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 84V102" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="198.8" y="84" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="249.2" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="282.8" y="84" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="299.6" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="358.4" y="84" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="408.8" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="442.4" y="84" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="492.8" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 84V102" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="190.4" y="102" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="207.2" y="115" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
+<rect x="224" y="102" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="257.6" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="274.4" y="102" width="25.2" height="18" fill="#7aa2f7"/>
+<text x="299.6" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="316.4" y="102" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="333.2" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="350" y="102" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="366.8" y="115" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
+<rect x="383.6" y="102" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="417.2" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="434" y="102" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="450.8" y="115" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
+<rect x="467.6" y="102" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="501.2" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="190.4" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="207.2" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="215.6" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="232.4" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
+<rect x="240.8" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="257.6" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="274.4" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="282.8" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="299.6" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="316.4" y="133" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<rect x="350" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="366.8" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="375.2" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="392" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
+<rect x="400.4" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="417.2" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="434" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="450.8" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="459.2" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="476" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
+<rect x="484.4" y="120" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="501.2" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="190.4" y="138" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="224" y="151" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="240.8" y="138" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="257.6" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="282.8" y="138" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="299.6" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="316.4" y="138" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="333.2" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="350" y="138" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="383.6" y="151" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="400.4" y="138" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="417.2" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="434" y="138" width="33.6" height="18" fill="#7aa2f7"/>
+<text x="467.6" y="151" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="484.4" y="138" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="501.2" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="190.4" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="198.8" y="156" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="249.2" y="169" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="282.8" y="156" width="16.8" height="18" fill="#7aa2f7"/>
+<text x="299.6" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="316.4" y="169" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<text x="350" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="358.4" y="156" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="408.8" y="169" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<text x="434" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="442.4" y="156" width="50.4" height="18" fill="#7aa2f7"/>
+<text x="492.8" y="169" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="198.8" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
+<text x="282.8" y="187" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<text x="358.4" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
+<text x="442.4" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="224" y="192" width="176.4" height="18" fill="#7aa2f7"/>
+<rect x="400.4" y="192" width="58.8" height="18" fill="#7aa2f7" opacity="0.25"/>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="198.8" y="241" fill="#7aa2f7" textLength="294" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Tokyo  ·  Wed 2 Sep (+1d)  ·  UTC+9</text>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M39.2 273H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="295" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  San Francisco                           Tue      09:00            UTC-7</text>
+<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="313" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  New York                                Tue      12:00            UTC-4</text>
+<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="331" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  London                                  Tue      17:00            UTC+1</text>
+<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="349" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  Berlin                                  Tue      18:00            UTC+2</text>
+<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M26.6 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M673.4 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M30.8 399H28.4M26.6 390V397.2M28.4 399Q26.6 399 26.6 397.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M30.8 399H669.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<path d="M669.2 399H671.6M673.4 390V397.2M671.6 399Q673.4 399 673.4 397.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="14" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">↑↓</text>
+<text x="30.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> move    </text>
+<text x="106.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">→</text>
+<text x="114.8" y="439" fill="#6a6a6a" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> add    </text>
+<text x="182" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">/</text>
+<text x="190.4" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> search    </text>
+<text x="282.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">a</text>
+<text x="291.2" y="439" fill="#6a6a6a" textLength="109.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> add city    </text>
+<text x="400.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">d</text>
+<text x="408.8" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> remove    </text>
+<text x="501.2" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">t</text>
+<text x="509.6" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> 12/24h    </text>
+<text x="602" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">s</text>
+<text x="610.4" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> sort by </text>
+<text x="14" y="457" fill="#6a6a6a" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve">offset    </text>
+<text x="98" y="457" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">y</text>
+<text x="106.4" y="457" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> prompt    </text>
+<text x="198.8" y="457" fill="#e6e6e6" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">←/esc</text>
+<text x="240.8" y="457" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> menu    </text>
+<text x="316.4" y="457" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">ctrl+c</text>
+<text x="366.8" y="457" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> quit</text>
+</svg>

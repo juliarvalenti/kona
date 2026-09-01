@@ -14,6 +14,7 @@ const NOTES = [
 export default defineSnapshots([
   {
     name: "lists titles with a preview and a count",
+    hero: true,
     state: () => ({ notes: NOTES, cursor: 1, query: "", open: null, draft: null }),
     width: 72,
     height: 16,

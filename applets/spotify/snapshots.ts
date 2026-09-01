@@ -25,6 +25,7 @@ export default defineSnapshots([
   },
   {
     name: "now-playing shows the active device and its volume",
+    hero: true, // the fullest now-playing frame: track, scrubber, device, volume
     state: {
       authed: true,
       playing: true,

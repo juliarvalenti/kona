@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="476" viewBox="0 0 700 476" font-family="ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace" font-size="14">
+<title>Notes</title>
+<rect width="700" height="476" rx="10" fill="#0b0b0b"/>
+<rect x="0.5" y="0.5" width="699" height="475" rx="9.5" fill="none" stroke="#5a5a5a" stroke-opacity="0.35"/>
+<circle cx="20" cy="15" r="5" fill="#ff5f56"/>
+<circle cx="36" cy="15" r="5" fill="#ffbd2e"/>
+<circle cx="52" cy="15" r="5" fill="#27c93f"/>
+<text x="350" y="19" fill="#6a6a6a" font-size="12" text-anchor="middle">Notes</text>
+<path d="M30.8 57H28.4M26.6 66V58.8M28.4 57Q26.6 57 26.6 58.8" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M30.8 57H316.4" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<text x="316.4" y="61" fill="#e0af68" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Notes </text>
+<path d="M375.2 57H669.2" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M669.2 57H671.6M673.4 66V58.8M671.6 57Q673.4 57 673.4 58.8" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 66V84" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M673.4 66V84" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 84V102" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="97" fill="#e0af68" textLength="159.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">NOTEPAD  ·  2 notes</text>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 84V102" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 102V120" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M39.2 111H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 102V120" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 120V138" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="133" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  release plan            cut rc1 friday freeze monday ship w…      20:18</text>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 120V138" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 138V156" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="39.2" y="138" width="613.2" height="18" fill="#e0af68"/>
+<text x="39.2" y="151" fill="#0b0b0b" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  groceries               milk eggs coffee                         31 Aug</text>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 138V156" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 156V174" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 156V174" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 174V192" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 174V192" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 192V210" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 192V210" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 210V228" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 210V228" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 228V246" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 228V246" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 246V264" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 246V264" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 264V282" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 264V282" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 282V300" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 282V300" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 300V318" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 300V318" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 318V336" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 318V336" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 336V354" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 336V354" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 354V372" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 354V372" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M26.6 372V390" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M673.4 372V390" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M30.8 399H28.4M26.6 390V397.2M28.4 399Q26.6 399 26.6 397.2" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M30.8 399H669.2" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<path d="M669.2 399H671.6M673.4 390V397.2M671.6 399Q673.4 399 673.4 397.2" stroke="#e0af68" stroke-width="1.2" fill="none"/>
+<text x="14" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">↑↓</text>
+<text x="30.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> move    </text>
+<text x="106.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">→</text>
+<text x="114.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> read    </text>
+<text x="190.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">/</text>
+<text x="198.8" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> search    </text>
+<text x="291.2" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">n</text>
+<text x="299.6" y="439" fill="#6a6a6a" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> new    </text>
+<text x="366.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">e</text>
+<text x="375.2" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> edit    </text>
+<text x="450.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">d</text>
+<text x="459.2" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> delete    </text>
+<text x="551.6" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">y</text>
+<text x="560" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> prompt    </text>
+<text x="652.4" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">←/</text>
+<text x="14" y="457" fill="#e6e6e6" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">esc</text>
+<text x="39.2" y="457" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> menu    </text>
+<text x="114.8" y="457" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">ctrl+c</text>
+<text x="165.2" y="457" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> quit</text>
+</svg>

@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="476" viewBox="0 0 700 476" font-family="ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace" font-size="14">
+<title>Weather</title>
+<rect width="700" height="476" rx="10" fill="#0b0b0b"/>
+<rect x="0.5" y="0.5" width="699" height="475" rx="9.5" fill="none" stroke="#5a5a5a" stroke-opacity="0.35"/>
+<circle cx="20" cy="15" r="5" fill="#ff5f56"/>
+<circle cx="36" cy="15" r="5" fill="#ffbd2e"/>
+<circle cx="52" cy="15" r="5" fill="#27c93f"/>
+<text x="350" y="19" fill="#6a6a6a" font-size="12" text-anchor="middle">Weather</text>
+<path d="M30.8 57H28.4M26.6 66V58.8M28.4 57Q26.6 57 26.6 58.8" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M30.8 57H190.4" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="190.4" y="61" fill="#9aa5b1" textLength="310.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> Weather › San Francisco, California </text>
+<path d="M501.2 57H669.2" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M669.2 57H671.6M673.4 66V58.8M671.6 57Q673.4 57 673.4 58.8" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 66V84" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M673.4 66V84" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 84V102" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="97" fill="#9aa5b1" textLength="210" lengthAdjust="spacingAndGlyphs" xml:space="preserve">San Francisco, California</text>
+<text x="534.8" y="97" fill="#6a6a6a" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">updated 6m ago</text>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 84V102" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 102V120" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M39.2 111H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 102V120" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 120V138" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="39.2" y="120" width="58.8" height="18" fill="#9aa5b1"/>
+<text x="98" y="133" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="114.8" y="120" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="131.6" y="133" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="156.8" y="120" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="173.6" y="133" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 120V138" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 138V156" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="151" fill="#9aa5b1" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
+<rect x="81.2" y="138" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="98" y="151" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="114.8" y="138" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="131.6" y="151" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="156.8" y="138" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="173.6" y="151" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="198.8" y="151" fill="#6a6a6a" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">°F</text>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 138V156" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 156V174" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="72.8" y="156" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="89.6" y="169" fill="#9aa5b1" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="114.8" y="156" width="58.8" height="18" fill="#9aa5b1"/>
+<text x="173.6" y="169" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 156V174" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 174V192" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="64.4" y="174" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="81.2" y="187" fill="#9aa5b1" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<text x="114.8" y="187" fill="#9aa5b1" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
+<rect x="156.8" y="174" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="173.6" y="187" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="198.8" y="187" fill="#9aa5b1" textLength="126" lengthAdjust="spacingAndGlyphs" xml:space="preserve">◐ Partly cloudy</text>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 174V192" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 192V210" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="64.4" y="192" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="81.2" y="205" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="156.8" y="192" width="16.8" height="18" fill="#9aa5b1"/>
+<text x="173.6" y="205" fill="#9aa5b1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="198.8" y="205" fill="#6a6a6a" textLength="336" lengthAdjust="spacingAndGlyphs" xml:space="preserve">feels 72°F  ·  61% humidity  ·  → 11 mph</text>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 192V210" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 210V228" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="64.4" y="223" fill="#9aa5b1" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<text x="156.8" y="223" fill="#9aa5b1" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 210V228" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 228V246" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 228V246" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 246V264" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="259" fill="#6a6a6a" textLength="226.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">NEXT 22 HOURS   48°F – 76°F</text>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
+<path d="M673.4 246V264" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 264V282" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="39.2" y="264" width="100.8" height="18" fill="#9aa5b1"/>
+<rect x="140" y="266.25" width="25.2" height="15.75" fill="#9aa5b1"/>
+<rect x="165.2" y="268.5" width="50.4" height="13.5" fill="#9aa5b1"/>
+<rect x="215.6" y="270.75" width="25.2" height="11.25" fill="#9aa5b1"/>
+<rect x="240.8" y="273" width="25.2" height="9" fill="#9aa5b1"/>
+<rect x="266" y="275.25" width="25.2" height="6.75" fill="#9aa5b1"/>
+<rect x="291.2" y="277.5" width="50.4" height="4.5" fill="#9aa5b1"/>
+<rect x="341.6" y="279.75" width="75.6" height="2.25" fill="#9aa5b1"/>
+<rect x="417.2" y="277.5" width="50.4" height="4.5" fill="#9aa5b1"/>
+<rect x="467.6" y="275.25" width="25.2" height="6.75" fill="#9aa5b1"/>
+<rect x="492.8" y="273" width="25.2" height="9" fill="#9aa5b1"/>
+<rect x="518" y="270.75" width="25.2" height="11.25" fill="#9aa5b1"/>
+<rect x="543.2" y="268.5" width="50.4" height="13.5" fill="#9aa5b1"/>
+<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
+<rect x="652.4" y="264" width="8.4" height="9" fill="#9a9ea3"/>
+<path d="M673.4 264V282" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 282V300" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="295" fill="#6a6a6a" textLength="554.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">2p    4p    6p    8p    10p   12a   2a    4a    6a    8a    10a   </text>
+<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 282V300" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 300V318" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="39.2" y="300" width="25.2" height="18" fill="#5aa9e6" opacity="0.25"/>
+<rect x="64.4" y="300" width="75.6" height="18" fill="#5aa9e6" opacity="0.5"/>
+<rect x="140" y="300" width="50.4" height="18" fill="#5aa9e6" opacity="0.75"/>
+<rect x="190.4" y="300" width="100.8" height="18" fill="#5aa9e6" opacity="0.25"/>
+<text x="291.2" y="313" fill="#5aa9e6" textLength="252" lengthAdjust="spacingAndGlyphs" xml:space="preserve">······························</text>
+<rect x="543.2" y="300" width="50.4" height="18" fill="#5aa9e6" opacity="0.25"/>
+<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 300V318" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 318V336" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="331" fill="#6a6a6a" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">rain  72% peak</text>
+<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 318V336" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 336V354" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 336V354" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 354V372" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="367" fill="#6a6a6a" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">daylight</text>
+<text x="114.8" y="367" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">6:41a</text>
+<rect x="165.2" y="354" width="151.2" height="18" fill="#f7c948"/>
+<rect x="316.4" y="354" width="2.1" height="18" fill="#f7c948"/>
+<rect x="324.8" y="354" width="109.2" height="18" fill="#f7c948" opacity="0.25"/>
+<text x="442.4" y="367" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">7:33p</text>
+<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 354V372" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 372V390" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<rect x="652.4" y="372" width="8.4" height="18" fill="#252527"/>
+<path d="M673.4 372V390" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M26.6 390V408" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M673.4 390V408" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M30.8 417H28.4M26.6 408V415.2M28.4 417Q26.6 417 26.6 415.2" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M30.8 417H669.2" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<path d="M669.2 417H671.6M673.4 408V415.2M671.6 417Q673.4 417 673.4 415.2" stroke="#9aa5b1" stroke-width="1.2" fill="none"/>
+<text x="14" y="439" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">↑↓</text>
+<text x="30.8" y="439" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> move    </text>
+<text x="106.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">→</text>
+<text x="114.8" y="439" fill="#6a6a6a" textLength="109.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> open day    </text>
+<text x="224" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">/</text>
+<text x="232.4" y="439" fill="#6a6a6a" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> search    </text>
+<text x="324.8" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">r</text>
+<text x="333.2" y="439" fill="#6a6a6a" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> refresh    </text>
+<text x="434" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">u</text>
+<text x="442.4" y="439" fill="#6a6a6a" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> °F/°C    </text>
+<text x="526.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">l</text>
+<text x="534.8" y="439" fill="#6a6a6a" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> locate me    </text>
+<text x="652.4" y="439" fill="#e6e6e6" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">y</text>
+<text x="14" y="457" fill="#6a6a6a" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve">prompt    </text>
+<text x="98" y="457" fill="#e6e6e6" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">←/esc</text>
+<text x="140" y="457" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> menu    </text>
+<text x="215.6" y="457" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">ctrl+c</text>
+<text x="266" y="457" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> quit</text>
+</svg>
