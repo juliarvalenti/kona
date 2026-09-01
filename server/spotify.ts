@@ -197,6 +197,7 @@ export interface NowPlaying {
   context: string; // playlist name (or album/artist label)
   upNext: QueueItem[];
   shuffle: boolean;
+  repeat: "off" | "context" | "track";
 }
 
 // Cache playlist names by uri so we don't refetch every poll.
@@ -247,11 +248,15 @@ export async function nowPlaying(): Promise<NowPlaying | null> {
     context: await contextLabel(p.context),
     upNext,
     shuffle: !!p.shuffle_state,
+    repeat: (p.repeat_state as NowPlaying["repeat"]) ?? "off",
   };
 }
 
 export const setShuffle = (on: boolean) =>
   api(`/v1/me/player/shuffle?${new URLSearchParams({ state: String(on) })}`, { method: "PUT" });
+
+export const setRepeat = (state: "off" | "context" | "track") =>
+  api(`/v1/me/player/repeat?${new URLSearchParams({ state })}`, { method: "PUT" });
 
 export const play = () => api("/v1/me/player/play", { method: "PUT" });
 export const pause = () => api("/v1/me/player/pause", { method: "PUT" });

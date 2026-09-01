@@ -7,6 +7,7 @@ import {
   next,
   previous,
   setShuffle,
+  setRepeat,
   search,
   searchMoreTracks,
   artistDetail,
@@ -36,6 +37,7 @@ interface SpotifyState {
   context: string;
   upNext: QueueItem[];
   shuffle: boolean;
+  repeat: "off" | "context" | "track";
   authed: boolean;
   loading: boolean;
   error: string | null;
@@ -110,6 +112,7 @@ export default defineApplet<SpotifyState>({
     context: "",
     upNext: [],
     shuffle: false,
+    repeat: "off",
     authed: false,
     loading: false,
     error: null,
@@ -163,6 +166,19 @@ export default defineApplet<SpotifyState>({
       await Bun.sleep(300);
       await loadNow(state, emit);
       return { shuffle: state.shuffle };
+    },
+    async repeat(_a, { state, emit }) {
+      const nextOf = { off: "context", context: "track", track: "off" } as const; // cycle
+      state.repeat = nextOf[state.repeat]; // optimistic
+      emit();
+      try {
+        await setRepeat(state.repeat);
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      }
+      await Bun.sleep(300);
+      await loadNow(state, emit);
+      return { repeat: state.repeat };
     },
     async search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "");
@@ -305,6 +321,7 @@ export default defineApplet<SpotifyState>({
     n: { verb: "next", label: "next" },
     p: { verb: "previous", label: "prev" },
     s: { verb: "shuffle", label: "shuffle" },
+    r: { verb: "repeat", label: "repeat" },
     b: { verb: "home", label: "home" },
   },
 
@@ -412,6 +429,7 @@ export default defineApplet<SpotifyState>({
         [
           text(`${state.device ? `♪ ${state.device}` : ""}`, { dim: true }),
           text(state.shuffle ? "   ⤮ shuffle" : "", { color: GREEN }),
+          text(state.repeat === "context" ? "   ⟳ all" : state.repeat === "track" ? "   ⟳ one" : "", { color: GREEN }),
         ],
         { align: "center" },
       ),
