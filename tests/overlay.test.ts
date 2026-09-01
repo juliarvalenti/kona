@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage } from "../host/stage.ts";
-import { overlayAction } from "../host/index.ts";
+import { overlayAction } from "../host/input.ts";
 import { defineApplet, text, col, input, type AppletDef, type AppletState, type Overlay } from "../sdk/index.ts";
 import { modal, list } from "../sdk/components.ts";
 
