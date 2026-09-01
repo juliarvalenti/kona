@@ -144,8 +144,9 @@ export async function runHost(startAppletId: string | null) {
     const nav = def.nav;
 
     // Back is browser-like: pop an internal view if the applet has one,
-    // otherwise return to the launcher.
+    // otherwise return to the launcher. Either way, reset scroll.
     if (isBack(n)) {
+      stage.resetScroll();
       if (nav?.back && nav.canBack?.(state)) await callVerb(def.id, nav.back).catch(() => {});
       else {
         current = null;
@@ -154,13 +155,20 @@ export async function runHost(startAppletId: string | null) {
       return;
     }
 
-    // Directional intents route to the applet's nav verbs.
-    if (nav) {
-      const intent = isUp(n) ? nav.up : isDown(n) ? nav.down : isSelect(n) ? nav.select : undefined;
-      if (intent) {
-        await callVerb(def.id, intent).catch(() => {});
-        return;
-      }
+    // Up/Down scroll the viewport (for long content like an email body) and
+    // also drive the applet's list cursor if it has one.
+    if (isUp(n) || isDown(n)) {
+      stage.scrollBy(isUp(n) ? -3 : 3);
+      const intent = isUp(n) ? nav?.up : nav?.down;
+      if (intent) await callVerb(def.id, intent).catch(() => {});
+      return;
+    }
+
+    // Select drills in (e.g. open an email); start it at the top.
+    if (isSelect(n) && nav?.select) {
+      stage.resetScroll();
+      await callVerb(def.id, nav.select).catch(() => {});
+      return;
     }
 
     // Non-nav actions from the keymap (letters like r).

@@ -74,18 +74,22 @@ function findPart(payload: GPayload | undefined, mime: string): string | null {
  * images are flattened so the reader stays clean.
  */
 export function extractBody(payload: GPayload | undefined): string {
+  const collapse = (s: string) => s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+
   const plain = findPart(payload, "text/plain");
-  if (plain) return plain.trim();
+  if (plain) return collapse(plain);
 
   const html = findPart(payload, "text/html");
   if (html) {
-    return htmlToText(html, {
-      wordwrap: false, // let the TUI wrap
-      selectors: [
-        { selector: "img", format: "skip" },
-        { selector: "a", options: { ignoreHref: true } },
-      ],
-    }).trim();
+    return collapse(
+      htmlToText(html, {
+        wordwrap: false, // let the TUI wrap
+        selectors: [
+          { selector: "img", format: "skip" },
+          { selector: "a", options: { ignoreHref: true } },
+        ],
+      }),
+    );
   }
   return "";
 }

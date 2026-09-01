@@ -2,6 +2,7 @@ import {
   TextRenderable,
   BoxRenderable,
   ASCIIFontRenderable,
+  ScrollBoxRenderable,
   StyledText,
   fg,
   bold,
@@ -59,6 +60,8 @@ export interface Stage {
   renderApplet(def: AppletDef, state: AppletState): void;
   renderLauncher(applets: AppletDef[], cursor: number): void;
   footerNote(text: string, color?: string): void;
+  scrollBy(lines: number): void;
+  resetScroll(): void;
 }
 
 export function createStage(renderer: CliRenderer): Stage {
@@ -84,6 +87,15 @@ export function createStage(renderer: CliRenderer): Stage {
     flexDirection: "column",
     alignItems: "stretch", // children fill width; applets align themselves
   });
+  // Content lives in a scroll viewport: overflow scrolls/clips instead of
+  // flex-shrinking every child on top of each other (which corrupted the view).
+  const scroll = new ScrollBoxRenderable(renderer, {
+    id: "scroll",
+    flexGrow: 1,
+    scrollY: true,
+    contentOptions: { flexDirection: "column", alignItems: "stretch" },
+  });
+  frame.add(scroll);
   stage.add(frame);
   const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1 });
   renderer.root.add(stage);
@@ -107,24 +119,26 @@ export function createStage(renderer: CliRenderer): Stage {
     frame.title = ` ${title} `;
     frame.titleAlignment = "center";
     frame.borderColor = titleColor;
-    for (const child of [...frame.getChildren()]) {
-      frame.remove(child);
+    for (const child of [...scroll.content.getChildren()]) {
+      scroll.content.remove(child);
       (child as { destroy?: () => void }).destroy?.();
     }
     const gen = seq++;
-    nodes.forEach((node, i) => frame.add(nodeToRenderable(node, `n${gen}-${i}`)));
+    nodes.forEach((node, i) => scroll.content.add(nodeToRenderable(node, `n${gen}-${i}`)));
     renderer.requestRender();
   }
 
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
-    if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG, wrapMode: "word" });
+    // flexShrink:0 everywhere — leaves must keep their height so they never
+    // collapse on top of each other when content exceeds the viewport.
+    if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG, wrapMode: "word", flexShrink: 0 });
     switch (node.kind) {
       case "big":
-        return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG });
+        return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG, flexShrink: 0 });
       case "text":
-        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG), wrapMode: "word" });
+        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG), wrapMode: "word", flexShrink: 0 });
       case "spacer":
-        return new TextRenderable(renderer, { id, content: " " });
+        return new TextRenderable(renderer, { id, content: " ", flexShrink: 0 });
       case "row":
       case "col": {
         const box = new BoxRenderable(renderer, {
@@ -183,6 +197,14 @@ export function createStage(renderer: CliRenderer): Stage {
     },
     footerNote(text, color = COLORS.RED) {
       footer.content = new StyledText([fg(color)(text)]);
+      renderer.requestRender();
+    },
+    scrollBy(lines) {
+      scroll.scrollTop = Math.max(0, scroll.scrollTop + lines);
+      renderer.requestRender();
+    },
+    resetScroll() {
+      scroll.scrollTop = 0;
       renderer.requestRender();
     },
   };
