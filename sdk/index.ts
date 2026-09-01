@@ -135,8 +135,12 @@ export interface InputNode {
   mask?: boolean;
   /** Verb fired on enter with `{ id, value }`. */
   submit?: string;
+  /** What enter does, for the hint bar ("send", "create"). Defaults to "save". */
+  submitLabel?: string;
   /** Verb fired on esc with `{ id }`. Without one, esc falls back to `back`. */
   cancel?: string;
+  /** What esc does, for the hint bar. Defaults to "cancel". */
+  cancelLabel?: string;
   /** Verb fired on every keystroke with `{ id, value }` — opt into live edits. */
   change?: string;
   color?: Color;

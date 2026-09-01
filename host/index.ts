@@ -278,12 +278,17 @@ export async function runHost(startAppletId: string | null) {
       const state = (states[def.id] ?? def.initialState) as AppletState;
       const nav = def.nav;
 
+      // The field with the keyboard, if any. While an overlay is up the stage
+      // only looks INSIDE it, so a dialog's own field takes the keys and a
+      // field in the body behind it is inert.
+      const field = stage.focusedInput();
+
       // --- Overlay input mode: a floating layer owns the keyboard. Everything
       // that would move or navigate the body behind it is trapped, so a dialog
       // can't be scrolled out from under you. The exception is back with no
       // dismiss verb: it falls through, so an applet can never strand you.
       const overlay = def.overlay?.(state) ?? null;
-      if (overlay) {
+      if (overlay && !field) {
         const action = overlayAction(overlay, n);
         if (action.kind === "verb") {
           await callVerb(def.id, action.verb, action.args).catch(() => {});
@@ -293,7 +298,7 @@ export async function runHost(startAppletId: string | null) {
       }
 
       // --- Search input mode: the footer line editor owns the keyboard.
-      if (search && def.search) {
+      if (!overlay && search && def.search) {
         const { edit: next, action } = applyKey(search, k);
         if (action === "submit") {
           const q = search.value;
@@ -313,7 +318,6 @@ export async function runHost(startAppletId: string | null) {
 
       // --- Text field: an `input` node in the view tree has focus, so every
       // key is text (even `/` and the arrows) until enter or esc ends the edit.
-      const field = stage.focusedInput();
       if (field) {
         if (draft?.id !== field.id) draft = { id: field.id, edit: mkEdit(field.value) };
         const { edit: next, action } = applyKey(draft.edit, k);
@@ -340,6 +344,11 @@ export async function runHost(startAppletId: string | null) {
           if (changed && field.change) {
             await callVerb(def.id, field.change, { id: field.id, value: next.value }).catch(() => {});
           }
+        } else if (overlay) {
+          // A key the editor has no use for (tab, say) still belongs to the
+          // dialog around the field — that's how a form moves between fields.
+          const dialogKey = overlayAction(overlay, n);
+          if (dialogKey.kind === "verb") await callVerb(def.id, dialogKey.verb, dialogKey.args).catch(() => {});
         }
         return;
       }

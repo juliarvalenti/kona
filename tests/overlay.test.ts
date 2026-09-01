@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage } from "../host/stage.ts";
 import { overlayAction } from "../host/index.ts";
-import { defineApplet, text, col, type AppletDef, type AppletState, type Overlay } from "../sdk/index.ts";
+import { defineApplet, text, col, input, type AppletDef, type AppletState, type Overlay } from "../sdk/index.ts";
 import { modal, list } from "../sdk/components.ts";
 
 /**
@@ -102,4 +102,59 @@ test("back falls through when an overlay declares no dismiss verb", () => {
   const noExit: Overlay = { node: text("x"), confirm: "ok" };
   expect(overlayAction(noExit, "escape")).toEqual({ kind: "pass" });
   expect(overlayAction(noExit, "down")).toEqual({ kind: "trap" });
+});
+
+/**
+ * A form inside a dialog. The overlay owns the keyboard, but a field inside it
+ * owns it one level further down — otherwise a modal could never take text,
+ * which is what a "new room" or "rename" dialog is entirely made of.
+ */
+const form = defineApplet<{ open: boolean; name: string; field: string }>({
+  id: "form",
+  title: "Form",
+  initialState: { open: false, name: "", field: "name" },
+  verbs: {},
+  view: (s) => [col(list(ROWS, { cursor: 1 }), { gap: 0 }), input("body", s.name, { focus: !s.open })],
+  overlay: (s) =>
+    s.open
+      ? {
+          node: modal("new room", [
+            input("room.name", s.name, { focus: s.field === "name", submit: "create", submitLabel: "create", cancel: "dismiss", width: 20 }),
+          ]),
+          scrim: true,
+          dismiss: "dismiss",
+          keymap: { tab: { verb: "next", label: "next field" } },
+        }
+      : null,
+});
+
+async function mountForm(state: Record<string, unknown>) {
+  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width: 54, height: 18 });
+  const stage = createStage(renderer);
+  stage.renderApplet(form as unknown as AppletDef, state as AppletState);
+  await renderOnce();
+  return { stage, frame: captureCharFrame() };
+}
+
+test("a field inside a dialog takes the keyboard", async () => {
+  const { stage, frame } = await mountForm({ open: true, name: "ship-kona", field: "name" });
+  expect(frame).toContain("new room");
+  expect(stage.focusedInput()?.id).toBe("room.name");
+});
+
+test("a field behind a dialog does not", async () => {
+  // The body's own field is focused, but a dialog is up: keys belong to the
+  // dialog, not to whatever was being typed into underneath it.
+  const { stage } = await mountForm({ open: true, name: "", field: "topic" });
+  expect(stage.focusedInput()).toBeNull();
+  const closed = await mountForm({ open: false, name: "", field: "name" });
+  expect(closed.stage.focusedInput()?.id).toBe("body");
+});
+
+test("a dialog with a focused field hands the hint bar to that field", async () => {
+  const { frame } = await mountForm({ open: true, name: "ship-kona", field: "name" });
+  const hints = frame.replace(/\s+/g, " "); // the legend wraps at this width
+  expect(hints).toContain("enter create"); // the field's submit, named by the applet
+  expect(hints).toContain("tab next field"); // ...and the dialog's own key survives
+  expect(hints).toContain("esc cancel");
 });

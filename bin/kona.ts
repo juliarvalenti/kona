@@ -349,6 +349,10 @@ switch (cmd) {
         if (preset && !(live?.remaining ?? 0)) await callVerb("timer", "start", { seconds: preset });
       }
     }
+    // `kona mycelium <room>` opens straight into that room's chat.
+    if (cmd === "mycelium" && rest[0]) {
+      await callVerb("mycelium", "open", { room: rest[0] });
+    }
     // Applets with a `refresh` verb (e.g. email) get an initial load on open.
     await callVerb(cmd, "refresh", {}).catch(() => {});
     const { runHost } = await import("../host/index.ts");
