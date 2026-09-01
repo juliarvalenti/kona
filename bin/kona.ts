@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 import { mkdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ensureDaemon, api, callVerb } from "../core/client.ts";
+import { ensureDaemon, api, base, callVerb } from "../core/client.ts";
 import { startDaemon } from "../server/daemon.ts";
 import { loadConfig, configDir, defaultConfigToml, resetConfig } from "../core/config.ts";
 import { loadPackages, type AppletPackage } from "../core/load.ts";
 import { catalogLines, catalogMarkdown } from "../core/catalog.ts";
 import { skillMarkdown } from "../core/skill.ts";
+import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
+import { copyToClipboard, clipboardHelpers } from "../core/clipboard.ts";
 import { scaffoldApplet, validId } from "../core/scaffold.ts";
 import type { AppletCall, AuthProvider, ToolSpec } from "../sdk/index.ts";
 
@@ -85,6 +87,9 @@ async function usage() {
   kona tools --json        the same manifest as JSON (args, keys, docs)
   kona tools --skill       render an agent skill from the live manifest
                            (--out <path> / --install to write it to a file)
+  kona prompt [applet]     an agent-ready prompt for one applet (or all of
+                           them) — --copy puts it on the clipboard, --skill
+                           renders it as a SKILL.md stanza
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
   kona config [init]       show the resolved config (init writes a starter file)
@@ -259,6 +264,47 @@ switch (cmd) {
     const width = Math.max(...tools.map((t) => t.name.length), 0);
     for (const t of tools) console.log(t.doc ? `${t.name.padEnd(width)}  ${t.doc}` : t.name);
     break;
+  }
+
+  // "Copy prompt", from the command line: the same blurb the TUI's `y` copies,
+  // rendered from the applets installed here. `--skill` is the durable shape of
+  // it — one applet as a drop-in SKILL.md, for an agent's skills dir.
+  case "prompt": {
+    const flags = new Set(rest.filter((a) => a.startsWith("--")));
+    const unknown = [...flags].filter((f) => f !== "--copy" && f !== "--skill");
+    if (unknown.length) {
+      console.error(`usage: kona prompt [applet] [--copy] [--skill]   (unknown: ${unknown.join(", ")})`);
+      process.exit(1);
+    }
+    const id = rest.find((a) => !a.startsWith("--"));
+    const defs = (await packages()).map((p) => p.def);
+    const skill = flags.has("--skill");
+    let text: string;
+    if (id) {
+      const def = defs.find((d) => d.id === id);
+      if (!def) {
+        console.error(`no such applet: ${id}`);
+        process.exit(1);
+      }
+      text = skill ? skillMarkdown([def], { name: `kona-${id}` }) : appletPrompt(def, { base: base() });
+    } else {
+      text = skill ? skillMarkdown(defs) : surfacePrompt(defs, { base: base() });
+    }
+    if (!flags.has("--copy")) {
+      console.log(text);
+      break;
+    }
+    const result = await copyToClipboard(text);
+    if (result === "copied") {
+      console.log(`copied ${id ?? `all ${defs.length} applets`} to the clipboard (${text.length} chars)`);
+      break;
+    }
+    console.error(
+      result === "unsupported"
+        ? `no clipboard helper — install one of ${clipboardHelpers()}, or set KONA_CLIPBOARD`
+        : "clipboard helper failed — nothing copied",
+    );
+    process.exit(1);
   }
 
   case "state": {

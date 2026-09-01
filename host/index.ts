@@ -2,8 +2,11 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { bindingFor, type AppletDef, type AppletState, type KeyBinding, type Overlay } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
-import { createStage, type Draft } from "./stage.ts";
+import { createStage, COPY_PROMPT_KEY, type Draft } from "./stage.ts";
 import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
+import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
+import { clipboardHelpers, copyToClipboard } from "../core/clipboard.ts";
+import { theme } from "../core/config.ts";
 
 /**
  * The host is a THIN client. It never owns state — it loads applet modules only
@@ -241,6 +244,28 @@ export async function runHost(startAppletId: string | null) {
     }
   }
 
+  /**
+   * Copy prompt: hand the agent in the next window a blurb that teaches it to
+   * drive THIS surface — the applet you have open, or (from the launcher) the
+   * whole set. Generated from the live manifest the host already loaded, so it
+   * names the verbs actually installed on this machine, and goes out through
+   * the system clipboard because that is where a paste comes from.
+   */
+  async function copyPrompt() {
+    const def = current ? byId.get(current) : null;
+    const url = base();
+    const text = def ? appletPrompt(def, { base: url }) : surfacePrompt(applets, { base: url });
+    const what = def ? `\`${def.id}\`` : `all ${applets.length} applets`;
+    const result = await copyToClipboard(text);
+    const { ok, error } = theme();
+    if (result === "copied") stage.footerNote(`copied a prompt for ${what} — paste it to your agent`, ok);
+    else if (result === "unsupported")
+      stage.footerNote(`no clipboard helper — install one of ${clipboardHelpers()}, or set KONA_CLIPBOARD`, error);
+    else stage.footerNote("clipboard helper failed — nothing copied", error);
+    // The note lives in the hint bar, so put the hints back after a beat.
+    setTimeout(() => render(), 2500);
+  }
+
   // The mouse rides the same intents as the keyboard: a click on a row is that
   // row's "select" (cursor moves there, then the verb fires); the wheel scrolls.
   stage.onMouse((e) => {
@@ -271,6 +296,9 @@ export async function runHost(startAppletId: string | null) {
       const n = keyName(k);
 
       if (current === null) {
+        // The launcher's surface IS the applet list, so copy-prompt here means
+        // the whole set.
+        if (n === COPY_PROMPT_KEY) return void copyPrompt();
         // launcher navigation
         if (isUp(n)) cursor = (cursor - 1 + applets.length) % applets.length;
         else if (isDown(n)) cursor = (cursor + 1) % applets.length;
@@ -378,6 +406,13 @@ export async function runHost(startAppletId: string | null) {
     if (claimed) {
       const { verb, args } = resolveBinding(claimed);
       await callVerb(def.id, verb, args).catch(() => {});
+      return;
+    }
+
+    // Platform keybind: teach an agent the surface you are looking at. Matched
+    // AFTER the applet's keymap, so an applet that binds the key keeps it.
+    if (n === COPY_PROMPT_KEY) {
+      await copyPrompt();
       return;
     }
 

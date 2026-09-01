@@ -32,7 +32,25 @@ const palette = (): Theme => theme();
 export interface Hint {
   key: string;
   label: string;
+  /**
+   * A hint that yields: shown only while it costs no extra footer line. The
+   * hint bar is charged against the viewport, so a platform-level key must not
+   * take a row of content away from the applet that earned it.
+   */
+  optional?: boolean;
 }
+
+/**
+ * The platform's own keybind: copy an agent-ready prompt for whatever surface
+ * is on screen. It lives here (not in any applet's keymap) because it works on
+ * every applet AND the launcher — the host handles it, the same way it handles
+ * `/` for search. An applet that binds the key itself keeps it, so this is a
+ * default rather than a reservation.
+ */
+export const COPY_PROMPT_KEY = "y";
+// Kept short on purpose: the hint bar is charged against the viewport, and a
+// two-line footer costs every applet a row of content.
+const COPY_PROMPT_LABEL = "prompt";
 
 /**
  * A mouse gesture, already resolved against what is on screen — the host never
@@ -340,7 +358,11 @@ export function createStage(renderer: CliRenderer): Stage {
 
   function setFooter(hints: Hint[]) {
     const cap = Math.max(20, term.width - 1); // paddingLeft
-    const shown = fitHints(hints, cap);
+    // Optional hints are the first thing to go — before the trimming below —
+    // and they go silently: they buy a whole line of viewport back.
+    const required = hints.filter((h) => !h.optional);
+    const affordable = linesFor(hints, cap) > linesFor(required, cap) ? required : hints;
+    const shown = fitHints(affordable, cap);
     footerLines = Math.min(FOOTER_MAX_LINES, linesFor(shown, cap));
     const chunks: TextChunk[] = [];
     shown.forEach((h, i) => {
@@ -582,6 +604,8 @@ export function createStage(renderer: CliRenderer): Stage {
       if (nav?.select) hints.push({ key: claims("right") ? "enter" : "→", label: nav.selectLabel ?? "open" });
       if (def.search) hints.push({ key: "/", label: "search" });
       hints.push(...km);
+      // The platform keybind, unless this applet claimed the key for itself.
+      if (!claims(COPY_PROMPT_KEY)) hints.push({ key: COPY_PROMPT_KEY, label: COPY_PROMPT_LABEL, optional: true });
       const canBack = nav?.canBack?.(state) ?? false;
       hints.push({ key: claims("left") ? "esc" : "←/esc", label: canBack ? (nav?.backLabel ?? "back") : "menu" });
       hints.push({ key: "ctrl+c", label: "quit" });
@@ -597,6 +621,7 @@ export function createStage(renderer: CliRenderer): Stage {
       setFooter([
         { key: "↑/↓", label: "move" },
         { key: "enter", label: "open" },
+        { key: COPY_PROMPT_KEY, label: COPY_PROMPT_LABEL },
         { key: "ctrl+c", label: "quit" },
       ]);
     },

@@ -37,6 +37,11 @@ Applets feed it from their own definition: a `docs` block (one line per verb,
 plus example args) and `recipes` (multi-step flows). Document a verb where you
 write it and the skill follows.
 
+The human can also hand you one surface at a time: `y` in the TUI (or `kona
+prompt <applet>`) copies a prompt for the applet they are looking at — the same
+manifest, scoped to one applet, with `--skill` rendering it as a SKILL.md
+stanza. If they paste one at you, it is current by construction.
+
 The rendered file is generated, never committed — `bun run skill` writes it, and
 a `SessionStart` hook does that for you. If it looks stale, regenerate it; if it
 disagrees with `kona tools --json`, the manifest wins.

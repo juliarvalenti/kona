@@ -68,8 +68,9 @@ The daemon (`konad`) autostarts on first use; state lives in
 `~/.local/state/kona/state.json`.
 
 In the TUI, `↑`/`↓` (or `k`/`j`) move, `→`/`enter` opens, `←`/`esc` goes back,
-and `/` searches. The mouse works the same way: click a row to select and open
-it, scroll the wheel to scroll.
+`/` searches, and `y` copies an agent prompt for whatever is on screen (below).
+The mouse works the same way: click a row to select and open it, scroll the
+wheel to scroll.
 
 ### Desktop notifications
 
@@ -408,6 +409,35 @@ call a verb — an agent never hardcodes an applet id), and `recipes` become the
 skill's worked examples. The manifest also carries the applet's title and the
 key each verb binds in the TUI, which is the bimodal thesis in one line: the
 same verb, whichever hand fires it.
+
+### Copy prompt
+
+The skill is the durable half — installed once, describing every applet. The
+other half is *"teach my agent about the thing I am staring at, right now"*:
+press **`y`** in any applet and its whole surface is on your clipboard, ready to
+paste into an agent — the verbs, their example args, the key you'd press for
+each, and both seams (`kona call …` and the HTTP route at the port this host is
+talking to). Press it in the launcher and you get the whole set instead.
+
+The same blurb from the command line:
+
+```sh
+kona prompt spotify            # print it
+kona prompt spotify --copy     # ...straight to the clipboard
+kona prompt                    # every applet installed here
+kona prompt spotify --skill    # one applet as a drop-in SKILL.md stanza
+```
+
+It is rendered from the live manifest by the same code that renders the skill
+(`core/prompt.ts` over `toolsForApplet`), so a copied prompt cannot describe a
+verb this machine doesn't have, and cannot drift from what `kona tools --json`
+says. The clipboard is `pbcopy` on macOS, `wl-copy`/`xclip`/`xsel` on Linux and
+`clip` on Windows; `KONA_CLIPBOARD="ssh mac pbcopy"` overrides the command,
+which is also how you copy out of an ssh session.
+
+`y` is a platform key, not an applet's: the host handles it for every applet and
+the launcher. An applet that binds `y` itself keeps it, and the hint bar yields
+the `y prompt` legend rather than spending a second footer line on it.
 
 ## Config
 
