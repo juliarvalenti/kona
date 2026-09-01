@@ -114,6 +114,24 @@ export default defineApplet<MyceliumState>({
     syncedAt: 0,
   },
 
+  docs: {
+    refresh: "Re-read the room list (and the open room) from the backend.",
+    open: { doc: "Drill into a room by `room` id — agents, recent messages, shared memory.", args: { room: "ship-kona" } },
+    search: { doc: "Filter rooms by name, topic, or a member agent.", args: { q: "kona" } },
+  },
+
+  recipes: [
+    {
+      title: "Read a mycelium room",
+      steps: [
+        `kona call mycelium refresh                          # -> { rooms: 4, source: "http" }`,
+        `kona call mycelium open '{"room":"ship-kona"}'      # -> agents, message count, memory keys`,
+        `kona state mycelium                                  # the messages themselves`,
+      ],
+      note: "Read-only by design: kona observes the coordination layer, it does not post to it. Say something in a room with your own mycelium client; kona is the window, not the mouth.",
+    },
+  ],
+
   verbs: {
     async refresh(_args, { state, emit }) {
       await loadRooms(state, emit);

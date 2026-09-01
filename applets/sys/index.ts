@@ -161,6 +161,11 @@ export default defineApplet<SysState>({
     error: null,
   },
 
+  docs: {
+    refresh: "Take a full reading now — load, memory, disk, battery, network. This is the one you want.",
+    mount: { doc: "Point the disk gauge at another filesystem.", args: { path: "/Volumes/ext" } },
+  },
+
   verbs: {
     /** Take a full reading now (agents: this is the one you want). */
     async refresh(_args, { state, emit }) {

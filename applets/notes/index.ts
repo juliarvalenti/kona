@@ -78,6 +78,14 @@ export default defineApplet<NotesState>({
   summary: "A scratchpad that survives restarts. Agents jot lines too.",
   initialState: { notes: [], cursor: 0, history: [] },
 
+  docs: {
+    add: { doc: "Jot a line. Newest first.", args: { text: "ship the skill generator" } },
+    edit: { doc: "Replace a note's text, by `id` or `index`.", args: { id: "a1b2c3d4", text: "ship it tomorrow" } },
+    remove: { doc: "Delete a note, by `id` or `index`. Undoable.", args: { id: "a1b2c3d4" } },
+    clear: "Wipe the pad. Undoable.",
+    undo: "Step back one mutation (add, edit, remove, clear).",
+  },
+
   verbs: {
     /**
      * Add a line. `text` (agent) or `q` (the host's `/` prompt) — same verb.

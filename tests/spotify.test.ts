@@ -59,3 +59,32 @@ test("volume says so when the device has no volume control", async () => {
   expect(fixed.volumePct).toBe(40); // unchanged
   expect(String(fixed.error)).toContain("Kitchen Speaker");
 });
+
+test("queue needs something to queue, and says so", async () => {
+  const idle = st({ mode: "now", track: "Rave Green" });
+  const res = (await call("queue", {}, idle)) as { queued: boolean; error?: string };
+  expect(res.queued).toBe(false);
+  expect(String(idle.error)).toContain("uri");
+});
+
+test("queue takes the track under the cursor while browsing (the `q` key)", async () => {
+  const browsing = st({
+    mode: "browse",
+    stack: [
+      {
+        title: "search: four tet",
+        cursor: 1,
+        rows: [
+          { kind: "artist", id: "a1", uri: "spotify:artist:a1", name: "Four Tet", subtitle: "" },
+          { kind: "track", id: "t1", uri: "spotify:track:t1", name: "Rave Green", subtitle: "Four Tet" },
+        ],
+      },
+    ],
+  });
+  const res = (await call("queue", {}, browsing)) as { queued: boolean };
+  // The Web API is stubbed out under test, so the call lands in state.error —
+  // what matters here is that the verb RESOLVED the selection instead of
+  // refusing for want of arguments.
+  expect(res.queued).toBe(false);
+  expect(String(browsing.error)).toContain("fake-providers");
+});

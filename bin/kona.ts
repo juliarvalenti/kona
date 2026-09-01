@@ -2,6 +2,7 @@
 import { ensureDaemon, api, callVerb, base } from "../core/client.ts";
 import { startDaemon } from "../server/daemon.ts";
 import { loadConfig, configPath, defaultConfigToml, appletString, resetConfig } from "../core/config.ts";
+import type { ToolSpec } from "../sdk/index.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -56,6 +57,9 @@ function usage() {
                            kona timer pomodoro)
   kona ls                  list applets
   kona tools               list agent-callable verbs (the manifest)
+  kona tools --json        the same manifest as JSON (args, keys, docs)
+  kona tools --skill       render an agent skill from the live manifest
+                           (--out <path> / --install to write it to a file)
   kona state <applet>      print an applet's current state
   kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
   kona config [init]       show the resolved config (init writes a starter file)
@@ -119,10 +123,42 @@ switch (cmd) {
     break;
   }
 
+  // The agent seam, in three shapes: names to skim, JSON to parse, or a
+  // ready-to-drop-in skill file rendered from the SAME live manifest — so an
+  // agent's instructions can never drift from the applets actually installed.
   case "tools": {
     await ensureDaemon();
-    const tools = (await api("/tools")) as Array<{ name: string }>;
-    for (const t of tools) console.log(t.name);
+    const skill = rest.includes("--skill");
+    const asJson = rest.includes("--json");
+    const outAt = rest.indexOf("--out");
+    const out = outAt >= 0 ? rest[outAt + 1] : undefined;
+    if (outAt >= 0 && !out) {
+      console.error("usage: kona tools --skill --out <path>");
+      process.exit(1);
+    }
+
+    if (skill) {
+      const md = await fetch(`${base()}/skill`).then((r) => r.text());
+      // `--install` is the common case spelled out: the project-local skill dir
+      // Claude Code (and friends) already look in.
+      const dest = out ?? (rest.includes("--install") ? ".claude/skills/kona/SKILL.md" : null);
+      if (!dest) {
+        console.log(md);
+        break;
+      }
+      await Bun.write(dest, md);
+      console.log(`wrote ${dest}`);
+      break;
+    }
+
+    const tools = (await api("/tools")) as ToolSpec[];
+    if (asJson) {
+      console.log(JSON.stringify(tools, null, 2));
+      break;
+    }
+    // Names, plus the one-liner when the applet documents the verb.
+    const width = Math.max(...tools.map((t) => t.name.length), 0);
+    for (const t of tools) console.log(t.doc ? `${t.name.padEnd(width)}  ${t.doc}` : t.name);
     break;
   }
 

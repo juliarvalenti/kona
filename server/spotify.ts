@@ -485,6 +485,21 @@ export const playInContext = (context_uri: string, trackUri: string) =>
     body: JSON.stringify({ context_uri, offset: { uri: trackUri } }),
   });
 
+/** Queue a track after the current one — playback keeps going. */
+export const queueUri = (uri: string) =>
+  api(`/v1/me/player/queue?${new URLSearchParams({ uri })}`, { method: "POST" });
+
+/**
+ * The first track matching free text — how an AGENT names a song ("rave green
+ * four tet") when it has no uri to hand.
+ */
+export async function findTrack(query: string): Promise<Row | null> {
+  if (!query.trim()) return null;
+  const r = await api(`/v1/search?${new URLSearchParams({ q: query, type: "track", limit: "1" })}`);
+  const t = ((r?.tracks?.items ?? []) as any[]).filter(Boolean)[0];
+  return t ? trackRow(t) : null;
+}
+
 /** Play a whole context (artist / album / playlist uri). */
 export const playContext = (context_uri: string) =>
   api("/v1/me/player/play", {

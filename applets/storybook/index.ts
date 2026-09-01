@@ -58,6 +58,14 @@ export default defineApplet<StoryState>({
 
   // Every verb is bimodal: a keypress fires it and so does `kona call storybook
   // <verb>`. The text field and the confirm dialog both demonstrate that seam.
+  docs: {
+    edit: "Give the demo text field the keyboard (state owns the focus).",
+    save: { doc: "Commit a value into the field — what `enter` does for a human.", args: { value: "ada" } },
+    ask: "Raise the confirm dialog (the overlay demo).",
+    ok: "Confirm the dialog.",
+    cancel: "Drop the edit and dismiss the dialog.",
+  },
+
   verbs: {
     /** Give the field the keyboard. */
     edit: (_a, { state, emit }) => {

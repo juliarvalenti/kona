@@ -122,6 +122,15 @@ export default defineApplet<TickerState>({
     updatedAt: 0,
   },
 
+  docs: {
+    refresh: "Poll quotes now, ignoring the every-45s gate.",
+    add: { doc: "Add symbols to the watchlist (comma- or space-separated).", args: { symbols: "NVDA, BTC-USD" } },
+    remove: { doc: "Drop a symbol.", args: { symbol: "NVDA" } },
+    reset: "Re-seed the watchlist from config (env / ~/.config/kona/ticker.json).",
+    select: "Open the detail screen for the selected symbol.",
+    web: "Open the selected symbol's page in a browser.",
+  },
+
   verbs: {
     /** Poll now, ignoring the every-45s gate (a keypress means "now"). */
     async refresh(_a, { state, emit }) {

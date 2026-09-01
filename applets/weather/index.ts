@@ -246,6 +246,15 @@ export default defineApplet<WeatherState>({
     syncedAt: 0,
   },
 
+  docs: {
+    refresh: "Refetch the current location. Call this before you read state.",
+    setLocation: { doc: "Move the view — coordinates, or a place name in `q` that gets geocoded.", args: { q: "Lisbon" } },
+    locate: "Guess the location from the IP address.",
+    search: { doc: "Geocode a query and offer the matches to pick from.", args: { q: "Porto" } },
+    units: { doc: "Switch units.", args: { fahrenheit: true } },
+    open: { doc: "Open a day in the forecast, or adopt a search result.", args: { index: 0 } },
+  },
+
   verbs: {
     /** Refetch the current location (the `r` key, and what an agent calls first). */
     async refresh(_args, { state, emit }) {

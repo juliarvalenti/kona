@@ -246,6 +246,17 @@ export default defineApplet<ClockState>({
     pick: 0,
   },
 
+  docs: {
+    list: { doc: "Read the board without changing it; `tz` reads any zone, on the board or not.", args: { tz: "Asia/Kathmandu" } },
+    add: { doc: "Add a city (an IANA zone, or a name from the catalog).", args: { tz: "Europe/Lisbon" } },
+    remove: { doc: "Remove a city from the board.", args: { tz: "Europe/Lisbon" } },
+    sort: "Order the board west -> east.",
+    format: { doc: "12- or 24-hour clock.", args: { hour12: true } },
+    pick: "Open the city picker.",
+    find: { doc: "Filter the picker's catalog.", args: { q: "tokyo" } },
+    choose: "Add the highlighted city from the picker.",
+  },
+
   verbs: {
     /**
      * Read the board without changing it — the verb an agent wants when the
