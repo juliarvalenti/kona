@@ -50,7 +50,12 @@ export function exampleCall(t: ToolSpec): string {
   return `kona call ${t.applet} ${t.verb}${args}`;
 }
 
-function verbLine(t: ToolSpec): string {
+/**
+ * One verb as a bullet: what it does, the command that fires it, and the key a
+ * human presses for the same thing. Shared with the copy-prompt blurb
+ * (core/prompt.ts) so both renderings of the manifest read identically.
+ */
+export function verbLine(t: ToolSpec): string {
   const bits = [`- \`${t.name}\``];
   if (t.doc) bits.push(`— ${t.doc}`);
   const trail: string[] = [`\`${exampleCall(t)}\``];
@@ -58,16 +63,22 @@ function verbLine(t: ToolSpec): string {
   return `${bits.join(" ")}  ·  ${list(trail)}`;
 }
 
-function recipeBlock(r: Recipe): string {
+/** A worked flow, as the skill and a copied prompt both print it. */
+export function recipeBlock(r: Recipe): string {
   const steps = ["```sh", ...r.steps, "```"].join("\n");
   return [`**${r.title}**`, "", steps, ...(r.note ? ["", r.note] : [])].join("\n");
 }
 
-function appletSection(def: AnyApplet): string {
+/**
+ * One applet's whole surface: its verbs, the cursor verbs an agent should leave
+ * alone, and its search seam. `level` is the heading depth, so the skill can
+ * nest it under "Applets on this machine" and a copied prompt can lead with it.
+ */
+export function appletSection(def: AnyApplet, level = 3): string {
   const tools = toolsForApplet(def);
   const acting = tools.filter((t) => !t.nav);
   const cursor = tools.filter((t) => t.nav);
-  const out: string[] = [`### ${def.id} — ${def.title}`, ""];
+  const out: string[] = [`${"#".repeat(level)} ${def.id} — ${def.title}`, ""];
   if (def.summary) out.push(def.summary, "");
   out.push(...acting.map(verbLine));
   if (cursor.length) {
@@ -147,7 +158,7 @@ state after the call — so you rarely need a follow-up read.
 Installed: ${list(ids.map((i) => `\`${i}\``))}.
 `;
 
-  const body = applets.map(appletSection).join("\n\n");
+  const body = applets.map((a) => appletSection(a)).join("\n\n");
 
   const tail = recipes.length
     ? `\n\n## Worked examples\n\n${recipes.map(recipeBlock).join("\n\n")}`
