@@ -54,14 +54,28 @@ export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
   | { kind: "text"; text: string; color?: Color; dim?: boolean }
-  | { kind: "spacer" };
+  | { kind: "spacer" }
+  | { kind: "row"; children: ViewNode[] }
+  | { kind: "bar"; value: number; width?: number; color?: Color };
 
 export type View = string | string[] | ViewNode[];
 
-/** Node constructors, so applets read declaratively. */
+/**
+ * Primitive node constructors. Everything richer (progress, key/value, lists)
+ * is a plain function that composes these — see sdk/components.ts. The host only
+ * ever needs to understand these primitives.
+ */
 export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
 export const text = (t: string, opts: { color?: Color; dim?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
 export const spacer = (): ViewNode => ({ kind: "spacer" });
+/** Lay children out horizontally. */
+export const row = (...children: ViewNode[]): ViewNode => ({ kind: "row", children });
+/** A fill bar; value is 0..1. */
+export const bar = (value: number, opts: { width?: number; color?: Color } = {}): ViewNode => ({
+  kind: "bar",
+  value: Math.max(0, Math.min(1, value)),
+  ...opts,
+});
 
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */

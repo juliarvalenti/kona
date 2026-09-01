@@ -98,6 +98,19 @@ test("view emits a big mm:ss hero and a status line", () => {
   expect(hasStatus).toBe(true);
 });
 
+test("total tracks the countdown for the progress bar", () => {
+  const h = harness();
+  h.call("start", { seconds: 100 });
+  expect(h.state.total).toBe(100);
+  h.tick();
+  expect(h.state.total).toBe(100); // total is fixed; only remaining moves
+  expect(h.state.remaining).toBe(99);
+  h.call("add", { seconds: 20 });
+  expect(h.state.total).toBe(120); // adding time extends the whole
+  h.call("stop");
+  expect(h.state.total).toBe(0);
+});
+
 test("accent color tracks timer state", () => {
   const h = harness();
   expect(timer.accent!(h.state)).toBe("#5a5a5a"); // idle

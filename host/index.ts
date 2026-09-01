@@ -153,6 +153,17 @@ export async function runHost(startAppletId: string | null) {
         return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG) });
       case "spacer":
         return new TextRenderable(renderer, { id, content: " " });
+      case "row": {
+        const box = new BoxRenderable(renderer, { id, flexDirection: "row" });
+        node.children.forEach((child, i) => box.add(nodeToRenderable(child, `${id}.${i}`)));
+        return box;
+      }
+      case "bar": {
+        const width = node.width ?? 24;
+        const filled = Math.round(node.value * width);
+        const content = "█".repeat(filled) + "░".repeat(Math.max(0, width - filled));
+        return new TextRenderable(renderer, { id, content, fg: node.color ?? FG });
+      }
     }
   }
 

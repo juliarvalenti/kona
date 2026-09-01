@@ -1,4 +1,5 @@
 import { defineApplet, big, text, spacer } from "../../sdk/index.ts";
+import { progress } from "../../sdk/components.ts";
 
 // state -> color: green running, amber paused, red done, dim idle
 const RUNNING = "#00d488";
@@ -25,6 +26,7 @@ function tint(s: { running: boolean; remaining: number; label: string }): string
 
 interface TimerState {
   remaining: number; // seconds
+  total: number; // seconds the current countdown started at (for the bar)
   running: boolean;
   label: string;
 }
@@ -58,11 +60,12 @@ export default defineApplet<TimerState>({
   id: "timer",
   title: "Timer",
   summary: "Count down. Start by hand or by agent; pause with space.",
-  initialState: { remaining: 0, running: false, label: "" },
+  initialState: { remaining: 0, total: 0, running: false, label: "" },
 
   verbs: {
     start(args, { state, emit }) {
       state.remaining = parseDuration(args.seconds ?? args.duration ?? args.for);
+      state.total = state.remaining;
       state.label = typeof args.label === "string" ? args.label : "";
       state.running = state.remaining > 0;
       emit();
@@ -81,11 +84,14 @@ export default defineApplet<TimerState>({
       emit();
     },
     add(args, { state, emit }) {
-      state.remaining += parseDuration(args.seconds ?? args.duration ?? 60);
+      const delta = parseDuration(args.seconds ?? args.duration ?? 60);
+      state.remaining += delta;
+      state.total += delta;
       emit();
     },
     stop(_args, { state, emit }) {
       state.remaining = 0;
+      state.total = 0;
       state.running = false;
       state.label = "";
       emit();
@@ -115,9 +121,12 @@ export default defineApplet<TimerState>({
     const done = !state.running && state.remaining === 0 && !!state.label;
     const status = state.running ? "running" : state.remaining > 0 ? "paused" : done ? "done" : "idle";
     const color = tint(state);
+    const frac = state.total > 0 ? state.remaining / state.total : 0;
     return [
       spacer(),
       big(fmt(state.remaining), color, "block"),
+      spacer(),
+      progress(frac, { color, width: 28 }),
       spacer(),
       text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
     ];
