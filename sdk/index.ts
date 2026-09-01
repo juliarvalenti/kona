@@ -33,6 +33,30 @@ export type Verb<S = AppletState> = (
 /** A key can fire a verb by name, or a verb with fixed args. */
 export type KeyBinding = string | { verb: string; args: Record<string, unknown> };
 
+/** Hex color, e.g. "#00d488". */
+export type Color = string;
+
+/** ASCII-art fonts the host can render for a `big` node. */
+export type BigFont = "block" | "tiny" | "slick" | "shade" | "huge" | "grid" | "pallet";
+
+/**
+ * The view vocabulary — deliberately tiny. An applet's `view` returns these and
+ * the host maps them to terminal widgets. Plain strings are lines; richer nodes
+ * opt into a hero display or color. Grow this set only when an applet needs it.
+ */
+export type ViewNode =
+  | string
+  | { kind: "big"; text: string; color?: Color; font?: BigFont }
+  | { kind: "text"; text: string; color?: Color; dim?: boolean }
+  | { kind: "spacer" };
+
+export type View = string | string[] | ViewNode[];
+
+/** Node constructors, so applets read declaratively. */
+export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
+export const text = (t: string, opts: { color?: Color; dim?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
+export const spacer = (): ViewNode => ({ kind: "spacer" });
+
 export interface AppletDef<S extends object = AppletState> {
   /** Stable id, used in the CLI and HTTP routes: `kona <id>`, `/applets/<id>`. */
   id: string;
@@ -44,8 +68,10 @@ export interface AppletDef<S extends object = AppletState> {
   initialState: S;
   /** Actions. Keyed by verb name. */
   verbs: Record<string, Verb<S>>;
-  /** Pure render: current state -> the lines the host draws. */
-  view: (state: S) => string | string[];
+  /** Pure render: current state -> what the host draws (lines or view nodes). */
+  view: (state: S) => View;
+  /** Optional frame tint (border/title color) derived from state. */
+  accent?: (state: S) => Color;
   /** key -> verb. e.g. { space: "toggle", s: "stop" }. */
   keymap?: Record<string, KeyBinding>;
   /** If set, the daemon calls tick every tickMs while the applet is "live". */

@@ -1,4 +1,17 @@
-import { defineApplet } from "../../sdk/index.ts";
+import { defineApplet, big, text, spacer } from "../../sdk/index.ts";
+
+// state -> color: green running, amber paused, red done, dim idle
+const RUNNING = "#00d488";
+const PAUSED = "#f0b000";
+const DONE = "#ff5c57";
+const IDLE = "#5a5a5a";
+
+function tint(s: { running: boolean; remaining: number; label: string }): string {
+  if (s.running) return RUNNING;
+  if (s.remaining > 0) return PAUSED;
+  if (s.label) return DONE; // finished (label survives until stop)
+  return IDLE;
+}
 
 /**
  * timer — the walking-skeleton proof.
@@ -98,20 +111,18 @@ export default defineApplet<TimerState>({
     a: { verb: "add", args: { seconds: 60 } },
   },
 
+  accent: tint,
+
   view(state) {
-    const status = state.running
-      ? "running"
-      : state.remaining > 0
-        ? "paused"
-        : "idle";
-    const bell = !state.running && state.remaining === 0 && state.label ? "  🔔 done" : "";
+    const done = !state.running && state.remaining === 0 && !!state.label;
+    const status = state.running ? "running" : state.remaining > 0 ? "paused" : done ? "done" : "idle";
+    const color = tint(state);
     return [
-      "",
-      `   ${fmt(state.remaining)}`,
-      "",
-      `   ${status}${state.label ? `  ·  ${state.label}` : ""}${bell}`,
-      "",
-      "   space pause/resume · a +1m · s stop",
+      spacer(),
+      big(fmt(state.remaining), color, "block"),
+      spacer(),
+      text(`${status}${state.label ? `  ·  ${state.label}` : ""}`, { color }),
+      text("space pause/resume   ·   a +1m   ·   s stop", { dim: true }),
     ];
   },
 });

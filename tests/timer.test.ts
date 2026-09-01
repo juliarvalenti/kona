@@ -87,10 +87,22 @@ test("toggle flips running; add extends; stop resets", () => {
   expect(h.state).toMatchObject({ remaining: 0, running: false, label: "" });
 });
 
-test("view renders mm:ss and reflects status", () => {
+test("view emits a big mm:ss hero and a status line", () => {
   const h = harness();
   h.call("start", { seconds: 65 });
-  const lines = timer.view(h.state) as string[];
-  expect(lines.join("\n")).toContain("01:05");
-  expect(lines.join("\n")).toContain("running");
+  const nodes = timer.view(h.state);
+  const arr = Array.isArray(nodes) ? nodes : [nodes];
+  const big = arr.find((n) => typeof n === "object" && n.kind === "big");
+  expect(big).toMatchObject({ kind: "big", text: "01:05" });
+  const hasStatus = arr.some((n) => typeof n === "object" && n.kind === "text" && n.text.includes("running"));
+  expect(hasStatus).toBe(true);
+});
+
+test("accent color tracks timer state", () => {
+  const h = harness();
+  expect(timer.accent!(h.state)).toBe("#5a5a5a"); // idle
+  h.call("start", { seconds: 30 });
+  expect(timer.accent!(h.state)).toBe("#00d488"); // running
+  h.call("pause");
+  expect(timer.accent!(h.state)).toBe("#f0b000"); // paused
 });

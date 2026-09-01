@@ -1,5 +1,12 @@
-import { createCliRenderer, TextRenderable, type CliRenderer } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding } from "../sdk/index.ts";
+import {
+  createCliRenderer,
+  TextRenderable,
+  BoxRenderable,
+  ASCIIFontRenderable,
+  type CliRenderer,
+  type Renderable,
+} from "@opentui/core";
+import type { AppletDef, AppletState, KeyBinding, ViewNode } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb } from "../core/client.ts";
 
@@ -55,38 +62,81 @@ export async function runHost(startAppletId: string | null) {
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
   const states: States = {};
 
+  const DIM = "#6a6a6a";
+  const FG = "#d0d0d0";
+  const ACCENT = "#7aa2f7";
+  const DONE_RED = "#ff5c57";
+
   const renderer: CliRenderer = await createCliRenderer({ exitOnCtrlC: true });
-  const screen = new TextRenderable(renderer, { id: "screen", content: "" });
-  renderer.root.add(screen);
+
+  // Center a single bordered frame on screen; its children are rebuilt per view.
+  renderer.root.alignItems = "center";
+  renderer.root.justifyContent = "center";
+  const frame = new BoxRenderable(renderer, {
+    id: "frame",
+    border: true,
+    borderStyle: "rounded",
+    borderColor: ACCENT,
+    padding: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    minWidth: 40,
+  });
+  renderer.root.add(frame);
 
   // null = launcher; otherwise the applet id currently open
   let current: string | null = startAppletId;
   let cursor = 0; // launcher selection
 
-  function paint(lines: string[]) {
-    screen.content = lines.join("\n");
+  // Rebuild the frame's children from scratch each render. Cheap at our cadence
+  // (~1Hz); destroy old nodes so native buffers (ASCII fonts) don't leak.
+  let seq = 0;
+  function setFrame(title: string, titleColor: string, nodes: ViewNode[]) {
+    frame.title = ` ${title} `;
+    frame.titleAlignment = "center";
+    frame.borderColor = titleColor;
+    for (const child of [...frame.getChildren()]) {
+      frame.remove(child);
+      (child as { destroy?: () => void }).destroy?.();
+    }
+    const gen = seq++;
+    nodes.forEach((node, i) => {
+      const id = `n${gen}-${i}`;
+      frame.add(nodeToRenderable(node, id));
+    });
     renderer.requestRender();
   }
 
+  function nodeToRenderable(node: ViewNode, id: string): Renderable {
+    if (typeof node === "string") return new TextRenderable(renderer, { id, content: node, fg: FG });
+    switch (node.kind) {
+      case "big":
+        return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG });
+      case "text":
+        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG) });
+      case "spacer":
+        return new TextRenderable(renderer, { id, content: " " });
+    }
+  }
+
   function renderLauncher() {
-    const lines: string[] = ["kona — pick an app", ""];
+    const nodes: ViewNode[] = [{ kind: "text", text: "pick an app", dim: true }, { kind: "spacer" }];
     applets.forEach((a, i) => {
-      const mark = i === cursor ? "▸" : " ";
-      lines.push(`  ${mark} ${a.title.padEnd(14)} ${a.summary ?? ""}`);
+      const sel = i === cursor;
+      nodes.push({ kind: "text", text: `${sel ? "▸" : " "} ${a.title}`, color: sel ? ACCENT : FG });
     });
-    lines.push("", "  ↑/↓ move · enter open · ctrl+c quit");
-    paint(lines);
+    nodes.push({ kind: "spacer" }, { kind: "text", text: "↑/↓ move · enter open · ctrl+c quit", dim: true });
+    setFrame("kona", ACCENT, nodes);
   }
 
   function renderApplet() {
     const def = current ? byId.get(current) : null;
     if (!def) return renderLauncher();
-    const state = states[def.id] ?? def.initialState;
-    const body = def.view(state as AppletState);
-    const lines = Array.isArray(body) ? body : [body];
-    const keys = Object.keys(def.keymap ?? {});
-    const help = keys.length ? `${keys.join(" · ")}  ·  ` : "";
-    paint([`${def.title}  (${def.id})`, ...lines, "", `  ${help}esc back · ctrl+c quit`]);
+    const state = (states[def.id] ?? def.initialState) as AppletState;
+    const body = def.view(state);
+    const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
+    const accent = def.accent?.(state) ?? ACCENT;
+    setFrame(def.title, accent, [...nodes, { kind: "spacer" }, { kind: "text", text: "esc back · ctrl+c quit", dim: true }]);
   }
 
   function render() {
@@ -105,8 +155,7 @@ export async function runHost(startAppletId: string | null) {
       if (id === current) renderApplet();
     },
   ).catch((e) => {
-    screen.content = `lost daemon: ${String(e)}`;
-    renderer.requestRender();
+    setFrame("kona", DONE_RED, [{ kind: "text", text: `lost daemon: ${String(e)}`, color: DONE_RED }]);
   });
 
   renderer.keyInput.on("keypress", async (k: { name: string; ctrl: boolean }) => {
