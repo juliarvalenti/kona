@@ -253,4 +253,24 @@ export function modal(
   );
 }
 
+/**
+ * A labeled gauge row: "CPU   ████░░░░  42%  8 cores". The cockpit primitive —
+ * a fixed-width label, a bar, its percentage, and an optional dim note, all
+ * column-aligned so a stack of them reads as one instrument panel.
+ */
+export function meter(
+  label: string,
+  value: number,
+  opts: { width?: number; color?: Color; note?: string; labelWidth?: number } = {},
+): ViewNode {
+  const pct = `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`.padStart(4);
+  const cells: ViewNode[] = [
+    text(label.padEnd(opts.labelWidth ?? 6), { dim: true }),
+    bar(value, { width: opts.width, color: opts.color }),
+    text(`  ${pct}`, { color: opts.color }),
+  ];
+  if (opts.note) cells.push(text(`  ${opts.note}`, { dim: true }));
+  return row(cells, { align: "center" });
+}
+
 export { spacer };
