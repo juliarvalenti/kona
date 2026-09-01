@@ -47,7 +47,7 @@ state after the call — so you rarely need a follow-up read.
 
 ## Applets on this machine
 
-Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `ticker`, `timer`, `weather`, `webex`.
+Installed: `clock`, `dash`, `email`, `mycelium`, `notes`, `rss`, `spotify`, `storybook`, `sys`, `ticker`, `timer`, `weather`, `webex`, `workflows`.
 
 ### clock — World Clock
 
@@ -251,6 +251,29 @@ Cursor verbs (the keyboard's business — address a row by id or index instead):
 
 Searchable: `webex.search` takes `{"q": "..."}`.
 
+### workflows — Workflows
+
+Named sequences of applet verbs — run them by hand, or on a cron.
+
+- `workflows.define` — Create or replace a workflow. `steps` takes `"applet.verb {json}"` lines or `{applet,verb,args}` objects; `cron` schedules it. With no `name` (a keypress) it opens the TUI's new-workflow form.  ·  `kona call workflows define '{"name":"morning","summary":"Start the day","cron":"30 8 * * 1-5","steps":["spotify.play {\"uri\":\"spotify:playlist:37i9dQZF1DX0XUsuxWHRQd\"}","timer.start {\"seconds\":1500,\"label\":\"focus\"}","notes.add {\"text\":\"focus block started {{now}}\"}"]}'`, key `n`
+- `workflows.run` — Run a workflow now. `params` fills its `{{params.x}}` references; the result reports every step.  ·  `kona call workflows run '{"name":"morning","params":{"room":"ship-kona"}}'`, key `r`
+- `workflows.runStep` — Fire ONE step on its own — how you test a step while building.  ·  `kona call workflows runStep '{"name":"morning","index":0}'`, key `return`
+- `workflows.addStep` — Append a step (same line format as `define`); `index` inserts instead. No `step` opens the builder field.  ·  `kona call workflows addStep '{"name":"morning","step":"notes.add {\"text\":\"stand-up in 10\"}"}'`, key `a`
+- `workflows.removeStep` — Drop a step by position (0-based).  ·  `kona call workflows removeStep '{"name":"morning","index":2}'`, key `x`
+- `workflows.schedule` — Put a workflow on the daemon's clock: a 5-field cron expression, `@daily`, or `@every 10m`; `null` clears it. The daemon then fires it exactly like an agent calling `workflows.run`.  ·  `kona call workflows schedule '{"name":"morning","cron":"30 8 * * 1-5"}'`, key `c`
+- `workflows.toggle` — Pause or resume a schedule without losing the expression.  ·  `kona call workflows toggle '{"name":"morning","enabled":false}'`, key `p`
+- `workflows.remove` — Delete a workflow. With no `name` (a keypress) it asks first.  ·  `kona call workflows remove '{"name":"morning"}'`, key `d`
+- `workflows.confirm` — Answer the delete dialog's question.  ·  `kona call workflows confirm`
+- `workflows.field` — A keystroke in the open form's field. The TUI's business — pass whole arguments to define/addStep/schedule instead.  ·  `kona call workflows field`
+- `workflows.form` — Submit the open form, through the same verb the form is filling in.  ·  `kona call workflows form`
+- `workflows.dismiss` — Close the open form or dialog.  ·  `kona call workflows dismiss`
+- `workflows.export` — Render a workflow as a portable SKILL.md-shaped document (frontmatter + `kona call` steps). `all` exports every one.  ·  `kona call workflows export '{"name":"morning"}'`
+- `workflows.import` — Define a workflow from that document — how one machine's workflow lands on another.  ·  `kona call workflows import '{"markdown":"---\nname: morning\nschedule: 30 8 * * 1-5\n---\n\n## Steps\n\n```sh\nkona call timer start '{\"seconds\":1500}'\n```\n"}'`
+- `workflows.clear` — Forget the run history (the workflows stay).  ·  `kona call workflows clear`
+- `workflows.open` — Show one workflow's steps (what `kona workflows <name>` opens into).  ·  `kona call workflows open '{"name":"morning"}'`
+
+Cursor verbs (the keyboard's business — address a row by id or index instead): `up`, `down`, `back`.
+
 ## Worked examples
 
 **Triage the inbox**
@@ -292,6 +315,43 @@ kona call timer add '{"id":"t1","seconds":300}'             # +5m, without touch
 ```
 
 Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon posts a desktop banner (`kona notify on timer.done`).
+
+**Define a workflow and run it**
+
+```sh
+kona call workflows define '{"name":"focus","steps":["timer.start {\"seconds\":1500,\"label\":\"focus\"}","notes.add {\"text\":\"focus block at {{now}}\"}"]}'
+kona call workflows run '{"name":"focus"}'    # -> { ok: true, steps: [...] }
+kona state workflows                          # the run history, newest first
+```
+
+Steps are ordinary verb calls — anything in `kona tools` can be one.
+
+**Put a workflow on the daemon's clock**
+
+```sh
+kona call workflows schedule '{"name":"focus","cron":"30 8 * * 1-5"}'
+kona call workflows toggle '{"name":"focus","enabled":false}'   # pause, keep the expression
+```
+
+The daemon fires scheduled workflows itself — no terminal has to be open.
+
+**Feed one step's result to the next**
+
+```sh
+kona call workflows define '{"name":"triage","steps":["email.refresh","mycelium.post {\"room\":\"{{params.room}}\",\"text\":\"inbox: {{steps.0.unread}} unread\"}"]}'
+kona call workflows run '{"name":"triage","params":{"room":"ship-kona"}}'
+```
+
+`{{steps.<n>.…}}`, `{{last.…}}`, `{{params.…}}` and `{{now}}` resolve per run; a step's `when` skips it.
+
+**Move a workflow to another machine**
+
+```sh
+kona call workflows export '{"name":"focus"}'    # -> { markdown: "---\nname: focus\n..." }
+kona call workflows import '{"markdown":"<that document>"}'
+```
+
+The document is SKILL.md-shaped: frontmatter plus literal `kona call` lines, so it reads as a skill.
 
 ---
 

@@ -1,6 +1,7 @@
 import { defineApplet, text, spacer, col, row, theme, appletAccent, type ViewNode } from "../../sdk/index.ts";
 import { divider, recordRow } from "../../sdk/components.ts";
 import { openItems, type GhItem } from "../../server/github.ts";
+import { nextRun } from "../../server/cron.ts";
 import { notify, freshIds } from "../../server/notify.ts";
 
 /**
@@ -16,6 +17,7 @@ interface DashState {
   unread: number;
   emailAuthed: boolean;
   webex: { unread: number; spaces: number } | null;
+  flows: { defined: number; scheduled: number; next: { name: string; at: number } | null; last: { name: string; ok: boolean; at: number } | null } | null;
   gh: GhItem[];
   ghError: string | null;
   cursor: number; // index into the selectable targets (now-playing + gh rows)
@@ -37,6 +39,15 @@ const palette = () => {
   const t = theme();
   return { GREEN: appletAccent("dash", BRAND), BLUE: t.accent, AMBER: t.warn, FG: t.fg, DIM: t.dim };
 };
+
+/** "in 12m" / "in 3h" — how long until a scheduled workflow fires. */
+function countdown(at: number, now = Date.now()): string {
+  const d = Math.max(0, at - now);
+  if (d < 60_000) return `in ${Math.round(d / 1000)}s`;
+  if (d < 3_600_000) return `in ${Math.round(d / 60_000)}m`;
+  if (d < 86_400_000) return `in ${Math.round(d / 3_600_000)}h`;
+  return `in ${Math.round(d / 86_400_000)}d`;
+}
 
 function fmt(sec: number): string {
   const s = Math.max(0, sec);
@@ -119,6 +130,34 @@ function aggregate(state: DashState, peek?: (id: string) => Record<string, unkno
   // Webex sits beside mail: the same "how much is waiting for me" question.
   const wx = peek?.("webex") as { unread?: number; spaces?: unknown[]; authed?: boolean } | undefined;
   state.webex = wx?.authed ? { unread: wx.unread ?? 0, spaces: (wx.spaces ?? []).length } : null;
+
+  // Workflows: what the daemon will fire next, and how the last one went. The
+  // scheduler runs whether or not anyone has the applet open, so this is the
+  // only place a human sees it coming.
+  const wf = peek?.("workflows") as
+    | { workflows?: Array<{ name: string; cron?: string | null; enabled?: boolean }>; runs?: Array<{ name: string; ok: boolean; at: number }> }
+    | undefined;
+  const defined = wf?.workflows ?? [];
+  const upcoming = defined
+    .filter((w) => w.cron && w.enabled)
+    .map((w) => {
+      try {
+        return { name: w.name, at: nextRun(w.cron!) };
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is { name: string; at: number } => !!x)
+    .sort((a, b) => a.at - b.at)[0];
+  const last = wf?.runs?.[0];
+  state.flows = defined.length
+    ? {
+        defined: defined.length,
+        scheduled: defined.filter((w) => w.cron && w.enabled).length,
+        next: upcoming ?? null,
+        last: last ? { name: last.name, ok: last.ok, at: last.at } : null,
+      }
+    : null;
 }
 
 export default defineApplet<DashState>({
@@ -126,7 +165,7 @@ export default defineApplet<DashState>({
   title: "Dashboard",
   summary: "Live cockpit — now playing, timer, mail, GitHub. Leave it open.",
   ephemeral: true,
-  initialState: { np: null, timer: null, unread: 0, emailAuthed: false, webex: null, gh: [], ghError: null, cursor: 0 },
+  initialState: { np: null, timer: null, unread: 0, emailAuthed: false, webex: null, flows: null, gh: [], ghError: null, cursor: 0 },
 
   docs: {
     refresh: "Re-aggregate the dashboard from the other applets' live state, and refetch GitHub.",
@@ -234,6 +273,15 @@ export default defineApplet<DashState>({
           color: unread ? BLUE : DIM,
         }),
       );
+    }
+
+    // Workflows — the next scheduled run, and how the last one went.
+    if (state.flows) {
+      const f = state.flows;
+      const bits = [`⚙ ${f.defined} workflow${f.defined === 1 ? "" : "s"}`];
+      if (f.next) bits.push(`next “${f.next.name}” ${countdown(f.next.at)}`);
+      if (f.last) bits.push(`last ${f.last.ok ? "✓" : "✗"} ${f.last.name}`);
+      nodes.push(text(bits.join("  ·  "), { color: f.last && !f.last.ok ? AMBER : f.scheduled ? BLUE : DIM }));
     }
 
     // GitHub

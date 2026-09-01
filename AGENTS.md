@@ -45,6 +45,31 @@ Verbs you fire can reach the human's screen: applets call `notify()` from
 point, not a side effect. Events are deduped and rate limited; you do not need
 to throttle your own calls.
 
+## Workflows
+
+Anything you can call twice, you can name once. The `workflows` applet stores
+named sequences of verb calls; the daemon can run them on a schedule:
+
+```sh
+kona call workflows define '{"name":"triage","steps":[
+  "email.refresh",
+  "mycelium.post {\"room\":\"{{params.room}}\",\"text\":\"inbox: {{steps.0.unread}} unread\"}"]}'
+kona call workflows run '{"name":"triage","params":{"room":"ship-kona"}}'
+kona call workflows schedule '{"name":"triage","cron":"0 9 * * 1-5"}'
+```
+
+Steps see the run: `{{params.…}}`, `{{steps.<n>.…}}` (or `{{steps.<as>.…}}`),
+`{{last.…}}`, `{{now}}` — a reference alone keeps its type, one inside a
+sentence is interpolated — and a step's `when` skips it when false. A failing
+step stops the run; `kona state workflows` has the history, newest first. The
+human sees the same list in the TUI and the next scheduled run on the dash, so
+say what a workflow does in its `summary` rather than leaving them to read the
+steps.
+
+`export`/`import` move a workflow between machines as a SKILL.md-shaped
+document — frontmatter plus literal `kona call` lines — so a workflow you write
+here is a skill someone else can read.
+
 ## Coordination
 
 `mycelium` is not a dashboard you appear in — it is a room you can talk in, and
