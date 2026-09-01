@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AnyApplet, AppletDef } from "../sdk/index.ts";
 import { configDir, loadConfig } from "./config.ts";
+import { linkedEntries } from "./links.ts";
 
 /**
  * The plugin loader.
@@ -21,6 +22,10 @@ import { configDir, loadConfig } from "./config.ts";
  *   3. `plugins = [...]` in config.toml, and `KONA_PLUGINS` (colon-separated).
  *      Each entry is either one package (a dir with an `index.ts`) or a dir
  *      full of them.
+ *   4. linked modules — single files you ran directly (`kona <path>`, or a
+ *      `chmod +x` applet with `#!/usr/bin/env kona` on line one). See
+ *      ./links.ts; a link is a FILE, not a directory, so it is the one source
+ *      whose entry need not be called `index.ts`.
  *
  * Ids are unique: the first package to claim an id wins and a later duplicate
  * is skipped with a warning, so a broken plugin can never shadow a built-in.
@@ -33,7 +38,7 @@ export const REPO_ROOT = join(here, "..");
 export const APPLETS_DIR = join(REPO_ROOT, "applets");
 
 /** Where an applet package came from. */
-export type AppletSource = "repo" | "plugin";
+export type AppletSource = "repo" | "plugin" | "link";
 
 /**
  * A loaded applet and the directory it lives in. The dir is the interesting
@@ -42,7 +47,7 @@ export type AppletSource = "repo" | "plugin";
  */
 export interface AppletPackage {
   def: AnyApplet;
-  /** Absolute path of the package directory. */
+  /** Absolute path of the package directory — for a linked file, the dir it sits in. */
   dir: string;
   /** Absolute path of the entry module. */
   entry: string;
@@ -75,6 +80,30 @@ export function pluginRoots(): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * Every module the loader will try, in precedence order: this repo, then the
+ * plugin roots, then the linked files. Ids are claimed first-come (see
+ * loadPackages), so this order is what makes a built-in unshadowable.
+ */
+async function entries(): Promise<Array<[string, AppletSource]>> {
+  const out: Array<[string, AppletSource]> = [];
+  for (const dir of await packageDirs(APPLETS_DIR)) out.push([join(dir, "index.ts"), "repo"]);
+  for (const root of pluginRoots()) {
+    for (const dir of await packageDirs(root)) out.push([join(dir, "index.ts"), "plugin"]);
+  }
+  for (const entry of linkedEntries()) out.push([entry, "link"]);
+  // A link that points back into a scanned directory names the same module
+  // twice; the first spelling wins, so its `source` reads as what it really is.
+  const seen = new Set<string>();
+  const unique: Array<[string, AppletSource]> = [];
+  for (const [entry, source] of out) {
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    unique.push([entry, source]);
+  }
+  return unique;
+}
+
 /** The package dirs under one root — or the root itself, if it is a package. */
 async function packageDirs(root: string): Promise<string[]> {
   if (!isDir(root)) return [];
@@ -92,31 +121,25 @@ async function packageDirs(root: string): Promise<string[]> {
  * docs and the test runner all start here.
  */
 export async function loadPackages(): Promise<AppletPackage[]> {
-  const roots: Array<[string, AppletSource]> = [[APPLETS_DIR, "repo"]];
-  for (const r of pluginRoots()) roots.push([r, "plugin"]);
-
   const found: AppletPackage[] = [];
   const seen = new Set<string>();
-  for (const [root, source] of roots) {
-    for (const dir of await packageDirs(root)) {
-      const entry = join(dir, "index.ts");
-      let def: AnyApplet | undefined;
-      try {
-        def = ((await import(entry)) as { default?: AnyApplet }).default;
-      } catch (e) {
-        // A plugin that throws on import is skipped, never fatal: kona still
-        // boots with everything else installed.
-        console.error(`kona: could not load ${entry}: ${e instanceof Error ? e.message : String(e)}`);
-        continue;
-      }
-      if (!def?.id) continue;
-      if (seen.has(def.id)) {
-        console.error(`kona: ignoring ${entry} — applet id "${def.id}" is already loaded`);
-        continue;
-      }
-      seen.add(def.id);
-      found.push({ def, dir, entry, source });
+  for (const [entry, source] of await entries()) {
+    let def: AnyApplet | undefined;
+    try {
+      def = ((await import(entry)) as { default?: AnyApplet }).default;
+    } catch (e) {
+      // A plugin that throws on import is skipped, never fatal: kona still
+      // boots with everything else installed.
+      console.error(`kona: could not load ${entry}: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
     }
+    if (!def?.id) continue;
+    if (seen.has(def.id)) {
+      console.error(`kona: ignoring ${entry} — applet id "${def.id}" is already loaded`);
+      continue;
+    }
+    seen.add(def.id);
+    found.push({ def, dir: dirname(entry), entry, source });
   }
   found.sort((a, b) => a.def.id.localeCompare(b.def.id));
   return found;

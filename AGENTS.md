@@ -53,8 +53,14 @@ If you are here to ADD an applet, the rule is that you edit **no shared file**:
 ```sh
 kona new <id>            # applets/<id>/ — applet, fixtures, test, README
 kona new <id> --plugin   # ...or ~/.config/kona/plugins/<id>, outside the repo
+kona new <id> --executable   # ...and make index.ts runnable on its own
 bun test applets/<id> && bun run check
 ```
+
+An applet file can also live nowhere in particular: `kona link <file.ts>` (or
+running a `chmod +x` module with `#!/usr/bin/env kona` on line one) hands it to
+the daemon and remembers it, so `kona call <id> <verb>` works from that moment
+on with no restart and no directory to install into.
 
 Everything the platform needs it reads out of that one directory: the loader
 finds `index.ts`, `bun test` finds `<id>.test.ts`, the snapshot runner finds
