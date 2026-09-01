@@ -92,12 +92,31 @@ export async function runHost(startAppletId: string | null) {
   let current: string | null = startAppletId;
   let cursor = 0; // launcher selection
 
+  let filling = false;
   function render() {
     const def = current ? byId.get(current) : null;
-    if (def) stage.renderApplet(def, (states[def.id] ?? def.initialState) as AppletState);
-    else {
+    if (!def) {
       current = null;
       stage.renderLauncher(applets, cursor);
+      return;
+    }
+    const state = (states[def.id] ?? def.initialState) as AppletState;
+    stage.renderApplet(def, state);
+
+    // Viewport auto-fill: keep loading pages until the list covers the visible
+    // rows, so a tall terminal isn't half-empty. Converges as count grows.
+    const pg = def.paginate;
+    if (!filling && pg?.count && (pg.hasMore?.(state) ?? false)) {
+      const rows = stage.viewportHeight();
+      if (pg.count(state) < rows - 2) {
+        filling = true;
+        callVerb(def.id, pg.more)
+          .catch(() => {})
+          .finally(() => {
+            filling = false;
+            render(); // re-check: keep filling until the viewport is covered
+          });
+      }
     }
   }
 
@@ -155,12 +174,21 @@ export async function runHost(startAppletId: string | null) {
       return;
     }
 
-    // Up/Down scroll the viewport (for long content like an email body) and
-    // also drive the applet's list cursor if it has one.
+    // Up/Down. In a cursored list, move the cursor — the stage scrolls to keep
+    // the selection visible (never yanks the whole list). In a plain document
+    // (no selection, e.g. an email body), scroll the viewport directly.
     if (isUp(n) || isDown(n)) {
-      stage.scrollBy(isUp(n) ? -3 : 3);
       const intent = isUp(n) ? nav?.up : nav?.down;
-      if (intent) await callVerb(def.id, intent).catch(() => {});
+      if (stage.hasFocusTarget() && intent) {
+        await callVerb(def.id, intent).catch(() => {});
+      } else {
+        stage.scrollBy(isUp(n) ? -2 : 2);
+      }
+      // Infinite pagination: at the end of the list with more to load, append.
+      const pg = def.paginate;
+      if (isDown(n) && pg && (pg.atEnd?.(state) ?? true) && (pg.hasMore?.(state) ?? false)) {
+        await callVerb(def.id, pg.more).catch(() => {});
+      }
       return;
     }
 

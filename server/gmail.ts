@@ -133,13 +133,20 @@ function threadUnread(messages: GMessage[]): boolean {
   return messages.some((m) => (m.labelIds ?? []).includes("UNREAD"));
 }
 
-export async function listInbox(query = "in:inbox", max = 20): Promise<MailThread[]> {
-  const list = await gapi("/gmail/v1/users/me/threads", { q: query, maxResults: String(max) });
+export interface InboxPage {
+  threads: MailThread[];
+  nextPageToken?: string;
+}
+
+export async function listInbox(query = "in:inbox", max = 20, pageToken?: string): Promise<InboxPage> {
+  const params: Record<string, string> = { q: query, maxResults: String(max) };
+  if (pageToken) params.pageToken = pageToken;
+  const list = await gapi("/gmail/v1/users/me/threads", params);
   const stubs = (list.threads ?? []) as Array<{ id: string; snippet?: string }>;
   // Fetch thread metadata in parallel (Promise.all preserves inbox order).
   // NB: Gmail wants metadataHeaders as repeated params, not a comma string —
   // a comma string silently returns zero headers, so we fetch all metadata.
-  return Promise.all(
+  const threads = await Promise.all(
     stubs.map(async (t) => {
       const full = await gapi(`/gmail/v1/users/me/threads/${t.id}`, { format: "metadata" });
       const messages = (full.messages ?? []) as GMessage[];
@@ -155,6 +162,7 @@ export async function listInbox(query = "in:inbox", max = 20): Promise<MailThrea
       };
     }),
   );
+  return { threads, nextPageToken: list.nextPageToken as string | undefined };
 }
 
 export async function getThread(id: string): Promise<OpenThread> {

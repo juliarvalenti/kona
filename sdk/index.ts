@@ -67,7 +67,7 @@ export interface LayoutOpts {
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
-  | { kind: "text"; text: string; color?: Color; dim?: boolean }
+  | { kind: "text"; text: string; color?: Color; dim?: boolean; bg?: Color; focus?: boolean }
   | { kind: "spacer" }
   | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
@@ -75,13 +75,19 @@ export type ViewNode =
 
 export type View = string | string[] | ViewNode[];
 
+/** Render context passed to view() so applets can size to the actual viewport. */
+export interface ViewCtx {
+  width: number;
+  height: number;
+}
+
 /**
  * Primitive node constructors. `row`/`col` are the layout containers (flexbox);
  * everything richer (progress, key/value, lists) is a plain function that
  * composes these — see sdk/components.ts. The host only understands primitives.
  */
 export const big = (text: string, color?: Color, font?: BigFont): ViewNode => ({ kind: "big", text, color, font });
-export const text = (t: string, opts: { color?: Color; dim?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
+export const text = (t: string, opts: { color?: Color; dim?: boolean; bg?: Color; focus?: boolean } = {}): ViewNode => ({ kind: "text", text: t, ...opts });
 export const spacer = (): ViewNode => ({ kind: "spacer" });
 /** Lay children out horizontally. */
 export const row = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "row", children, opts });
@@ -126,12 +132,24 @@ export interface AppletDef<S extends object = AppletState> {
   ephemeral?: boolean;
   /** Actions. Keyed by verb name. */
   verbs: Record<string, Verb<S>>;
-  /** Pure render: current state -> what the host draws (lines or view nodes). */
-  view: (state: S) => View;
+  /** Pure render: current state (+ viewport size) -> what the host draws. */
+  view: (state: S, ctx?: ViewCtx) => View;
   /** Optional frame tint (border/title color) derived from state. */
   accent?: (state: S) => Color;
   /** Navigation intents (arrows + vim + browser-like back). */
   nav?: Nav<S>;
+  /**
+   * Infinite pagination. The host fires the `more` verb to fetch+append the
+   * next page when the user reaches the end (down + `atEnd` + `hasMore`) AND,
+   * on open/resize, keeps firing while `count(state)` is below the number of
+   * visible rows — so a tall terminal fills instead of showing 20 in 50 lines.
+   */
+  paginate?: {
+    more: string;
+    hasMore?: (state: S) => boolean;
+    atEnd?: (state: S) => boolean;
+    count?: (state: S) => number;
+  };
   /** Breadcrumb for the current sub-view, shown in the title (e.g. open email). */
   crumb?: (state: S) => string | null;
   /** key -> verb for NON-navigation actions (e.g. { r: "refresh" }). */

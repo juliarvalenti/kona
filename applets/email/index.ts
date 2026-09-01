@@ -2,6 +2,8 @@ import { defineApplet, text, spacer, col, type ViewNode } from "../../sdk/index.
 import { keyValue, divider } from "../../sdk/components.ts";
 import { listInbox, getThread, type MailThread, type OpenThread } from "../../server/gmail.ts";
 
+const PAGE = 20;
+
 /**
  * email — browse Gmail in the terminal. The daemon owns the OAuth tokens and
  * fetches over the Gmail REST API, so YOU browse the list with j/k/l and an
@@ -17,6 +19,7 @@ interface EmailState {
   error: string | null;
   authed: boolean;
   syncedAt: number;
+  nextPage: string | null; // Gmail page cursor; null = no more
 }
 
 const ACCENT = "#7aa2f7";
@@ -33,14 +36,16 @@ function pad(s: string, n: number): string {
   return truncate(s, n).padEnd(n);
 }
 
-/** Shared inbox loader used by the refresh/search verbs and the auto-refresh tick. */
+/** (Re)load the first page. Used by refresh/search and the auto-refresh tick. */
 async function loadInbox(state: EmailState, emit: () => void) {
   if (state.loading) return;
   state.loading = true;
   state.error = null;
   emit();
   try {
-    state.threads = await listInbox(state.query, 20);
+    const page = await listInbox(state.query, PAGE);
+    state.threads = page.threads;
+    state.nextPage = page.nextPageToken ?? null;
     state.cursor = Math.min(state.cursor, Math.max(0, state.threads.length - 1));
     state.authed = true;
   } catch (e) {
@@ -50,6 +55,23 @@ async function loadInbox(state: EmailState, emit: () => void) {
   } finally {
     state.loading = false;
     state.syncedAt = Date.now();
+    emit();
+  }
+}
+
+/** Append the next page (infinite scroll). */
+async function loadMore(state: EmailState, emit: () => void) {
+  if (state.loading || !state.nextPage) return;
+  state.loading = true;
+  emit();
+  try {
+    const page = await listInbox(state.query, PAGE, state.nextPage);
+    state.threads = [...state.threads, ...page.threads];
+    state.nextPage = page.nextPageToken ?? null;
+  } catch (e) {
+    state.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    state.loading = false;
     emit();
   }
 }
@@ -68,6 +90,7 @@ export default defineApplet<EmailState>({
     error: null,
     authed: false,
     syncedAt: 0,
+    nextPage: null,
   },
 
   verbs: {
@@ -78,8 +101,13 @@ export default defineApplet<EmailState>({
     async search(args, { state, emit }) {
       state.query = String(args.q ?? args.query ?? "in:inbox");
       state.open = null;
+      state.cursor = 0;
       await loadInbox(state, emit);
       return { query: state.query, count: state.threads.length };
+    },
+    async more(_args, { state, emit }) {
+      await loadMore(state, emit);
+      return { count: state.threads.length, hasMore: !!state.nextPage };
     },
     async open(args, { state, emit }) {
       const idx = typeof args.index === "number" ? args.index : state.cursor;
@@ -139,6 +167,13 @@ export default defineApplet<EmailState>({
     canBack: (s) => !!s.open,
   },
 
+  paginate: {
+    more: "more",
+    hasMore: (s) => !!s.nextPage,
+    atEnd: (s) => s.cursor >= s.threads.length - 1,
+    count: (s) => s.threads.length,
+  },
+
   crumb: (s) => (s.open ? truncate(s.open.subject, 40) : null),
 
   accent(state) {
@@ -147,7 +182,9 @@ export default defineApplet<EmailState>({
     return ACCENT;
   },
 
-  view(state): ViewNode[] {
+  view(state, ctx): ViewNode[] {
+    const W = Math.max(40, (ctx?.width ?? 80)); // usable inner width
+
     if (!state.authed && !state.loading && state.threads.length === 0) {
       return [
         col(
@@ -165,9 +202,9 @@ export default defineApplet<EmailState>({
     // Reading one thread
     if (state.open) {
       const t = state.open;
-      const body: ViewNode[] = [text(truncate(t.subject, 56), { color: ACCENT }), divider(56)];
+      const body: ViewNode[] = [text(truncate(t.subject, W - 2), { color: ACCENT }), divider(W - 1)];
       for (const m of t.messages) {
-        body.push(keyValue("from", truncate(m.from, 40), { color: FG }));
+        body.push(keyValue("from", truncate(m.from, W - 8), { color: FG }));
         body.push(text(m.date, { dim: true }));
         body.push(spacer());
         // Keep whole lines (they word-wrap in the host); cap total for now.
@@ -178,22 +215,29 @@ export default defineApplet<EmailState>({
     }
 
     // The inbox list
+    const loaded = `${state.threads.length}${state.nextPage ? "+" : ""} loaded`;
     const header = state.loading
       ? text("syncing…", { color: AMBER })
-      : text(`${state.query}   ${state.threads.length} threads`, { dim: true });
+      : text(`${state.query}   ${loaded}`, { dim: true });
 
+    // Columns sized to the real width: sender fixed, subject fills the rest.
+    const fromW = Math.min(28, Math.max(14, Math.floor(W * 0.28)));
+    const subjW = Math.max(10, W - fromW - 6);
     const rows: ViewNode[] = state.threads.map((t, i) => {
       const sel = i === state.cursor;
-      const marker = sel ? "▸" : " ";
       const dot = t.unread ? "●" : " ";
-      const line = `${marker} ${dot} ${pad(t.from, 16)}  ${truncate(t.subject, 34)}`;
-      return text(line, { color: sel ? ACCENT : t.unread ? UNREAD : FG, dim: !sel && !t.unread });
+      // Pad to exactly W so the highlight bar and rows span the full width
+      // (slice guards against overflow → no wrap, keeps 1 line per row).
+      const line = ` ${dot} ${pad(t.from, fromW)}  ${truncate(t.subject, subjW)}`.slice(0, W).padEnd(W);
+      if (sel) return text(line, { color: "#0b0b0b", bg: ACCENT, focus: true });
+      return text(line, { color: t.unread ? UNREAD : FG, dim: !t.unread });
     });
 
     if (rows.length === 0 && !state.loading) {
       rows.push(text("(empty — press r to refresh)", { dim: true }));
     }
+    if (state.nextPage) rows.push(text("  ↓ more…", { dim: true }));
 
-    return [col([header, divider(56), ...rows])];
+    return [col([header, divider(W - 1), ...rows])];
   },
 });

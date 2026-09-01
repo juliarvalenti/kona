@@ -53,8 +53,8 @@ test("email inbox list shows senders, subjects, and a cursor", async () => {
   expect(frame).toContain("GitHub");
   expect(frame).toContain("Ada Lovelace");
   expect(frame).toContain("dinner friday?");
-  expect(frame).toContain("▸"); // cursor
   expect(frame).toContain("●"); // unread dot on the GitHub row
+  // (selection is a full-width highlight bar now, not a ▸ marker)
 });
 
 test("email reader shows subject, sender, and body", async () => {

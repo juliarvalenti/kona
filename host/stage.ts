@@ -56,16 +56,65 @@ function bindingLabel(b: KeyBinding): string {
   return typeof b === "string" ? b : (b.label ?? b.verb);
 }
 
+/**
+ * Line offset of the focused node (the selected list row), so the host can
+ * scroll it into view. Approximate heights in lines — good enough because focus
+ * only lives on single-line rows in a column.
+ */
+function focusLineOf(nodes: ViewNode[]): number | null {
+  let line = 0;
+  let found: number | null = null;
+  const visit = (n: ViewNode) => {
+    if (found !== null) return;
+    if (typeof n === "string") {
+      line += 1;
+      return;
+    }
+    switch (n.kind) {
+      case "text":
+        if (n.focus) found = line;
+        line += 1;
+        break;
+      case "spacer":
+      case "bar":
+        line += 1;
+        break;
+      case "big":
+        line += 6;
+        break;
+      case "row":
+        for (const c of n.children) if (typeof c === "object" && c.kind === "text" && c.focus) found = line;
+        line += 1;
+        break;
+      case "col":
+        for (const c of n.children) visit(c);
+        break;
+    }
+  };
+  nodes.forEach(visit);
+  return found;
+}
+
 export interface Stage {
   renderApplet(def: AppletDef, state: AppletState): void;
   renderLauncher(applets: AppletDef[], cursor: number): void;
   footerNote(text: string, color?: string): void;
   scrollBy(lines: number): void;
+  scrollTop(): number;
+  viewportHeight(): number;
+  hasFocusTarget(): boolean;
   resetScroll(): void;
 }
 
 export function createStage(renderer: CliRenderer): Stage {
   const { DIM, FG, ACCENT, KEY } = COLORS;
+
+  // Inner content size = terminal size minus fixed chrome (stage padding 2 +
+  // border 2 + frame padding 2 = 6 wide; + footer 1 = 7 tall). Derived from the
+  // renderer, which knows the terminal size immediately — no layout wait.
+  const term = renderer as unknown as { width: number; height: number };
+  const innerWidth = () => Math.max(20, term.width - 6);
+  const innerHeight = () => Math.max(6, term.height - 7);
 
   // The frame fills the terminal (minus a 1-cell margin), with the hint bar
   // pinned below. A bounded width is also what lets long lines word-wrap.
@@ -115,16 +164,33 @@ export function createStage(renderer: CliRenderer): Stage {
   // Rebuild the frame's children each render; destroy old nodes so native
   // buffers (ASCII fonts) don't leak.
   let seq = 0;
+  let hasFocus = false;
   function setFrame(title: string, titleColor: string, nodes: ViewNode[]) {
     frame.title = ` ${title} `;
     frame.titleAlignment = "center";
     frame.borderColor = titleColor;
+    // Preserve scroll position across rebuilds — appends (load-more) and idle
+    // refreshes shouldn't jump the view back to the top. Transitions call
+    // resetScroll() explicitly.
+    const prevScroll = scroll.scrollTop;
     for (const child of [...scroll.content.getChildren()]) {
       scroll.content.remove(child);
       (child as { destroy?: () => void }).destroy?.();
     }
     const gen = seq++;
     nodes.forEach((node, i) => scroll.content.add(nodeToRenderable(node, `n${gen}-${i}`)));
+
+    // Scroll-to-follow-selection: only move the viewport when the focused row
+    // would be off-screen — a list that fits never scrolls.
+    const focusLine = focusLineOf(nodes);
+    hasFocus = focusLine !== null;
+    let top = prevScroll;
+    if (focusLine !== null) {
+      const vh = innerHeight();
+      if (focusLine < top) top = focusLine;
+      else if (focusLine > top + vh - 1) top = focusLine - vh + 1;
+    }
+    scroll.scrollTop = Math.max(0, top);
     renderer.requestRender();
   }
 
@@ -135,8 +201,27 @@ export function createStage(renderer: CliRenderer): Stage {
     switch (node.kind) {
       case "big":
         return new ASCIIFontRenderable(renderer, { id, text: node.text, font: node.font ?? "block", color: node.color ?? FG, flexShrink: 0 });
-      case "text":
-        return new TextRenderable(renderer, { id, content: node.text, fg: node.dim ? DIM : (node.color ?? FG), wrapMode: "word", flexShrink: 0 });
+      case "text": {
+        const label = new TextRenderable(renderer, {
+          id: node.bg ? `${id}-t` : id,
+          content: node.text,
+          fg: node.dim ? DIM : (node.color ?? FG),
+          ...(node.bg ? { bg: node.bg } : {}),
+          wrapMode: "word",
+          flexShrink: 0,
+        });
+        if (!node.bg) return label;
+        // Wrap in a bg box so the highlight spans the FULL row width (a text
+        // node's bg only paints behind its glyphs; a box fills its stretched box).
+        const bar = new BoxRenderable(renderer, {
+          id,
+          backgroundColor: node.bg,
+          flexDirection: "row",
+          flexShrink: 0,
+        });
+        bar.add(label);
+        return bar;
+      }
       case "spacer":
         return new TextRenderable(renderer, { id, content: " ", flexShrink: 0 });
       case "row":
@@ -165,7 +250,7 @@ export function createStage(renderer: CliRenderer): Stage {
 
   return {
     renderApplet(def, state) {
-      const body = def.view(state);
+      const body = def.view(state, { width: innerWidth(), height: innerHeight() });
       const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
       const accent = def.accent?.(state) ?? ACCENT;
       const crumb = def.crumb?.(state);
@@ -200,8 +285,20 @@ export function createStage(renderer: CliRenderer): Stage {
       renderer.requestRender();
     },
     scrollBy(lines) {
-      scroll.scrollTop = Math.max(0, scroll.scrollTop + lines);
+      // Clamp to [0, maxScroll] so a list that fits never scrolls into empty
+      // space (the "whole group scrolls on down 1" bug).
+      const max = Math.max(0, scroll.scrollHeight - scroll.viewport.height);
+      scroll.scrollTop = Math.max(0, Math.min(max, scroll.scrollTop + lines));
       renderer.requestRender();
+    },
+    scrollTop() {
+      return scroll.scrollTop;
+    },
+    viewportHeight() {
+      return innerHeight();
+    },
+    hasFocusTarget() {
+      return hasFocus;
     },
     resetScroll() {
       scroll.scrollTop = 0;
