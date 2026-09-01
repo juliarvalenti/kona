@@ -16,6 +16,7 @@ import {
   card,
   modal,
 } from "../../sdk/components.ts";
+import { renderMarkdown } from "../../sdk/markdown.ts";
 
 /**
  * storybook — a live gallery of every kona component. It also dogfoods the
@@ -44,6 +45,28 @@ interface StoryState {
   note: string | null;
   noteUntil: number;
 }
+
+/**
+ * The markdown demo. Everything the renderer has to get right in six lines:
+ * a heading, inline styles, a link that keeps its URL, a list, a quote and a
+ * fenced block — drawn as nodes, which is why it lines up with the rest of the
+ * gallery instead of smuggling ANSI into the frame.
+ */
+const MARKDOWN_DEMO = [
+  "## a heading",
+  "",
+  "A paragraph with **strong**, *emphasis*, `inline code` and a",
+  "[link](https://kona.dev) — wrapped to the frame, never truncated.",
+  "",
+  "- a bullet",
+  "- [x] a finished task",
+  "",
+  "> and a quote",
+  "",
+  "```sh",
+  "kona call storybook save '{\"value\":\"ada\"}'",
+  "```",
+].join("\n");
 
 /** A rolling series for the sparkline demo — a sine wave sampled per frame. */
 function series(frame: number, n = 24): number[] {
@@ -122,8 +145,10 @@ export default defineApplet<StoryState>({
     emit();
   },
 
-  view(state) {
+  view(state, ctx) {
     const sweep = (state.frame % 100) / 100; // 0..1 looping
+    // The gallery is a column inside the frame; markdown wraps to what is left.
+    const W = Math.max(24, (ctx?.width ?? 62) - 6);
     // Straight from the central theme — recolor config.toml and the gallery
     // recolors with it.
     const { alt: PURPLE, ok: GREEN, accent: BLUE, warn: AMBER } = theme();
@@ -195,6 +220,7 @@ export default defineApplet<StoryState>({
           // The modal is NOT drawn inline: it's an overlay, so it floats over
           // this gallery instead of taking a slot in it.
           section("modal", text("press m — floats over the body", { dim: true })),
+          section("markdown", ...renderMarkdown(MARKDOWN_DEMO, { width: W })),
         ],
         { gap: 1 },
       ),

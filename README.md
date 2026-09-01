@@ -620,8 +620,8 @@ conflict.
 Applets load from `applets/*/` in this repo, from `~/.config/kona/plugins/*/`,
 and from anything named by `plugins` in config.toml or `KONA_PLUGINS`. The
 stable surface a plugin targets — `defineApplet`, the view vocabulary,
-`sdk/components.ts`, `AppletCtx`, `sdk/testing.ts` — is written down in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+`sdk/components.ts`, `sdk/markdown.ts`, `AppletCtx`, `sdk/testing.ts` — is written
+down in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Installing someone else's applet
 

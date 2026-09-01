@@ -37,7 +37,7 @@
 <rect x="198.8" y="156" width="7.35" height="18" fill="#00d488"/>
 <rect x="207.2" y="156" width="100.8" height="18" fill="#00d488" opacity="0.25"/>
 <rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="652.4" y="156" width="8.4" height="9" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="187" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">gauge    </text>
@@ -46,7 +46,6 @@
 <rect x="190.4" y="174" width="67.2" height="18" fill="#7aa2f7" opacity="0.25"/>
 <text x="257.6" y="187" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  45%</text>
 <rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="205" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">spinner  </text>

@@ -34,6 +34,33 @@ export default defineSnapshots([
     contains: ["release plan", "cut rc1 friday", "freeze monday", "ship when the suite is green"],
   },
   {
+    name: "a body written in markdown reads as markdown",
+    state: () => ({
+      notes: [
+        {
+          id: "c3",
+          title: "release plan",
+          body: "## friday\n\nCut **rc1**, then:\n\n- [x] tag it\n- [ ] mail the list\n\n```sh\nbun test && bun run check\n```",
+          at: Date.now() - 3_600_000,
+          updated: Date.now(),
+        },
+      ],
+      cursor: 0,
+      query: "",
+      open: "c3",
+      draft: null,
+    }),
+    width: 72,
+    height: 24,
+    contains: [
+      "friday", // a heading, without its hashes
+      "Cut rc1, then:", // strong, without its stars
+      "• [x] tag it", // a task list, checked
+      "bun test && bun run check", // a fenced block, verbatim
+    ],
+    excludes: ["```", "**rc1**", "## friday"], // no syntax on screen
+  },
+  {
     name: "a filter says what it matched, and never creates",
     state: () => ({ notes: notes(), cursor: 0, query: "milk", open: null, draft: null }),
     width: 72,

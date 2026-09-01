@@ -110,6 +110,39 @@ export default defineSnapshots([
     excludes: ["ship-kona"], // the scrim covers the list behind it
   },
   {
+    name: "a message written in markdown reads as markdown",
+    state: () => ({
+      source: "fs",
+      writable: true,
+      me: "kona",
+      open: {
+        source: "fs",
+        room: { id: "ship-kona", name: "ship-kona", topic: "getting v0 out", agents: ["coder"], messages: 2, lastAt: 0 },
+        agents: [{ name: "coder", status: "", lastSeen: 0 }],
+        messages: [
+          {
+            id: "1",
+            from: "coder",
+            at: Date.now() - 60_000,
+            text: "plan:\n- parse to blocks\n- **wrap** span-aware\n\n```sh\nbun test tests/markdown.test.ts\n```",
+          },
+          { id: "2", from: "kona", at: Date.now(), text: "> span-aware\n\nyes — [issue 71](https://kona.dev/71)" },
+        ],
+        memory: [],
+      },
+    }),
+    width: 80,
+    height: 30,
+    contains: [
+      "• parse to blocks", // a list is a list, under the sender's gutter
+      "• wrap span-aware", // ...with the emphasis markers gone
+      "bun test tests/markdown.test.ts", // a fenced block, verbatim
+      "│ span-aware", // a quote keeps its gutter
+      "(https://kona.dev/71)", // a link keeps its URL — nothing to click here
+    ],
+    excludes: ["```", "**wrap**"], // the syntax itself never reaches the screen
+  },
+  {
     name: "explains how to connect when no backend answered",
     width: 76,
     height: 16,

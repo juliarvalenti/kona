@@ -49,6 +49,7 @@ Everything below is stable — target it. Everything else (the daemon's internal
 | `defineApplet(...)` from `sdk/index.ts` | the applet contract, typed |
 | the view vocabulary | `text`, `big`, `row`, `col`, `box`, `bar`, `input`, `spacer` |
 | `sdk/components.ts` | composed widgets: lists, meters, sparklines, cards, modals |
+| `sdk/markdown.ts` | `renderMarkdown(md)` — a markdown document as view nodes |
 | `AppletCtx` | `state`, `emit()`, `peek(id)`, `applets()` — what a verb and a tick get |
 | `theme()` / `appletConfig(id)` | the palette and your own settings block |
 | `sdk/testing.ts` | `renderApplet`, `defineSnapshots`, `testSnapshots` |
