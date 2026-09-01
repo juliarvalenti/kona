@@ -10,6 +10,8 @@ import {
   searchMoreTracks,
   artistDetail,
   albumDetail,
+  playlistDetail,
+  home as fetchHome,
   playUris,
   playContext,
   type QueueItem,
@@ -180,7 +182,21 @@ export default defineApplet<SpotifyState>({
         emit();
       }
     },
-    // enter: play a track / play-a-context, or drill into an artist/album.
+    async home(_a, { state, emit }) {
+      state.mode = "browse";
+      state.stack = [{ title: "Home", rows: [], cursor: 0 }];
+      state.loading = true;
+      emit();
+      try {
+        state.stack[0]!.rows = await fetchHome();
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        state.loading = false;
+        emit();
+      }
+    },
+    // enter: play a track / play-a-context, or drill into an artist/album/playlist.
     async enter(_a, { state, emit }) {
       const scr = state.stack[state.stack.length - 1];
       const r = scr?.rows[scr.cursor];
@@ -200,10 +216,15 @@ export default defineApplet<SpotifyState>({
           await loadNow(state, emit);
           return { playing: r.name };
         }
-        // artist / album -> push a detail screen with a Play action on top.
+        // artist / album / playlist -> push a detail screen with a Play action.
         state.loading = true;
         emit();
-        const d = r.kind === "artist" ? await artistDetail(r.id) : await albumDetail(r.id);
+        const d =
+          r.kind === "artist"
+            ? await artistDetail(r.id)
+            : r.kind === "playlist"
+              ? await playlistDetail(r.id)
+              : await albumDetail(r.id);
         state.stack.push({
           title: d.name,
           rows: [{ kind: "play", uri: d.uri, name: `Play ${d.name}`, subtitle: "" }, ...d.rows],
@@ -254,6 +275,7 @@ export default defineApplet<SpotifyState>({
     space: { verb: "playPause", label: "play/pause" },
     n: { verb: "next", label: "next" },
     p: { verb: "previous", label: "prev" },
+    b: { verb: "home", label: "home" },
   },
 
   nav: {
@@ -307,7 +329,8 @@ export default defineApplet<SpotifyState>({
     if (state.mode === "browse") {
       const scr = state.stack[state.stack.length - 1];
       const head = state.loading ? text("loading…", { color: AMBER }) : text(scr?.title ?? "", { dim: true });
-      const tag = (k: BrowseRow["kind"]) => (k === "play" ? "▶" : k === "artist" ? "artist" : k === "album" ? "album" : "");
+      const tag = (k: BrowseRow["kind"]) =>
+        k === "play" ? "▶" : k === "artist" ? "artist" : k === "album" ? "album" : k === "playlist" ? "playlist" : "";
       const rows: ViewNode[] = (scr?.rows ?? []).map((r, i) =>
         recordRow(
           [

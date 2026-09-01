@@ -21,7 +21,14 @@ const KC_ACCOUNT = "refresh-token";
 // loopback), so we pin a port and register this in the app dashboard.
 const PORT = 8899;
 export const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
-const SCOPE = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
+const SCOPE = [
+  "user-read-playback-state",
+  "user-modify-playback-state",
+  "user-read-currently-playing",
+  "playlist-read-private", // your playlists (incl. Discover Weekly / Daily Mixes)
+  "user-top-read", // top artists/tracks
+  "user-read-recently-played", // recently played
+].join(" ");
 const AUTH_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 
@@ -245,9 +252,9 @@ export const pause = () => api("/v1/me/player/pause", { method: "PUT" });
 export const next = () => api("/v1/me/player/next", { method: "POST" });
 export const previous = () => api("/v1/me/player/previous", { method: "POST" });
 
-/** A browsable item: a track, artist, or album. */
+/** A browsable item: a track, artist, album, or playlist. */
 export interface Row {
-  kind: "track" | "artist" | "album";
+  kind: "track" | "artist" | "album" | "playlist";
   id: string;
   uri: string;
   name: string;
@@ -330,6 +337,45 @@ export async function artistDetail(id: string): Promise<Detail> {
     subtitle: al.release_date?.slice(0, 4) ?? "",
   }));
   return { name: a?.name ?? "Artist", uri: a?.uri ?? "", rows: [...topTracks, ...albums] };
+}
+
+/** Your personal home: playlists (incl. Discover Weekly etc.), top artists,
+ * and recently played — the closest thing to Spotify's home the API still gives. */
+export async function home(): Promise<Row[]> {
+  const [pls, tops, recent] = await Promise.all([
+    api("/v1/me/playlists?limit=20").catch(() => null),
+    api("/v1/me/top/artists?limit=10").catch(() => null),
+    api("/v1/me/player/recently-played?limit=15").catch(() => null),
+  ]);
+  const playlists: Row[] = ((pls?.items ?? []) as any[]).filter(Boolean).map((p) => ({
+    kind: "playlist" as const,
+    id: p.id,
+    uri: p.uri,
+    name: p.name ?? "",
+    subtitle: `${p.owner?.display_name ?? ""}`.trim() || "playlist",
+  }));
+  const artists: Row[] = ((tops?.items ?? []) as any[]).map((a) => ({
+    kind: "artist" as const,
+    id: a.id,
+    uri: a.uri,
+    name: a.name ?? "",
+    subtitle: "top artist",
+  }));
+  const seen = new Set<string>();
+  const recents: Row[] = ((recent?.items ?? []) as any[])
+    .map((it) => it.track)
+    .filter((t) => t && !seen.has(t.id) && (seen.add(t.id), true))
+    .map(trackRow);
+  return [...playlists, ...artists, ...recents];
+}
+
+export async function playlistDetail(id: string): Promise<Detail> {
+  const p = await api(`/v1/playlists/${id}`);
+  const rows: Row[] = ((p?.tracks?.items ?? []) as any[])
+    .map((it) => it.track)
+    .filter(Boolean)
+    .map(trackRow);
+  return { name: p?.name ?? "Playlist", uri: p?.uri ?? "", rows };
 }
 
 export async function albumDetail(id: string): Promise<Detail> {
