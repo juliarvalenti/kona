@@ -447,6 +447,34 @@ export default defineApplet<TimerState>({
     },
   },
 
+  /** What an agent reads in `kona tools` / the generated skill. */
+  docs: {
+    start: {
+      doc: "Start a countdown. `seconds` takes 300, \"5m\" or \"1h30m\"; `label` names it. Naming an existing `id` restarts that one.",
+      args: { seconds: 300, label: "tea" },
+    },
+    pause: { doc: "Pause a countdown — by `id`, `label`, `index`, else the selected one.", args: { id: "t1" } },
+    resume: { doc: "Resume a paused countdown.", args: { id: "t1" } },
+    toggle: { doc: "Pause or resume, whichever applies (the `space` key).", args: { id: "t1" } },
+    add: { doc: "Add time to a running countdown.", args: { id: "t1", seconds: 60 } },
+    stop: { doc: "Remove a countdown; `{\"all\":true}` clears every one.", args: { id: "t1" } },
+    clear: "Drop the countdowns that already finished.",
+    label: { doc: "Rename a countdown.", args: { id: "t1", to: "steep" } },
+    select: { doc: "Move the human's selection to a countdown.", args: { id: "t1" } },
+  },
+
+  recipes: [
+    {
+      title: "Start a focus timer, then extend it",
+      steps: [
+        `kona call timer start '{"seconds":1500,"label":"focus"}'   # -> { id: "t1", status: "running" }`,
+        `kona state timer                                            # every countdown, with remaining`,
+        `kona call timer add '{"id":"t1","seconds":300}'             # +5m, without touching the cursor`,
+      ],
+      note: "Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon posts a desktop banner (`kona notify on timer.done`).",
+    },
+  ],
+
   verbs: {
     // Starts a NEW countdown and selects it — unless `id`/`label` names one
     // that already exists, in which case it restarts that one in place.

@@ -38,8 +38,24 @@ test("health reports applet count", async () => {
 test("applets and tools manifests include the timer", async () => {
   const applets = (await get("/applets")) as Array<{ id: string }>;
   expect(applets.some((a) => a.id === "timer")).toBe(true);
-  const tools = (await get("/tools")) as Array<{ name: string }>;
+  const tools = (await get("/tools")) as Array<{ name: string; doc?: string; args?: unknown }>;
   expect(tools.map((t) => t.name)).toContain("timer.start");
+  // ...and enough about it that an agent needs no second lookup: what the verb
+  // does, and args it can send as-is.
+  const start = tools.find((t) => t.name === "timer.start")!;
+  expect(start.doc).toContain("countdown");
+  expect(start.args).toMatchObject({ seconds: 300 });
+});
+
+test("the daemon renders the agent skill from the applets it loaded", async () => {
+  const res = await fetch(`${url}/skill`);
+  expect(res.headers.get("content-type")).toContain("text/markdown");
+  const md = await res.text();
+  expect(md.startsWith("---\nname: kona\n")).toBe(true);
+  expect(md).toContain("### timer — Timer");
+  expect(md).toContain(`kona call timer start '{"seconds":300,"label":"tea"}'`);
+  // The seam it documents is the one it is being served from.
+  expect(md).toContain(`${url}/tools`);
 });
 
 test("a verb call mutates shared state, readable by the next client", async () => {

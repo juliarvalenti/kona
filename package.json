@@ -11,6 +11,7 @@
     "daemon": "bun run bin/konad.ts",
     "dev": "bun run bin/konad.ts",
     "check": "tsc --noEmit",
+    "skill": "bun run bin/kona.ts tools --skill --install",
     "test": "bun test"
   },
   "dependencies": {

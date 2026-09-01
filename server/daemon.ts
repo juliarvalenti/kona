@@ -4,6 +4,7 @@ import { mkdirSync, watch } from "node:fs";
 import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
 import { loadApplets, APPLETS_DIR } from "../core/load.ts";
+import { skillMarkdown } from "../core/skill.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
 
@@ -128,6 +129,15 @@ export async function startDaemon(port = DEFAULT_PORT) {
       // The manifest an agent reads to learn what it can call.
       if (path === "/tools" && req.method === "GET") {
         return json(applets.flatMap(toolsForApplet));
+      }
+
+      // The same manifest as a drop-in agent skill. Generated here, from the
+      // applets this daemon actually loaded, so it can never describe verbs the
+      // machine doesn't have. `kona tools --skill` is a thin client for it.
+      if (path === "/skill" && req.method === "GET") {
+        return new Response(skillMarkdown(applets, { base: `${url.protocol}//${url.host}` }), {
+          headers: { "content-type": "text/markdown; charset=utf-8" },
+        });
       }
 
       // Current state of one applet (host initial paint; agent read).

@@ -100,6 +100,14 @@ export default defineApplet<RssState>({
     syncedAt: 0,
   },
 
+  docs: {
+    refresh: "Refetch every feed and rebuild the river.",
+    search: { doc: "Filter the river locally — no refetch, so it is instant.", args: { q: "bun" } },
+    more: "Show the next page of items.",
+    open: { doc: "Open an item by `index` and read its text.", args: { index: 0 } },
+    browser: "Hand the open (or selected) item to a browser.",
+  },
+
   verbs: {
     async refresh(_args, { state, emit }) {
       await load(state, emit);

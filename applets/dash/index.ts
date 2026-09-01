@@ -123,6 +123,11 @@ export default defineApplet<DashState>({
   ephemeral: true,
   initialState: { np: null, timer: null, unread: 0, emailAuthed: false, gh: [], ghError: null, cursor: 0 },
 
+  docs: {
+    refresh: "Re-aggregate the dashboard from the other applets' live state, and refetch GitHub.",
+    open: { doc: "Open a row: a GitHub PR/issue in the browser, or jump to the Spotify applet.", args: { index: 0 } },
+  },
+
   verbs: {
     refresh(_a, { state, emit, peek }) {
       aggregate(state, peek);

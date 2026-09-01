@@ -20,6 +20,8 @@ import {
   setVolume,
   devices as fetchDevices,
   transferPlayback,
+  queueUri,
+  findTrack,
   type QueueItem,
   type Row,
 } from "../../server/spotify.ts";
@@ -198,6 +200,38 @@ export default defineApplet<SpotifyState>({
     stack: [],
   },
 
+  docs: {
+    refresh: "Re-read now-playing, the queue, and the active device. Call this before you read state.",
+    playPause: "Toggle playback.",
+    next: "Skip to the next track.",
+    previous: "Back to the previous track.",
+    shuffle: "Toggle shuffle.",
+    repeat: "Cycle repeat: off -> context -> track.",
+    seek: { doc: "Scrub. Agents pass an absolute `positionMs`; the arrow keys pass `deltaMs`.", args: { positionMs: 90000 } },
+    volume: { doc: "Set the volume (`pct`) or nudge it (`delta`), 0-100.", args: { pct: 40 } },
+    queue: {
+      doc: "Queue a track to play after the current one — by `uri`, or by free-text `q` we resolve to the first match.",
+      args: { q: "four tet rave green" },
+    },
+    devices: "List Spotify Connect devices (and open the picker for the human).",
+    transfer: { doc: "Hand playback to another device, by `id` or by `name`.", args: { name: "kitchen" } },
+    search: { doc: "Search the catalog — artists, albums, playlists, tracks.", args: { q: "four tet" } },
+    more: "Append the next page of track results.",
+    home: "Load recently played, top artists and your playlists.",
+    enter: { doc: "Act on a row of the current screen: play a track, open an artist/album, pick a device.", args: { index: 0 } },
+  },
+
+  recipes: [
+    {
+      title: "Queue a track without stopping what is playing",
+      steps: [
+        `kona call spotify queue '{"q":"four tet rave green"}'   # -> { queued: true, track: "..." }`,
+        `kona state spotify                                       # upNext now leads with it`,
+      ],
+      note: "Needs `kona login spotify` and an active device (`kona call spotify devices`). To play something *now* instead, `spotify.search` then `spotify.enter {\"index\":N}`.",
+    },
+  ],
+
   verbs: {
     async refresh(_a, { state, emit }) {
       await loadNow(state, emit);
@@ -294,6 +328,43 @@ export default defineApplet<SpotifyState>({
       await Bun.sleep(300);
       await loadNow(state, emit);
       return { volumePct: state.volumePct };
+    },
+    /**
+     * Queue a track to play after the current one. An AGENT names it in words
+     * (`{"q":"four tet rave green"}`) and we resolve the first match; YOU press
+     * `q` on a track row in browse and the same verb queues the selection.
+     */
+    async queue(args, { state, emit }) {
+      const scr = state.stack[state.stack.length - 1];
+      const rowUnderCursor = state.mode === "browse" ? scr?.rows[scr.cursor] : undefined;
+      const uri =
+        (typeof args.uri === "string" && args.uri) ||
+        (rowUnderCursor?.kind === "track" ? rowUnderCursor.uri : "");
+      const q = String(args.q ?? args.query ?? args.track ?? "");
+      if (!uri && !q) {
+        state.error = "queue needs a uri, a q, or a track under the cursor";
+        emit();
+        return { queued: false, error: state.error };
+      }
+      try {
+        let target = uri;
+        let name = rowUnderCursor?.kind === "track" && !args.uri ? rowUnderCursor.name : "";
+        if (!target) {
+          const found = await findTrack(q);
+          if (!found) throw new Error(`no track matching "${q}"`);
+          target = found.uri;
+          name = [found.name, found.subtitle].filter(Boolean).join(" — ");
+        }
+        await queueUri(target);
+        state.error = null;
+        await Bun.sleep(300); // the queue reports the new tail a beat later
+        await loadNow(state, emit);
+        return { queued: true, uri: target, track: name };
+      } catch (e) {
+        state.error = e instanceof Error ? e.message : String(e);
+        emit();
+        return { queued: false, error: state.error };
+      }
     },
     // Open the device picker: a browse screen of Connect targets. Selecting one
     // transfers playback (see enter). Re-opening refreshes it in place rather
@@ -542,6 +613,8 @@ export default defineApplet<SpotifyState>({
     s: { verb: "shuffle", label: "shuffle" },
     r: { verb: "repeat", label: "repeat" },
     b: { verb: "home", label: "home" },
+    // `q` queues the highlighted track — the keyboard half of `spotify.queue`.
+    q: { verb: "queue", label: "queue", when: (s) => s.mode === "browse" },
   },
 
   nav: {

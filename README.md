@@ -44,6 +44,8 @@ kona timer 5m              # open the timer, pre-started
 kona timer pomodoro        # ...or a 25/5 work-break cycle
 kona ls                    # list applets
 kona tools                 # the manifest an agent reads
+kona tools --json          # ...with docs, example args, and the key each verb binds
+kona tools --skill         # that manifest as a drop-in agent skill
 kona call timer start '{"seconds":300}'   # ← exactly what an agent does
 kona state timer           # read current state
 kona config                # show the resolved config (init writes a starter)
@@ -173,6 +175,42 @@ once and it stays warm in the daemon:
 or `KONA_TICKER_SYMBOLS="AAPL,BTC-USD"`. In the applet, `/` adds a symbol and
 `x` drops the selected one; an agent does the same with
 `kona call ticker add '{"symbol":"NVDA"}'`.
+
+## Agent skill
+
+An agent drives kona through four calls — discover, read, call, watch — and
+`AGENTS.md` is the short version. The long version ships as a **skill**, and it
+is *generated*, not written:
+
+```sh
+kona tools --skill                   # print it
+kona tools --skill --install         # write .claude/skills/kona/SKILL.md
+kona tools --skill --out ~/.claude/skills/kona/SKILL.md
+bun run skill                        # the same install, from the repo
+```
+
+The daemon renders it (`GET /skill`) from the applets it actually loaded, so
+the skill can never describe a verb the machine doesn't have — drop a new
+applet into `applets/` and re-run it. A copy lives at
+`.claude/skills/kona/SKILL.md`, and a test fails if it drifts from the
+generator.
+
+What feeds it is per-applet, next to the verbs themselves:
+
+```ts
+docs: {
+  start: { doc: "Start a countdown. `seconds` takes 300, \"5m\" or \"1h30m\".",
+           args: { seconds: 300, label: "tea" } },
+  clear: "Drop the countdowns that already finished.",
+},
+recipes: [{ title: "Start a focus timer", steps: ["kona call timer start '{\"seconds\":1500}'"] }],
+```
+
+`docs` becomes the manifest's `doc`/`args` (so `GET /tools` alone is enough to
+call a verb — an agent never hardcodes an applet id), and `recipes` become the
+skill's worked examples. The manifest also carries the applet's title and the
+key each verb binds in the TUI, which is the bimodal thesis in one line: the
+same verb, whichever hand fires it.
 
 ## Config
 

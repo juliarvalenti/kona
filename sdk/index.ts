@@ -308,6 +308,15 @@ export interface AppletDef<S extends object = AppletState> {
    * before the navigation intents, so a `when`-guarded entry may claim a nav
    * key (←/→) on a specific screen. */
   keymap?: Record<string, KeyBinding<S>>;
+  /**
+   * Agent-facing docs, keyed by verb name. A string is the one-liner; the
+   * object form also carries example args, so the manifest can print a command
+   * an agent can paste. This is what `GET /tools` and the generated skill read,
+   * so a verb documents itself where it is written and the skill cannot drift.
+   */
+  docs?: Record<string, VerbDoc>;
+  /** Multi-step flows worth showing an agent; emitted into the skill verbatim. */
+  recipes?: Recipe[];
   /** If set, the daemon calls tick every tickMs while the applet is "live". */
   tick?: (ctx: AppletCtx<S>) => void;
   tickMs?: number;
@@ -323,17 +332,82 @@ export function defineApplet<S extends object>(def: AppletDef<S>): AppletDef<S> 
 /** Type-erased applet, as the daemon/host/loader handle them generically. */
 export type AnyApplet = AppletDef<AppletState>;
 
-/** The tool manifest entry an agent reads to learn what it can call. */
+/**
+ * What a verb does, for the agent reading the manifest. The object form adds
+ * example args — the exact JSON body a caller can send — so a tool entry is
+ * self-demonstrating.
+ */
+export type VerbDoc = string | { doc: string; args?: Record<string, unknown> };
+
+/** A worked flow: what to accomplish, and the calls that accomplish it. */
+export interface Recipe {
+  /** What the flow does, e.g. "Start a 25-minute focus timer". */
+  title: string;
+  /** Shell lines in order — usually `kona call ...` / `kona state ...`. */
+  steps: string[];
+  /** One line of context printed under the steps. */
+  note?: string;
+}
+
+/**
+ * The tool manifest entry an agent reads to learn what it can call. It carries
+ * the applet's identity as well as the verb's, so `GET /tools` alone is enough
+ * to drive kona — an agent never has to hardcode an applet id or guess args.
+ */
 export interface ToolSpec {
   name: string; // `${appletId}.${verb}`
   applet: string;
   verb: string;
+  /** The applet's human title. */
+  title: string;
+  /** The applet's one-liner. */
+  summary?: string;
+  /** What this verb does (from the applet's `docs` block). */
+  doc?: string;
+  /** Example args — a ready-to-send JSON body. */
+  args?: Record<string, unknown>;
+  /** The TUI key that fires the same verb, when one is bound. */
+  key?: string;
+  /** A cursor/navigation verb (up/down/back/select) — the keyboard's business,
+   * rarely an agent's: address a row by id or index instead. */
+  nav?: boolean;
+}
+
+/** key -> verb, for annotating the manifest with the keyboard's equivalent. */
+function keysByVerb(def: AnyApplet): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, binding] of Object.entries(def.keymap ?? {})) {
+    const verb = typeof binding === "string" ? binding : binding.verb;
+    out[verb] ??= key;
+  }
+  return out;
+}
+
+/** Verbs the host wires to cursor movement — noise in an agent's tool list. */
+function navVerbs(def: AnyApplet): Set<string> {
+  const { up, down, back } = def.nav ?? {};
+  return new Set([up, down, back].filter((v): v is string => !!v));
 }
 
 export function toolsForApplet(def: AnyApplet): ToolSpec[] {
-  return Object.keys(def.verbs).map((verb) => ({
-    name: `${def.id}.${verb}`,
-    applet: def.id,
-    verb,
-  }));
+  const keys = keysByVerb(def);
+  const cursor = navVerbs(def);
+  return Object.keys(def.verbs).map((verb) => {
+    const doc = def.docs?.[verb];
+    const spec: ToolSpec = {
+      name: `${def.id}.${verb}`,
+      applet: def.id,
+      verb,
+      title: def.title,
+    };
+    if (def.summary) spec.summary = def.summary;
+    if (typeof doc === "string") spec.doc = doc;
+    else if (doc) {
+      spec.doc = doc.doc;
+      if (doc.args) spec.args = doc.args;
+    }
+    if (keys[verb]) spec.key = keys[verb];
+    if (cursor.has(verb)) spec.nav = true;
+    return spec;
+  });
 }

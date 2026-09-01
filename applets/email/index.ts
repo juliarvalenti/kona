@@ -133,6 +133,26 @@ export default defineApplet<EmailState>({
     nextPage: null,
   },
 
+  docs: {
+    refresh: "Reload the inbox. Call this before you read state.",
+    search: { doc: "Run a Gmail query and replace the list with its results.", args: { q: "is:unread newer_than:1d" } },
+    more: "Fetch the next page of threads.",
+    open: { doc: "Open a thread by list `index` and load its body.", args: { index: 0 } },
+  },
+
+  recipes: [
+    {
+      title: "Triage the inbox",
+      steps: [
+        `kona call email refresh`,
+        `kona call email search '{"q":"is:unread newer_than:1d"}'   # -> { count: 12 }`,
+        `kona state email                                            # threads[]: from, subject, snippet`,
+        `kona call email open '{"index":0}'                          # -> the body, for summarising`,
+      ],
+      note: "The Gmail scope is read-only: kona reads and shows mail, it never sends or archives. Triage means reading, summarising, and telling the human what deserves a reply.",
+    },
+  ],
+
   verbs: {
     async refresh(_args, { state, emit }) {
       await loadInbox(state, emit);
