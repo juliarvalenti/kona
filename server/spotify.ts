@@ -280,6 +280,9 @@ export interface Row {
   uri: string;
   name: string;
   subtitle: string;
+  /** For tracks: the album/playlist this track lives in, so playback continues
+   * in context (play the album from here) rather than the one track alone. */
+  contextUri?: string;
 }
 
 const artistsOf = (x: any): string => (x?.artists ?? []).map((a: any) => a.name).join(", ");
@@ -294,7 +297,7 @@ function ago(iso: string): string {
   if (h < 24) return `${h}h ago`;
   return `${Math.round(h / 24)}d ago`;
 }
-const trackRow = (t: any): Row => ({ kind: "track", id: t.id, uri: t.uri, name: t.name ?? "", subtitle: artistsOf(t) });
+const trackRow = (t: any): Row => ({ kind: "track", id: t.id, uri: t.uri, name: t.name ?? "", subtitle: artistsOf(t), contextUri: t.album?.uri });
 
 let _market: string | null = null;
 async function market(): Promise<string> {
@@ -436,6 +439,7 @@ export async function albumDetail(id: string): Promise<Detail> {
     uri: t.uri,
     name: t.name ?? "",
     subtitle: artistsOf(t),
+    contextUri: al.uri, // album tracklist items carry no album; set it here
   }));
   return { name: al?.name ?? "Album", uri: al?.uri ?? "", rows };
 }
@@ -446,6 +450,14 @@ export const playUris = (uris: string[]) =>
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ uris }),
+  });
+
+/** Play a track within its context (album/playlist), so playback continues. */
+export const playInContext = (context_uri: string, trackUri: string) =>
+  api("/v1/me/player/play", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ context_uri, offset: { uri: trackUri } }),
   });
 
 /** Play a whole context (artist / album / playlist uri). */

@@ -8,6 +8,7 @@ import {
   previous,
   setShuffle,
   setRepeat,
+  playInContext,
   search,
   searchMoreTracks,
   artistDetail,
@@ -297,7 +298,9 @@ export default defineApplet<SpotifyState>({
           if (!t) return {};
           if (t.kind === "artist") await pushDetail(state, emit, "artist", t.id);
           else if (t.kind === "track") {
-            await playUris([t.uri]);
+            // up-next lives in the current context — resume it there so playback continues
+            if (state.contextUri) await playInContext(state.contextUri, t.uri);
+            else await playUris([t.uri]);
             await Bun.sleep(400);
             await loadNow(state, emit);
           } else if (t.kind === "context") {
@@ -317,7 +320,9 @@ export default defineApplet<SpotifyState>({
         const r = scr?.rows[scr.cursor];
         if (!r || r.kind === "header") return {};
         if (r.kind === "track") {
-          await playUris([r.uri]);
+          // play in the track's album/playlist context so it continues
+          if (r.contextUri) await playInContext(r.contextUri, r.uri);
+          else await playUris([r.uri]);
           state.mode = "now";
           await Bun.sleep(400);
           await loadNow(state, emit);
