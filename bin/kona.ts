@@ -10,6 +10,42 @@ const AUTH_PROVIDERS: Record<string, string> = {
   spotify: "../server/spotify.ts",
 };
 
+/** Minimal arrow-key selector for the CLI (↑/↓/j/k, enter, esc). */
+async function select(prompt: string, options: string[]): Promise<string> {
+  const stdin = process.stdin;
+  process.stdout.write(`${prompt}\n`);
+  let idx = 0;
+  const draw = (first = false) => {
+    if (!first) process.stdout.write(`\x1b[${options.length}A`); // cursor up N lines
+    for (const [i, o] of options.entries()) {
+      const sel = i === idx;
+      process.stdout.write(`\x1b[2K${sel ? "\x1b[36m▸ " : "  "}${o}\x1b[0m\n`);
+    }
+  };
+  draw(true);
+  stdin.setRawMode?.(true);
+  stdin.resume();
+  return new Promise<string>((resolve) => {
+    const done = (v: string | null) => {
+      stdin.setRawMode?.(false);
+      stdin.pause();
+      stdin.off("data", onData);
+      if (v === null) process.exit(0);
+      resolve(v);
+    };
+    const onData = (buf: Buffer) => {
+      const s = buf.toString();
+      if (s === "\x1b[A" || s === "k") idx = (idx - 1 + options.length) % options.length;
+      else if (s === "\x1b[B" || s === "j") idx = (idx + 1) % options.length;
+      else if (s === "\r" || s === "\n") return done(options[idx]!);
+      else if (s === "\x03" || s === "q") return done(null);
+      else return;
+      draw();
+    };
+    stdin.on("data", onData);
+  });
+}
+
 function usage() {
   console.log(`kona — bimodal terminal applets
 
@@ -41,7 +77,7 @@ switch (cmd) {
   }
 
   case "login": {
-    const svc = rest[0] ?? "gmail";
+    const svc = rest[0] ?? (await select("sign in to:", Object.keys(AUTH_PROVIDERS)));
     const mod = AUTH_PROVIDERS[svc];
     if (!mod) {
       console.error(`unknown provider: ${svc} (have: ${Object.keys(AUTH_PROVIDERS).join(", ")})`);

@@ -22,6 +22,7 @@ let server: Server;
 let url: string;
 
 beforeAll(async () => {
+  process.env.KONA_NO_WATCH = "1";
   process.env.KONA_STATE_DIR = mkdtempSync(join(tmpdir(), "kona-sse-"));
   process.env.KONA_IDLE_TIMEOUT = "1"; // Bun closes idle sockets after 1s
   process.env.KONA_HEARTBEAT_MS = "250"; // ...unless we keep them warm

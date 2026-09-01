@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, watch } from "node:fs";
 import type { AppletDef, AppletState, AppletCtx } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
-import { loadApplets } from "../core/load.ts";
+import { loadApplets, APPLETS_DIR } from "../core/load.ts";
 
 export const DEFAULT_PORT = Number(process.env.KONA_PORT ?? 4177);
 
@@ -26,6 +26,25 @@ export async function startDaemon(port = DEFAULT_PORT) {
   const HEARTBEAT_MS = Number(process.env.KONA_HEARTBEAT_MS ?? 15_000);
   const applets = await loadApplets();
   const byId = new Map<string, AppletDef>(applets.map((a) => [a.id, a]));
+
+  // `bun --watch` only reloads files already in the module graph; applets are
+  // imported dynamically, so a BRAND-NEW applet file never triggers a restart
+  // and the daemon goes stale ("no such applet"). Watch the dir ourselves and
+  // exit on change — the client respawns a fresh daemon that re-scans. unref so
+  // this never keeps a test process alive.
+  if (!process.env.KONA_NO_WATCH) {
+    try {
+      const w = watch(APPLETS_DIR, { recursive: true }, (_e, file) => {
+        if (file && file.endsWith(".ts")) {
+          console.error(`applets changed (${file}) — restarting`);
+          process.exit(0);
+        }
+      });
+      w.unref?.();
+    } catch {
+      /* watch unsupported — fall back to manual restart */
+    }
+  }
 
   // Applets marked ephemeral (e.g. email) never touch disk — mail stays in RAM.
   const ephemeral = new Set(applets.filter((a) => a.ephemeral).map((a) => a.id));

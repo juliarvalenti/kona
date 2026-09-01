@@ -13,6 +13,7 @@ let server: Server;
 let url: string;
 
 beforeAll(async () => {
+  process.env.KONA_NO_WATCH = "1"; // don't let the applets-dir watcher exit the test
   process.env.KONA_STATE_DIR = mkdtempSync(join(tmpdir(), "kona-test-"));
   server = await startDaemon(0); // 0 = ephemeral port
   url = `http://localhost:${server.port}`;
