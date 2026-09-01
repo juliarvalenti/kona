@@ -16,6 +16,11 @@ The human may be looking at the same applet while you act — your verb call
 repaints their view. Prefer small, named verbs over sweeping mutations, and
 leave state coherent (an applet's `view` must always make sense).
 
+Text fields are no exception. A field on screen is an `input` node whose value
+lives in state, so you fill one by calling its verb — `storybook.save
+{"value":"ada"}` — exactly as a human pressing enter would. There is nothing
+keyboard-only to work around.
+
 ## Daemon
 
 Base URL: `http://localhost:${KONA_PORT:-4177}`. Autostarts via the CLI; to run

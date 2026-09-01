@@ -2,7 +2,8 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import type { AppletDef, AppletState, KeyBinding } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
 import { base, callVerb, ensureDaemon } from "../core/client.ts";
-import { createStage } from "./stage.ts";
+import { createStage, type Draft } from "./stage.ts";
+import { applyKey, edit as mkEdit, type Edit } from "./editor.ts";
 
 /**
  * The host is a THIN client. It never owns state — it loads applet modules only
@@ -111,8 +112,11 @@ export async function runHost(startAppletId: string | null) {
   let cursor = 0; // launcher selection
 
   // Search input mode (first-class): `/` opens a footer line editor.
-  let searching = false;
-  let query = "";
+  // Text fields in the view tree get the same treatment, one level down: while
+  // an `input` node has focus the host holds its keystrokes as a draft and only
+  // the finished string goes to a verb.
+  let search: Edit | null = null;
+  let draft: Draft | null = null;
 
   let filling = false;
   function render() {
@@ -120,30 +124,39 @@ export async function runHost(startAppletId: string | null) {
     const def = current ? byId.get(current) : null;
     if (!def) {
       current = null;
+      search = null; // no applet, no line editor
       stage.renderLauncher(applets, cursor);
-      return;
-    }
-    const state = (states[def.id] ?? def.initialState) as AppletState;
-    stage.renderApplet(def, state);
+    } else {
+      const state = (states[def.id] ?? def.initialState) as AppletState;
+      stage.renderApplet(def, state);
 
-    // If a search is open, keep the footer showing it — otherwise a background
-    // re-render (e.g. a 1s scrubber tick) would clobber the search line.
-    if (searching && def.search) stage.searchBar(query, def.search.placeholder);
+      // If a search is open, keep the footer showing it — otherwise a background
+      // re-render (e.g. a 1s scrubber tick) would clobber the search line.
+      if (search && def.search) stage.searchBar(search, def.search.placeholder);
 
-    // Viewport auto-fill: keep loading pages until the list covers the visible
-    // rows, so a tall terminal isn't half-empty. Converges as count grows.
-    const pg = def.paginate;
-    if (!filling && pg?.count && (pg.hasMore?.(state) ?? false)) {
-      const rows = stage.viewportHeight();
-      if (pg.count(state) < rows - 2) {
-        filling = true;
-        callVerb(def.id, pg.more)
-          .catch(() => {})
-          .finally(() => {
-            filling = false;
-            render(); // re-check: keep filling until the viewport is covered
-          });
+      // Viewport auto-fill: keep loading pages until the list covers the visible
+      // rows, so a tall terminal isn't half-empty. Converges as count grows.
+      const pg = def.paginate;
+      if (!filling && pg?.count && (pg.hasMore?.(state) ?? false)) {
+        const rows = stage.viewportHeight();
+        if (pg.count(state) < rows - 2) {
+          filling = true;
+          callVerb(def.id, pg.more)
+            .catch(() => {})
+            .finally(() => {
+              filling = false;
+              render(); // re-check: keep filling until the viewport is covered
+            });
+        }
       }
+    }
+
+    // The applet owns focus: the moment the freshly rendered view stops focusing
+    // the field we were typing into (submitted, cancelled, navigated away), the
+    // half-typed draft is dead.
+    if (draft && stage.focusedInput()?.id !== draft.id) {
+      draft = null;
+      stage.setDraft(null);
     }
   }
 
@@ -164,6 +177,13 @@ export async function runHost(startAppletId: string | null) {
       if (alive) stage.footerNote(`reconnecting… (${attempt})`);
     },
   );
+
+  /** Browser-like back: pop the applet's internal view, else exit to the launcher. */
+  async function goBack(def: AppletDef, state: AppletState) {
+    stage.resetScroll();
+    if (def.nav?.back && def.nav.canBack?.(state)) await callVerb(def.id, def.nav.back).catch(() => {});
+    else current = null;
+  }
 
   // Canonical navigation intents, each matched by an arrow key AND a vim key.
   const isUp = (n: string) => n === "up" || n === "k";
@@ -197,24 +217,53 @@ export async function runHost(startAppletId: string | null) {
       const state = (states[def.id] ?? def.initialState) as AppletState;
       const nav = def.nav;
 
-      // --- Search input mode: capture typed text until enter/esc.
-      if (searching && def.search) {
-        if (n === "return") {
-          searching = false;
+      // --- Search input mode: the footer line editor owns the keyboard.
+      if (search && def.search) {
+        const { edit: next, action } = applyKey(search, k);
+        if (action === "submit") {
+          const q = search.value;
+          search = null;
           stage.resetScroll();
-          await callVerb(def.id, def.search.verb, { q: query }).catch(() => {});
+          await callVerb(def.id, def.search.verb, { q }).catch(() => {});
           render();
-        } else if (n === "escape") {
-          searching = false;
+        } else if (action === "cancel") {
+          search = null;
           render();
-        } else if (n === "backspace") {
-          query = query.slice(0, -1);
-          stage.searchBar(query, def.search.placeholder);
-        } else {
-          const ch = k.sequence;
-          if (ch && ch.length === 1 && ch >= " " && !k.ctrl && !k.meta) {
-            query += ch;
-            stage.searchBar(query, def.search.placeholder);
+        } else if (action === "edit") {
+          search = next;
+          stage.searchBar(search, def.search.placeholder);
+        }
+        return;
+      }
+
+      // --- Text field: an `input` node in the view tree has focus, so every
+      // key is text (even `/` and the arrows) until enter or esc ends the edit.
+      const field = stage.focusedInput();
+      if (field) {
+        if (draft?.id !== field.id) draft = { id: field.id, edit: mkEdit(field.value) };
+        const { edit: next, action } = applyKey(draft.edit, k);
+        if (action === "submit") {
+          const value = draft.edit.value;
+          draft = null;
+          stage.setDraft(null);
+          if (field.submit) await callVerb(def.id, field.submit, { id: field.id, value }).catch(() => {});
+          render();
+        } else if (action === "cancel") {
+          draft = null;
+          stage.setDraft(null);
+          // No cancel verb? Then esc means what it always means.
+          if (field.cancel) await callVerb(def.id, field.cancel, { id: field.id }).catch(() => {});
+          else await goBack(def, state);
+          render();
+        } else if (action === "edit") {
+          const changed = next.value !== draft.edit.value;
+          draft = { id: field.id, edit: next };
+          stage.setDraft(draft);
+          render();
+          // Opt-in live editing (filter-as-you-type). Off by default: a verb per
+          // keystroke is a round-trip per keystroke.
+          if (changed && field.change) {
+            await callVerb(def.id, field.change, { id: field.id, value: next.value }).catch(() => {});
           }
         }
         return;
@@ -222,21 +271,16 @@ export async function runHost(startAppletId: string | null) {
 
       // `/` opens search on a searchable applet.
       if (def.search && k.sequence === "/") {
-        searching = true;
-        query = "";
-        stage.searchBar(query, def.search.placeholder);
+        search = mkEdit("");
+        stage.searchBar(search, def.search.placeholder);
         return;
       }
 
     // Back is browser-like: pop an internal view if the applet has one,
     // otherwise return to the launcher. Either way, reset scroll.
     if (isBack(n)) {
-      stage.resetScroll();
-      if (nav?.back && nav.canBack?.(state)) await callVerb(def.id, nav.back).catch(() => {});
-      else {
-        current = null;
-        render();
-      }
+      await goBack(def, state);
+      render();
       return;
     }
 

@@ -69,6 +69,37 @@ export interface LayoutOpts {
   grow?: boolean;
 }
 
+/**
+ * An editable text field. The applet owns the value AND the focus, both in
+ * state — so an agent can fill a field (`POST .../verbs/save {"value":"…"}`)
+ * with no terminal in sight, exactly as a human typing into it would. While a
+ * field is focused the host keeps the in-flight keystrokes locally (a draft) so
+ * typing never round-trips to the daemon, and hands the finished string to
+ * `submit`.
+ */
+export interface InputNode {
+  kind: "input";
+  /** Stable id. Names the field in verb payloads and keys its draft. */
+  id: string;
+  /** The value as state knows it. Shown until the field takes focus. */
+  value: string;
+  /** Shown dim when the value is empty. */
+  placeholder?: string;
+  /** True when this field has the keyboard. Applet state decides. */
+  focus?: boolean;
+  /** Field width in cells; longer text scrolls under the caret. */
+  width?: number;
+  /** Render the value as dots (secrets). */
+  mask?: boolean;
+  /** Verb fired on enter with `{ id, value }`. */
+  submit?: string;
+  /** Verb fired on esc with `{ id }`. Without one, esc falls back to `back`. */
+  cancel?: string;
+  /** Verb fired on every keystroke with `{ id, value }` — opt into live edits. */
+  change?: string;
+  color?: Color;
+}
+
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
@@ -76,7 +107,8 @@ export type ViewNode =
   | { kind: "spacer" }
   | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
-  | { kind: "bar"; value: number; width?: number; color?: Color };
+  | { kind: "bar"; value: number; width?: number; color?: Color }
+  | InputNode;
 
 export type View = string | string[] | ViewNode[];
 
@@ -98,6 +130,12 @@ export const spacer = (): ViewNode => ({ kind: "spacer" });
 export const row = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "row", children, opts });
 /** Stack children vertically. */
 export const col = (children: ViewNode[], opts: LayoutOpts = {}): ViewNode => ({ kind: "col", children, opts });
+/** An editable text field; see InputNode. */
+export const input = (
+  id: string,
+  value: string,
+  opts: Omit<InputNode, "kind" | "id" | "value"> = {},
+): ViewNode => ({ kind: "input", id, value, ...opts });
 /** A fill bar; value is 0..1. */
 export const bar = (value: number, opts: { width?: number; color?: Color } = {}): ViewNode => ({
   kind: "bar",

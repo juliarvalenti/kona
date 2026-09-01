@@ -49,6 +49,18 @@ export function divider(width = 32, opts: { color?: Color } = {}): ViewNode {
   return text("─".repeat(width), { color: opts.color, dim: !opts.color });
 }
 
+/**
+ * A labeled text field: a dim caption beside an `input` primitive. Pass the
+ * same `labelWidth` to a stack of fields and their captions line up, so a form
+ * is just a `col` of these.
+ */
+export function field(label: string, node: ViewNode, opts: { labelWidth?: number } = {}): ViewNode {
+  return row([text(label.padEnd(opts.labelWidth ?? label.length), { dim: true }), node], {
+    gap: 1,
+    align: "center",
+  });
+}
+
 /** A section heading. */
 export function heading(label: string, color?: Color): ViewNode {
   return text(label, { color, dim: !color });

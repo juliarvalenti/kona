@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { progress, keyValue, list, badge, gauge, divider, spinner, table, recordRow } from "../sdk/components.ts";
-import type { ViewNode } from "../sdk/index.ts";
+import { progress, keyValue, list, badge, gauge, divider, spinner, table, recordRow, field } from "../sdk/components.ts";
+import { input, text, type ViewNode } from "../sdk/index.ts";
 
 // helper: narrow a node to an object kind
 function kind(n: ViewNode): string {
@@ -96,4 +96,27 @@ test("table aligns columns and dims the header", () => {
   if (typeof nodes[0] !== "string" && nodes[0]!.kind === "text") {
     expect(nodes[0]!.text).toBe("k      label");
   }
+});
+
+test("input names the field and carries its verbs", () => {
+  const n = input("subject", "hi", { submit: "send", cancel: "discard", width: 20 });
+  expect(n).toMatchObject({
+    kind: "input",
+    id: "subject",
+    value: "hi",
+    submit: "send",
+    cancel: "discard",
+    width: 20,
+  });
+});
+
+test("field pads its caption so a stack of them lines up", () => {
+  const captions = ["to", "subject"].map((label) => {
+    const n = field(label, input(label, ""), { labelWidth: 8 });
+    if (typeof n === "string" || n.kind !== "row") throw new Error("field should be a row");
+    const caption = n.children[0];
+    expect(caption).toMatchObject({ kind: "text", dim: true });
+    return (caption as { text: string }).text;
+  });
+  expect(captions).toEqual(["to      ", "subject "]);
 });

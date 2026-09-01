@@ -103,6 +103,26 @@ Drop a `applets/<name>/index.ts` that default-exports `defineApplet(...)`. Its
 `keymap` are picked up by the host. That's the whole extension surface — see
 `applets/timer/index.ts`.
 
+### Typing into an applet
+
+`input(id, value, opts)` is a real editable text field you put in the view tree.
+State owns both the text and the focus, so it stays bimodal:
+
+```ts
+input("name", state.name, { focus: state.editing, submit: "save", cancel: "cancel" })
+```
+
+While the field has focus the host takes every key (arrows move the caret,
+readline bindings work, `enter` submits, `esc` cancels) and fires `save` with
+`{ id, value }`. An agent skips the keyboard and calls the same verb:
+
+```sh
+kona call storybook save '{"value":"ada"}'
+```
+
+Pass `change` instead of waiting for `enter` to get a verb per keystroke; see
+the `input` section of the storybook applet for a live one.
+
 ## Status
 
 v0 walking skeleton. The daemon, SDK, agent seam, cron tick, and shared-state
