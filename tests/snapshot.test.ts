@@ -29,11 +29,35 @@ test("timer shows status, label, and a partly-filled bar", async () => {
 });
 
 test("storybook renders every component; bars fill mid-sweep", async () => {
-  const frame = await snapshot("storybook", { frame: 45 }, 62, 34);
+  // Tall viewport: the gallery is longer than a default terminal, and every
+  // component has to be on screen for this to be a real regression test.
+  const frame = await snapshot("storybook", { frame: 45 }, 62, 60);
   for (const expected of ["kona components", "[LIVE]", "host", "inbox", "pause/resume"]) {
     expect(frame).toContain(expected);
   }
   expect(frame).toContain("█"); // progress/gauge have fill at frame 45
+  // sparkline / tabs / toast / card / modal
+  expect(frame).toContain("▁"); // sparkline's low samples
+  expect(frame).toContain("drafts"); // tab strip
+  expect(frame).toContain("rate limited"); // warn toast
+  expect(frame).toContain("─ cpu ─"); // card's titled border
+  expect(frame).toContain("press m"); // the modal lives on the overlay layer
+  expect(frame).not.toContain("╔"); // ...so it is NOT drawn inline in the gallery
+});
+
+test("storybook's modal floats over the gallery as an overlay", async () => {
+  const frame = await snapshot("storybook", { frame: 45, confirm: true }, 62, 30);
+  expect(frame).toContain("delete draft?"); // double-bordered dialog, centered
+  expect(frame).toContain("╔");
+  expect(frame).not.toContain("[LIVE]"); // scrim covers the body behind it
+  expect(frame).toContain("enter delete"); // the overlay owns the hint bar
+  expect(frame).toContain("esc cancel");
+});
+
+test("storybook's confirm verb leaves a transient toast in the body", async () => {
+  const frame = await snapshot("storybook", { frame: 45, note: "draft deleted", noteUntil: 75 }, 62, 30);
+  expect(frame).toContain("draft deleted");
+  expect(frame).toContain("kona components"); // no overlay: the body is back
 });
 
 test("an empty text field shows its placeholder; a filled one shows the value", async () => {

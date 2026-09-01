@@ -10,6 +10,11 @@ import {
   divider,
   field,
   heading,
+  sparkline,
+  tabs,
+  toast,
+  card,
+  modal,
 } from "../../sdk/components.ts";
 
 /**
@@ -33,6 +38,16 @@ interface StoryState {
   name: string;
   /** ...and state owns the focus, so an agent can open the editor too. */
   editing: boolean;
+  /** Is the demo confirm dialog up? Drives the overlay. */
+  confirm: boolean;
+  /** Transient banner text, cleared by the tick. */
+  note: string | null;
+  noteUntil: number;
+}
+
+/** A rolling series for the sparkline demo — a sine wave sampled per frame. */
+function series(frame: number, n = 24): number[] {
+  return Array.from({ length: n }, (_, i) => Math.sin((frame + i) / 3) + Math.sin((frame + i) / 7));
 }
 
 const PURPLE = "#bb9af7";
@@ -44,9 +59,10 @@ export default defineApplet<StoryState>({
   id: "storybook",
   title: "Storybook",
   summary: "Live gallery of kona components.",
-  initialState: { frame: 0, name: "", editing: false },
+  initialState: { frame: 0, name: "", editing: false, confirm: false, note: null, noteUntil: 0 },
 
-  // Animating purely from the server tick proves the stream drives the UI.
+  // Every verb is bimodal: a keypress fires it and so does `kona call storybook
+  // <verb>`. The text field and the confirm dialog both demonstrate that seam.
   verbs: {
     /** Give the field the keyboard. */
     edit: (_a, { state, emit }) => {
@@ -59,16 +75,44 @@ export default defineApplet<StoryState>({
       state.editing = false;
       emit();
     },
-    /** Esc drops the edit; state never saw the half-typed draft. */
+    /** Open the confirm dialog (the overlay). */
+    ask: (_a, { state, emit }) => {
+      state.confirm = true;
+      emit();
+    },
+    /** Confirm the dialog's action, leaving a transient toast behind. */
+    ok: (_a, { state, emit }) => {
+      state.confirm = false;
+      state.note = "draft deleted";
+      state.noteUntil = state.frame + 30; // ~3s at tickMs 100
+      emit();
+    },
+    /** Esc: drop the edit AND dismiss the dialog (input cancel + overlay dismiss). */
     cancel: (_a, { state, emit }) => {
       state.editing = false;
+      state.confirm = false;
       emit();
     },
   },
-  keymap: { i: { verb: "edit", label: "edit name" } },
+  keymap: { i: { verb: "edit", label: "edit name" }, m: { verb: "ask", label: "modal" } },
+
+  // A floating confirm dialog over the gallery — the overlay seam itself.
+  overlay: (state) =>
+    state.confirm
+      ? {
+          node: modal("delete draft?", [text("This can't be undone.")], { width: 34 }),
+          scrim: true,
+          confirm: "ok",
+          confirmLabel: "delete",
+          dismiss: "cancel",
+        }
+      : null,
+
+  // Animating purely from the server tick proves the stream drives the UI.
   tickMs: 100,
   tick({ state, emit }) {
     state.frame += 1;
+    if (state.note && state.frame > state.noteUntil) state.note = null;
     emit();
   },
 
@@ -85,6 +129,8 @@ export default defineApplet<StoryState>({
     return [
       col(
         [
+          // A real transient banner: `ok` sets it, the tick clears it.
+          ...(state.note ? [toast(state.note, "info")] : []),
           heading("kona components", PURPLE),
           divider(40),
           col(
@@ -114,6 +160,9 @@ export default defineApplet<StoryState>({
               labelWidth: 7,
             }),
           ),
+          section("sparkline", sparkline(series(state.frame), { color: GREEN })),
+          section("tabs", tabs(["inbox", "sent", "drafts"], Math.floor(state.frame / 20) % 3, { accent: PURPLE })),
+          section("toast", toast("saved", "info"), toast("rate limited", "warn"), toast("auth failed", "error")),
           section("keyValue", keyValue("host", "localhost:4177", { color: BLUE })),
           section("list", ...list(["inbox", "calendar", "timer"], { cursor: state.frame % 3, color: PURPLE })),
           section(
@@ -127,6 +176,16 @@ export default defineApplet<StoryState>({
               ],
             ),
           ),
+          section(
+            "card",
+            card("cpu", [gauge(sweep, { width: 14, color: GREEN }), sparkline(series(state.frame, 14), { color: GREEN })], {
+              color: GREEN,
+              width: 24,
+            }),
+          ),
+          // The modal is NOT drawn inline: it's an overlay, so it floats over
+          // this gallery instead of taking a slot in it.
+          section("modal", text("press m — floats over the body", { dim: true })),
         ],
         { gap: 1 },
       ),

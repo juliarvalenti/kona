@@ -1,0 +1,105 @@
+import { test, expect } from "bun:test";
+import { createTestRenderer } from "@opentui/core/testing";
+import { createStage } from "../host/stage.ts";
+import { overlayAction } from "../host/index.ts";
+import { defineApplet, text, col, type AppletDef, type AppletState, type Overlay } from "../sdk/index.ts";
+import { modal, list } from "../sdk/components.ts";
+
+/**
+ * The overlay seam: a floating layer that draws OVER the body instead of in it,
+ * and takes the keyboard while it's up. The render half is checked against real
+ * on-screen output; the input half against the key resolver the host uses.
+ */
+
+const ROWS = ["one", "two", "three", "four", "five", "six", "seven", "eight"];
+
+const demo = defineApplet<{ open: boolean; scrim: boolean }>({
+  id: "demo",
+  title: "Demo",
+  initialState: { open: false, scrim: false },
+  verbs: {},
+  view: () => [col(list(ROWS, { cursor: 1 }), { gap: 0 })],
+  keymap: { r: "refresh" },
+  overlay: (s) =>
+    s.open
+      ? {
+          node: modal("confirm?", [text("delete 'two'")], { width: 28 }),
+          scrim: s.scrim,
+          confirm: "ok",
+          confirmLabel: "delete",
+          dismiss: "cancel",
+        }
+      : null,
+});
+
+async function frameOf(state: Record<string, unknown>, width = 54, height = 18): Promise<string> {
+  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width, height });
+  createStage(renderer).renderApplet(demo as unknown as AppletDef, state as AppletState);
+  await renderOnce();
+  return captureCharFrame();
+}
+
+test("with no overlay the body renders alone", async () => {
+  const frame = await frameOf({ open: false });
+  expect(frame).toContain("one");
+  expect(frame).toContain("eight");
+  expect(frame).not.toContain("confirm?");
+});
+
+test("an overlay floats over the body without displacing it", async () => {
+  const frame = await frameOf({ open: true, scrim: false });
+  expect(frame).toContain("confirm?"); // the dialog is drawn
+  // Every body row is still on screen: the layer is absolutely positioned, so
+  // it covers content rather than pushing it down (the inline-modal bug).
+  for (const rowLabel of ROWS) expect(frame).toContain(rowLabel);
+});
+
+test("a scrim covers the body behind the overlay", async () => {
+  const frame = await frameOf({ open: true, scrim: true });
+  expect(frame).toContain("delete 'two'");
+  expect(frame).not.toContain("seven"); // body hidden, not merely overdrawn
+});
+
+test("an open overlay owns the hint bar", async () => {
+  const frame = await frameOf({ open: true, scrim: true });
+  expect(frame).toContain("enter delete");
+  expect(frame).toContain("esc cancel");
+  expect(frame).not.toContain("r refresh"); // the body's keys are inert under it
+});
+
+test("returning to the launcher clears a live overlay", async () => {
+  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({ width: 54, height: 18 });
+  const stage = createStage(renderer);
+  stage.renderApplet(demo as unknown as AppletDef, { open: true, scrim: true } as AppletState);
+  await renderOnce();
+  expect(captureCharFrame()).toContain("confirm?");
+  stage.renderLauncher([demo as unknown as AppletDef], 0);
+  await renderOnce();
+  expect(captureCharFrame()).not.toContain("confirm?");
+});
+
+const overlay: Overlay = {
+  node: text("x"),
+  confirm: "ok",
+  dismiss: "cancel",
+  keymap: { d: { verb: "delete", args: { force: true } } },
+};
+
+test("overlay keys fire confirm, dismiss, and its own keymap", () => {
+  expect(overlayAction(overlay, "return")).toMatchObject({ kind: "verb", verb: "ok" });
+  expect(overlayAction(overlay, "escape")).toMatchObject({ kind: "verb", verb: "cancel" });
+  expect(overlayAction(overlay, "d")).toMatchObject({ kind: "verb", verb: "delete", args: { force: true } });
+});
+
+test("overlay traps keys that would move the body behind it", () => {
+  for (const key of ["down", "j", "up", "/", "r"]) {
+    expect(overlayAction(overlay, key)).toEqual({ kind: "trap" });
+  }
+});
+
+test("back falls through when an overlay declares no dismiss verb", () => {
+  // Otherwise an applet could strand you in a dialog with no exit.
+  const noExit: Overlay = { node: text("x"), confirm: "ok" };
+  expect(overlayAction(noExit, "escape")).toEqual({ kind: "pass" });
+  expect(overlayAction(noExit, "down")).toEqual({ kind: "trap" });
+});

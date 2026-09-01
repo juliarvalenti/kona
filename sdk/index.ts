@@ -100,6 +100,19 @@ export interface InputNode {
   color?: Color;
 }
 
+/** Border look for a `box` node. */
+export type BorderStyle = "single" | "double" | "rounded" | "heavy";
+/** A `box` is a `col` that can draw a border, a title and a background. */
+export interface BoxOpts extends LayoutOpts {
+  title?: string;
+  titleAlign?: "left" | "center" | "right";
+  /** Draw a border (default true when a title is set). */
+  border?: boolean;
+  borderStyle?: BorderStyle;
+  borderColor?: Color;
+  bg?: Color;
+}
+
 export type ViewNode =
   | string
   | { kind: "big"; text: string; color?: Color; font?: BigFont }
@@ -108,7 +121,8 @@ export type ViewNode =
   | { kind: "row"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "col"; children: ViewNode[]; opts: LayoutOpts }
   | { kind: "bar"; value: number; width?: number; color?: Color }
-  | InputNode;
+  | InputNode
+  | { kind: "box"; children: ViewNode[]; opts: BoxOpts };
 
 export type View = string | string[] | ViewNode[];
 
@@ -142,6 +156,12 @@ export const bar = (value: number, opts: { width?: number; color?: Color } = {})
   value: Math.max(0, Math.min(1, value)),
   ...opts,
 });
+/**
+ * A bordered container — a `col` that can also draw a frame, a title and a
+ * background. The one node the host draws chrome for; `card`/`modal` in
+ * sdk/components.ts are thin wrappers over it.
+ */
+export const box = (children: ViewNode[], opts: BoxOpts = {}): ViewNode => ({ kind: "box", children, opts });
 
 /**
  * Navigation model. The host binds canonical intents to BOTH arrow keys and
@@ -160,6 +180,33 @@ export interface Nav<S extends object = AppletState> {
   back?: string;
   backLabel?: string;
   canBack?: (state: S) => boolean;
+}
+
+/**
+ * A floating layer drawn ON TOP of the applet body — a confirm dialog, a detail
+ * popover. The terminal has no z-axis of its own, so the host provides one: an
+ * overlay is positioned absolutely over the content viewport, does not scroll
+ * with the body, and does not displace it.
+ *
+ * It is also an INPUT MODE. While `overlay(state)` returns non-null the host
+ * routes keys here instead of to `nav`/`keymap`, so the body cannot be scrolled
+ * or navigated behind a dialog. The one deliberate exception: with no `dismiss`
+ * verb, back (esc/←) falls through to the applet's normal back — an applet can
+ * never trap you in a dialog it forgot to give an exit.
+ */
+export interface Overlay {
+  /** What to draw, centered over the body. Usually `modal(...)`. */
+  node: ViewNode;
+  /** Cover the body behind the layer. Off by default: the body shows around it. */
+  scrim?: boolean;
+  /** Verb fired by enter/→ (the affirmative action). */
+  confirm?: string;
+  confirmLabel?: string;
+  /** Verb fired by esc/← (dismiss). */
+  dismiss?: string;
+  dismissLabel?: string;
+  /** Extra keys while the layer is up. Replaces the applet's keymap. */
+  keymap?: Record<string, KeyBinding>;
 }
 
 export interface AppletDef<S extends object = AppletState> {
@@ -181,6 +228,11 @@ export interface AppletDef<S extends object = AppletState> {
   accent?: (state: S) => Color;
   /** Navigation intents (arrows + vim + browser-like back). */
   nav?: Nav<S>;
+  /**
+   * A floating layer above the body. Returning non-null both draws the layer
+   * and puts the host in overlay input mode — see `Overlay`.
+   */
+  overlay?: (state: S) => Overlay | null;
   /**
    * Makes the applet searchable. The host binds `/` to open a search line;
    * submitting fires `verb` with `{ q: <typed query> }`. First-class across

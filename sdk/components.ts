@@ -3,7 +3,7 @@
  * the primitives in ./index.ts — the host needs no knowledge of them. Applets
  * import what they want; anyone can add more here without touching the host.
  */
-import { type ViewNode, type Color, text, row, bar, spacer } from "./index.ts";
+import { type ViewNode, type Color, text, row, box, bar, spacer } from "./index.ts";
 
 /** A progress bar with an optional trailing label, e.g. "▓▓▓░░ 60%". */
 export function progress(
@@ -122,6 +122,135 @@ export function table(headers: string[], rows: string[][], opts: { color?: Color
     text(fmtRow(headers), { dim: true }),
     ...rows.map((r) => text(fmtRow(r), { color: opts.color })),
   ];
+}
+
+/** The eight bar heights a sparkline draws with. */
+const SPARK_LEVELS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/**
+ * An inline unicode bar chart — one glyph per sample, for trends that have to
+ * fit on a single line (a temperature curve, a price tape, CPU load).
+ *
+ * The series is auto-scaled to its own min/max unless you pin `min`/`max` (do
+ * that when several sparklines must be comparable). `width` keeps the LAST n
+ * samples, because a trend is about the recent tail. Non-finite samples render
+ * as a gap and are left out of the scale, so a series with holes still lines up
+ * with its own axis.
+ */
+export function sparkline(
+  values: number[],
+  opts: { color?: Color; dim?: boolean; width?: number; min?: number; max?: number } = {},
+): ViewNode {
+  const window = opts.width !== undefined ? values.slice(-Math.max(0, opts.width)) : values;
+  const finite = window.filter((v) => Number.isFinite(v));
+  if (!finite.length) return text("", { color: opts.color, dim: opts.dim });
+
+  const min = opts.min ?? Math.min(...finite);
+  const max = opts.max ?? Math.max(...finite);
+  const span = max - min;
+  // The level a half-scale sample rounds to, so a flat series and a pinned
+  // mid-range sample draw the same height.
+  const mid = SPARK_LEVELS[Math.round((SPARK_LEVELS.length - 1) / 2)]!;
+
+  const glyphs = window.map((v) => {
+    if (!Number.isFinite(v)) return " ";
+    // A flat series has no shape to show — draw it mid-height rather than
+    // slamming every sample to the floor.
+    if (span === 0) return mid;
+    const t = (v - min) / span;
+    const i = Math.min(SPARK_LEVELS.length - 1, Math.max(0, Math.round(t * (SPARK_LEVELS.length - 1))));
+    return SPARK_LEVELS[i]!;
+  });
+  return text(glyphs.join(""), { color: opts.color, dim: opts.dim });
+}
+
+/**
+ * A tab strip header: the active tab is a filled chip, the rest are dim. Purely
+ * presentational — the applet owns which tab is active and what switches it
+ * (a verb + keymap), so the same strip serves a keypress and an agent call.
+ */
+export function tabs(
+  labels: string[],
+  active: number,
+  opts: { accent?: Color; color?: Color } = {},
+): ViewNode {
+  const accent = opts.accent ?? "#7aa2f7";
+  return row(
+    labels.map((label, i) =>
+      i === active
+        ? text(` ${label} `, { color: "#0b0b0b", bg: accent })
+        : text(` ${label} `, { dim: true, color: opts.color }),
+    ),
+    { gap: 1 },
+  );
+}
+
+export type ToastKind = "info" | "warn" | "error";
+
+const TOAST_STYLE: Record<ToastKind, { icon: string; color: Color }> = {
+  info: { icon: "ℹ", color: "#7aa2f7" },
+  warn: { icon: "▲", color: "#f0b000" },
+  error: { icon: "✖", color: "#ff5c57" },
+};
+
+/**
+ * A transient banner for the top of a view — "saved", "rate limited", "auth
+ * failed". A filled bar rather than a line of colored text, so it reads as a
+ * notification and not as content. Pass `width` to pad it across the viewport.
+ */
+export function toast(message: string, kind: ToastKind = "info", opts: { width?: number } = {}): ViewNode {
+  const { icon, color } = TOAST_STYLE[kind] ?? TOAST_STYLE.info;
+  const line = ` ${icon}  ${message} `;
+  return text(opts.width ? line.slice(0, opts.width).padEnd(opts.width) : line, {
+    color: "#0b0b0b",
+    bg: color,
+  });
+}
+
+/**
+ * A small bordered sub-panel with a title — the unit a dashboard is built from.
+ * Wraps the `box` primitive so applets never have to reach for chrome details.
+ */
+export function card(
+  title: string,
+  children: ViewNode[],
+  opts: { color?: Color; width?: number | `${number}%`; padding?: number; grow?: boolean } = {},
+): ViewNode {
+  return box(children, {
+    title,
+    borderColor: opts.color,
+    padding: opts.padding ?? 1,
+    ...(opts.width !== undefined ? { width: opts.width } : {}),
+    ...(opts.grow ? { grow: true } : {}),
+  });
+}
+
+/**
+ * A modal: a centered card that reads as sitting on top of the view — a
+ * confirm prompt, a detail popover. The terminal has no z-axis, so "on top" is
+ * conveyed by centering and a heavier double border; the applet is responsible
+ * for rendering it INSTEAD of (or above) its body and for the key that dismisses
+ * it. `footer` is the dim hint line inside the frame, e.g. "enter ok · esc cancel".
+ */
+export function modal(
+  title: string,
+  children: ViewNode[],
+  opts: { color?: Color; width?: number | `${number}%`; footer?: string } = {},
+): ViewNode {
+  const body = opts.footer ? [...children, spacer(), text(opts.footer, { dim: true })] : children;
+  return row(
+    [
+      box(body, {
+        title,
+        titleAlign: "center",
+        borderStyle: "double",
+        borderColor: opts.color ?? "#bb9af7",
+        padding: 1,
+        ...(opts.width !== undefined ? { width: opts.width } : {}),
+      }),
+    ],
+    { justify: "center" },
+  );
 }
 
 export { spacer };

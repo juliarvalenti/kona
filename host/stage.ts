@@ -11,7 +11,7 @@ import {
   type Renderable,
   type TextChunk,
 } from "@opentui/core";
-import type { AppletDef, AppletState, KeyBinding, ViewNode, LayoutOpts, InputNode } from "../sdk/index.ts";
+import type { AppletDef, AppletState, KeyBinding, Overlay, ViewNode, LayoutOpts, InputNode } from "../sdk/index.ts";
 import { type Edit, edit as mkEdit, windowOf } from "./editor.ts";
 
 /**
@@ -31,6 +31,8 @@ export const COLORS = {
   FIELD_FOCUS: "#2b2e3d", // ...brighter while it has the keyboard
   CARET: "#7aa2f7",
   CARET_FG: "#0b0b0b",
+  /** Opaque fill for chrome that must hide what is behind it (scrim, panels). */
+  PANEL: "#0d0d12",
 };
 
 export interface Hint {
@@ -100,6 +102,13 @@ function focusLineOf(nodes: ViewNode[]): number | null {
       case "col":
         for (const c of n.children) visit(c);
         break;
+      case "box": {
+        const chrome = n.opts.border === false ? 0 : 1; // top border line
+        line += chrome;
+        for (const c of n.children) visit(c);
+        line += chrome; // bottom border line
+        break;
+      }
     }
   };
   nodes.forEach(visit);
@@ -180,6 +189,23 @@ export function createStage(renderer: CliRenderer): Stage {
     contentOptions: { flexDirection: "column", alignItems: "stretch" },
   });
   frame.add(scroll);
+  // The overlay layer: absolutely positioned over the whole content area and
+  // stacked above it, so a modal floats instead of taking part in the flow.
+  // Transparent and hidden until an applet returns an overlay.
+  const overlayLayer = new BoxRenderable(renderer, {
+    id: "overlay",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    visible: false,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  });
+  frame.add(overlayLayer);
   stage.add(frame);
   const footer = new TextRenderable(renderer, { id: "footer", content: "", paddingLeft: 1, wrapMode: "none" });
   renderer.root.add(stage);
@@ -205,7 +231,7 @@ export function createStage(renderer: CliRenderer): Stage {
   // and a background state push mid-word can't clobber what you typed.
   let focused: InputNode | null = null;
   let draft: Draft | null = null;
-  function setFrame(title: string, titleColor: string, nodes: ViewNode[]) {
+  function setFrame(title: string, titleColor: string, nodes: ViewNode[], overlay?: Overlay | null) {
     frame.title = ` ${title} `;
     frame.titleAlignment = "center";
     frame.borderColor = titleColor;
@@ -232,6 +258,7 @@ export function createStage(renderer: CliRenderer): Stage {
       else if (focusLine > top + vh - 1) top = focusLine - vh + 1;
     }
     scroll.scrollTop = Math.max(0, top);
+    setOverlay(overlay ?? null, gen);
     renderer.requestRender();
   }
 
@@ -265,6 +292,19 @@ export function createStage(renderer: CliRenderer): Stage {
         ? hint(node.placeholder.slice(0, width - 1).padEnd(width - 1))
         : paint(line.slice(win.cursor + 1));
     return [paint(line.slice(0, win.cursor)), caret, tail].filter((c) => c.text.length > 0);
+  }
+
+  function setOverlay(overlay: Overlay | null, gen: number) {
+    for (const child of [...overlayLayer.getChildren()]) {
+      overlayLayer.remove(child);
+      (child as { destroy?: () => void }).destroy?.();
+    }
+    overlayLayer.visible = overlay !== null;
+    // Cells have no alpha, so a scrim is an opaque fill, not a tint: it covers
+    // the body rather than dimming it. Without one the layer stays transparent
+    // and only the overlay node itself hides what it sits on.
+    overlayLayer.backgroundColor = overlay?.scrim ? COLORS.PANEL : "transparent";
+    if (overlay) overlayLayer.add(nodeToRenderable(overlay.node, `ov${gen}`));
   }
 
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
@@ -314,6 +354,27 @@ export function createStage(renderer: CliRenderer): Stage {
           wrapMode: "none",
           flexShrink: 0,
         });
+      case "box": {
+        const o = node.opts;
+        // A titled box borders itself unless told otherwise — a floating title
+        // with no frame reads as stray text.
+        const bordered = o.border ?? o.title !== undefined;
+        const panel = new BoxRenderable(renderer, {
+          id,
+          flexDirection: "column",
+          flexShrink: 0,
+          ...(bordered
+            ? { border: true, borderStyle: o.borderStyle ?? "rounded", borderColor: o.borderColor ?? DIM }
+            : {}),
+          ...(o.title !== undefined
+            ? { title: ` ${o.title} `, titleAlignment: o.titleAlign ?? "left", titleColor: o.borderColor ?? ACCENT }
+            : {}),
+          ...(o.bg ? { backgroundColor: o.bg } : {}),
+          ...layoutProps(o),
+        });
+        node.children.forEach((child, i) => panel.add(nodeToRenderable(child, `${id}.${i}`)));
+        return panel;
+      }
       case "bar": {
         const width = node.width ?? 24;
         // Sub-cell resolution: full blocks + one fractional block = 8x smoother,
@@ -334,7 +395,20 @@ export function createStage(renderer: CliRenderer): Stage {
       const nodes: ViewNode[] = Array.isArray(body) ? (body as ViewNode[]) : [body as ViewNode];
       const accent = def.accent?.(state) ?? ACCENT;
       const crumb = def.crumb?.(state);
-      setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes);
+      const overlay = def.overlay?.(state) ?? null;
+      setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
+
+      // An overlay owns the keyboard, so it owns the hint bar too — showing the
+      // body's keybinds under a dialog would be a lie about what they do.
+      if (overlay) {
+        const hints: Hint[] = [];
+        if (overlay.confirm) hints.push({ key: "enter", label: overlay.confirmLabel ?? overlay.confirm });
+        for (const [key, b] of Object.entries(overlay.keymap ?? {})) hints.push({ key, label: bindingLabel(b) });
+        hints.push({ key: "esc", label: overlay.dismissLabel ?? (overlay.dismiss ? "cancel" : "back") });
+        hints.push({ key: "ctrl+c", label: "quit" });
+        setFooter(hints);
+        return;
+      }
 
       // A focused field owns the keyboard, so it owns the hint bar too —
       // showing nav keys there would be a lie (← moves the caret, not the view).

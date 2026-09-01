@@ -1,5 +1,21 @@
 import { test, expect } from "bun:test";
-import { progress, keyValue, list, badge, gauge, divider, spinner, table, recordRow, field } from "../sdk/components.ts";
+import {
+  progress,
+  keyValue,
+  list,
+  badge,
+  gauge,
+  divider,
+  spinner,
+  table,
+  recordRow,
+  field,
+  sparkline,
+  tabs,
+  toast,
+  card,
+  modal,
+} from "../sdk/components.ts";
 import { input, text, type ViewNode } from "../sdk/index.ts";
 
 // helper: narrow a node to an object kind
@@ -119,4 +135,97 @@ test("field pads its caption so a stack of them lines up", () => {
     return (caption as { text: string }).text;
   });
   expect(captions).toEqual(["to      ", "subject "]);
+});
+
+test("sparkline maps a series onto the block ramp, low to high", () => {
+  const n = sparkline([0, 1, 2, 3]);
+  if (typeof n !== "string" && n.kind === "text") {
+    expect(n.text).toHaveLength(4);
+    expect(n.text[0]).toBe("▁"); // min -> floor
+    expect(n.text[3]).toBe("█"); // max -> ceiling
+  }
+});
+
+test("sparkline draws a flat series mid-height, not on the floor", () => {
+  const n = sparkline([5, 5, 5]);
+  if (typeof n !== "string" && n.kind === "text") expect(n.text).toBe("▅▅▅");
+});
+
+test("sparkline keeps the last `width` samples", () => {
+  const n = sparkline([0, 1, 2, 3, 4, 5], { width: 3 });
+  if (typeof n !== "string" && n.kind === "text") {
+    expect(n.text).toHaveLength(3);
+    expect(n.text[0]).toBe("▁"); // the window rescales to 3..5
+  }
+});
+
+test("sparkline honors a pinned min/max so charts stay comparable", () => {
+  const n = sparkline([5, 5, 5], { min: 0, max: 10 });
+  if (typeof n !== "string" && n.kind === "text") expect(n.text).toBe("▅▅▅"); // half of 0..10
+});
+
+test("sparkline renders gaps for non-finite samples and survives an empty series", () => {
+  const n = sparkline([0, NaN, 10]);
+  if (typeof n !== "string" && n.kind === "text") {
+    expect(n.text).toBe("▁ █"); // hole keeps its column, scale ignores it
+  }
+  const empty = sparkline([]);
+  expect(empty).toMatchObject({ kind: "text", text: "" });
+});
+
+test("tabs fills the active tab and dims the rest", () => {
+  const n = tabs(["inbox", "sent"], 0, { accent: "#abc" });
+  expect(kind(n)).toBe("row");
+  if (typeof n !== "string" && n.kind === "row") {
+    expect(n.children[0]).toMatchObject({ kind: "text", text: " inbox ", bg: "#abc" });
+    expect(n.children[1]).toMatchObject({ kind: "text", text: " sent ", dim: true });
+  }
+});
+
+test("tabs with an out-of-range active index highlights nothing", () => {
+  const n = tabs(["a", "b"], -1);
+  if (typeof n !== "string" && n.kind === "row") {
+    expect(n.children.every((c) => typeof c !== "string" && c.kind === "text" && c.dim)).toBe(true);
+  }
+});
+
+test("toast is a filled banner whose color tracks the kind", () => {
+  const info = toast("saved");
+  const err = toast("boom", "error");
+  expect(info).toMatchObject({ kind: "text", bg: "#7aa2f7" });
+  if (typeof info !== "string" && info.kind === "text") expect(info.text).toContain("saved");
+  if (typeof err !== "string" && err.kind === "text") {
+    expect(err.bg).toBe("#ff5c57");
+    expect(err.text).toContain("✖");
+  }
+});
+
+test("toast pads to the requested width and truncates past it", () => {
+  const padded = toast("hi", "warn", { width: 20 });
+  if (typeof padded !== "string" && padded.kind === "text") expect(padded.text).toHaveLength(20);
+  const clipped = toast("a very long notification indeed", "warn", { width: 10 });
+  if (typeof clipped !== "string" && clipped.kind === "text") expect(clipped.text).toHaveLength(10);
+});
+
+test("card is a titled bordered box wrapping its children", () => {
+  const n = card("cpu", [text("42%")], { color: "#0f0", width: 24 });
+  expect(kind(n)).toBe("box");
+  if (typeof n !== "string" && n.kind === "box") {
+    expect(n.opts).toMatchObject({ title: "cpu", borderColor: "#0f0", width: 24, padding: 1 });
+    expect(n.children).toHaveLength(1);
+  }
+});
+
+test("modal centers a double-bordered card and appends the footer hint", () => {
+  const n = modal("delete?", [text("sure?")], { footer: "enter ok · esc cancel" });
+  expect(kind(n)).toBe("row");
+  if (typeof n !== "string" && n.kind === "row") {
+    expect(n.opts.justify).toBe("center");
+    const panel = n.children[0]!;
+    expect(kind(panel)).toBe("box");
+    if (typeof panel !== "string" && panel.kind === "box") {
+      expect(panel.opts).toMatchObject({ title: "delete?", borderStyle: "double", titleAlign: "center" });
+      expect(panel.children.at(-1)).toMatchObject({ kind: "text", dim: true, text: "enter ok · esc cancel" });
+    }
+  }
 });
