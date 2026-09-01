@@ -174,6 +174,10 @@ export async function api(path: string, init?: RequestInit): Promise<Record<stri
   return text ? JSON.parse(text) : null;
 }
 
+export interface QueueItem {
+  track: string;
+  artist: string;
+}
 export interface NowPlaying {
   playing: boolean;
   track: string;
@@ -182,12 +186,47 @@ export interface NowPlaying {
   positionMs: number;
   durationMs: number;
   device: string;
+  context: string; // playlist name (or album/artist label)
+  upNext: QueueItem[];
 }
+
+// Cache playlist names by uri so we don't refetch every poll.
+const contextNames = new Map<string, string>();
+async function contextLabel(ctx: any): Promise<string> {
+  if (!ctx?.uri || !ctx?.type) return "";
+  if (contextNames.has(ctx.uri)) return contextNames.get(ctx.uri)!;
+  let label = ctx.type as string;
+  try {
+    if (ctx.type === "playlist") {
+      const pl = await api(`/v1/playlists/${ctx.uri.split(":").pop()}?fields=name`);
+      label = pl?.name ?? "playlist";
+    } else if (ctx.type === "album") {
+      const al = await api(`/v1/albums/${ctx.uri.split(":").pop()}?fields=name`);
+      label = al?.name ?? "album";
+    }
+  } catch {
+    /* keep the type label */
+  }
+  contextNames.set(ctx.uri, label);
+  return label;
+}
+
+const track = (t: any): QueueItem => ({
+  track: t?.name ?? "",
+  artist: (t?.artists ?? []).map((a: any) => a.name).join(", "),
+});
 
 export async function nowPlaying(): Promise<NowPlaying | null> {
   const p = await api("/v1/me/player");
   if (!p || !p.item) return null;
   const item = p.item as any;
+  let upNext: QueueItem[] = [];
+  try {
+    const q = await api("/v1/me/player/queue");
+    upNext = ((q?.queue ?? []) as any[]).slice(0, 8).map(track);
+  } catch {
+    /* queue unavailable */
+  }
   return {
     playing: !!p.is_playing,
     track: item.name ?? "",
@@ -196,6 +235,8 @@ export async function nowPlaying(): Promise<NowPlaying | null> {
     positionMs: p.progress_ms ?? 0,
     durationMs: item.duration_ms ?? 0,
     device: p.device?.name ?? "",
+    context: await contextLabel(p.context),
+    upNext,
   };
 }
 

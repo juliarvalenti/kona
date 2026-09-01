@@ -1,6 +1,6 @@
 import { defineApplet, text, spacer, col, row, type ViewNode } from "../../sdk/index.ts";
-import { progress } from "../../sdk/components.ts";
-import { nowPlaying, play, pause, next, previous } from "../../server/spotify.ts";
+import { progress, divider, recordRow } from "../../sdk/components.ts";
+import { nowPlaying, play, pause, next, previous, type QueueItem } from "../../server/spotify.ts";
 
 /**
  * spotify — now-playing + transport control. The daemon holds the OAuth token
@@ -17,6 +17,8 @@ interface SpotifyState {
   positionMs: number;
   durationMs: number;
   device: string;
+  context: string;
+  upNext: QueueItem[];
   authed: boolean;
   loading: boolean;
   error: string | null;
@@ -40,6 +42,8 @@ async function loadNow(state: SpotifyState, emit: () => void) {
     } else {
       state.track = "";
       state.playing = false;
+      state.context = "";
+      state.upNext = [];
     }
     state.authed = true;
     state.error = null;
@@ -67,6 +71,8 @@ export default defineApplet<SpotifyState>({
     positionMs: 0,
     durationMs: 0,
     device: "",
+    context: "",
+    upNext: [],
     authed: false,
     loading: false,
     error: null,
@@ -162,19 +168,25 @@ export default defineApplet<SpotifyState>({
     const frac = state.durationMs > 0 ? state.positionMs / state.durationMs : 0;
     const color = state.playing ? GREEN : FG;
 
-    return [
-      col(
-        [
-          text(state.track, { color }),
-          text(state.artist, { dim: true }),
-          text(state.album, { dim: true }),
-          spacer(),
-          row([text(fmt(state.positionMs), { dim: true }), progress(frac, { width: barW, color: GREEN }), text(fmt(state.durationMs), { dim: true })], { align: "center", gap: 1 }),
-          spacer(),
-          text(`${state.playing ? "▶ playing" : "⏸ paused"}${state.device ? `  ·  ${state.device}` : ""}`, { color }),
-        ],
-        { align: "center", justify: "center", grow: true },
-      ),
+    const nodes: ViewNode[] = [
+      text(state.track, { color }),
+      text(state.artist, { dim: true }),
+      text(`${state.playing ? "▶" : "⏸"} ${state.album}${state.context ? `  ·  from ${state.context}` : ""}`, { dim: true }),
+      spacer(),
+      row([text(fmt(state.positionMs), { dim: true }), progress(frac, { width: barW, color: GREEN }), text(fmt(state.durationMs), { dim: true })], { align: "center", gap: 1 }),
+      spacer(),
+      text(`${state.device ? `♪ ${state.device}` : ""}`, { dim: true }),
     ];
+
+    if (state.upNext.length) {
+      nodes.push(spacer(), divider(W - 1), text("up next", { dim: true }));
+      for (const q of state.upNext) {
+        nodes.push(
+          recordRow([{ text: q.track, grow: true }, { text: q.artist, width: Math.min(28, Math.floor(W * 0.3)), align: "right" }], { width: W, color: FG }),
+        );
+      }
+    }
+
+    return [col(nodes)];
   },
 });
