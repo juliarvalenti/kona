@@ -80,10 +80,22 @@ export function createChrome(renderer: CliRenderer, accent: Color): Chrome {
   return { frame, scroll, overlayLayer, footer };
 }
 
-/** Empty a container, destroying children so native buffers don't leak. */
+/**
+ * Empty a container, destroying children so native buffers don't leak.
+ *
+ * `destroyRecursively`, NOT `destroy`: OpenTUI's `destroy()` frees the node's
+ * own buffers and then merely REMOVES its children — it does not destroy them.
+ * A view tree is nested (a board is `text` cells inside a `row` inside a `col`),
+ * so destroying only the roots orphaned every leaf with its native TextBuffer
+ * still allocated, and the frame after that allocated a fresh set. At one repaint
+ * a second nothing showed; at a game's tick rate the allocator ran out and
+ * `new TextBuffer` started throwing "Failed to create TextBuffer", which took the
+ * whole TUI down mid-game (#99). Freeing the subtree is what makes a repaint cost
+ * nothing that lasts.
+ */
 export function clearChildren(parent: { getChildren(): unknown[]; remove(child: never): void }): void {
   for (const child of [...parent.getChildren()]) {
     parent.remove(child as never);
-    (child as { destroy?: () => void }).destroy?.();
+    (child as { destroyRecursively?: () => void }).destroyRecursively?.();
   }
 }
