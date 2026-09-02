@@ -128,6 +128,11 @@ Verbs you fire can reach the human's screen: applets call `notify()` from
 point, not a side effect. Events are deduped and rate limited; you do not need
 to throttle your own calls.
 
+Some of them make a noise, too: `server/sound.ts` plays a cue, so a countdown
+or a pomodoro phase you started reaches someone who is not looking at the
+screen (and who is not on a Mac, where the banners stop). `kona sound` lists
+the tones; the human picks which one an applet uses in their config.
+
 ## Workflows
 
 Anything you can call twice, you can name once. The `workflows` applet stores

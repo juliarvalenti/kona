@@ -1,6 +1,7 @@
 import { defineApplet, big, text, spacer, col, theme, appletConfig, appletString, type ViewNode, type DashCard } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
+import { canPlay, playSound } from "../../server/sound.ts";
 
 /**
  * timer — several countdowns at once, with quick presets.
@@ -136,6 +137,76 @@ function statusOf(t: Timer): string {
   return t.running ? "running" : t.remaining > 0 ? "paused" : isDone(t) ? "done" : "idle";
 }
 
+// --- sounds -----------------------------------------------------------------
+
+/**
+ * A timer that only banners is no use to someone in the next room, and banners
+ * are macOS-only anyway. So an ending countdown and an ending phase each play a
+ * TONE — a name from `server/sound.ts`'s small vocabulary, or any sound file you
+ * point at — and the three moments get three different ones, because "your
+ * break is over" and "the pasta is done" should not sound the same.
+ */
+type Cue = "done" | "break" | "work";
+
+interface Cues extends Record<Cue, string> {
+  /** 0..1. Config, not an argument: this is somebody's room, not a mix. */
+  volume: number;
+}
+
+const DEFAULT_CUES: Cues = { done: "alarm", break: "chime", work: "rise", volume: 1 };
+
+/** `false`, `""`, `"off"` and `"none"` all mean "not this one" — silence one cue, keep the rest. */
+function toneOf(v: unknown, fallback: string): string {
+  if (v === false || v === "" || v === "off" || v === "none") return "";
+  return typeof v === "string" && v.trim() ? v.trim() : fallback;
+}
+
+function volumeOf(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
+}
+
+/**
+ * The cues from `~/.config/kona/config.toml`:
+ *
+ *   [applets.timer.sounds]
+ *   done   = "alarm"   # a countdown reaches zero
+ *   break  = "chime"   # a work phase ends
+ *   work   = "rise"    # a break ends
+ *   volume = 0.6
+ *
+ * `sounds = false` on the `[applets.timer]` block silences the lot, which is
+ * the one setting somebody sharing an office reaches for first.
+ */
+function configCues(): Cues {
+  const raw = appletConfig("timer").sounds;
+  if (raw === false) return { done: "", break: "", work: "", volume: DEFAULT_CUES.volume };
+  const cfg = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  if (cfg.enabled === false) return { done: "", break: "", work: "", volume: DEFAULT_CUES.volume };
+  return {
+    done: toneOf(cfg.done, DEFAULT_CUES.done),
+    break: toneOf(cfg.break, DEFAULT_CUES.break),
+    work: toneOf(cfg.work, DEFAULT_CUES.work),
+    volume: volumeOf(cfg.volume, DEFAULT_CUES.volume),
+  };
+}
+
+/**
+ * Play the cue for a moment. Returns whether the speakers are about to be busy,
+ * which is what the caller passes to `notify({ silent })`: one sound per event,
+ * not the cue plus the banner's own ding.
+ *
+ * Sound is its OWN channel, not a decoration on the banner — a cue still plays
+ * when `timer.done` is switched off in `kona notify`, and it still plays on a
+ * machine where banners are a no-op.
+ */
+function playCue(cue: Cue): boolean {
+  const cues = configCues();
+  const tone = cues[cue];
+  if (!tone || !canPlay(tone)) return false;
+  void playSound(tone, cues.volume);
+  return true;
+}
+
 // --- pomodoro ---------------------------------------------------------------
 
 /** Local calendar day, so "done today" rolls over at midnight where you are. */
@@ -238,13 +309,16 @@ function pomoStatus(p: Pomodoro): string {
 }
 
 /**
- * A phase boundary is the whole point of the mode, so it reaches the desktop:
- * a distinct `timer.pomodoro` event (toggleable on its own in `kona notify`),
- * keyed per transition so two boundaries never dedupe into one.
+ * A phase boundary is the whole point of the mode, so it leaves the terminal:
+ * a cue for the room and a distinct `timer.pomodoro` banner (toggleable on its
+ * own in `kona notify`), keyed per transition so two boundaries never dedupe
+ * into one.
  */
 function notifyPhase(p: Pomodoro, from: Phase) {
   const onBreak = p.phase !== "work";
+  const heard = playCue(onBreak ? "break" : "work");
   void notify({
+    silent: heard,
     event: "timer.pomodoro",
     title: onBreak ? "Time for a break" : "Break's over, back to it",
     body: onBreak
@@ -619,7 +693,16 @@ work  = "25m"
 short = "5m"
 long  = "15m"
 every = 4            # long break after every 4th work phase
-auto  = true         # false: wait for \`p\` at each phase boundary`,
+auto  = true         # false: wait for \`p\` at each phase boundary
+
+# The sounds an ending timer makes (\`kona sound\` lists the tones, and plays
+# one so you can hear it). A tone name, a path to a sound file, or false for
+# silence; \`sounds = false\` above silences all three.
+[applets.timer.sounds]
+done   = "alarm"     # a countdown reaches zero
+break  = "chime"     # a work phase ends — break time
+work   = "rise"      # a break ends — back to it
+volume = 1.0`,
   initialState: {
     timers: [],
     cursor: 0,
@@ -679,7 +762,7 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
         `kona state timer                                            # every countdown, with remaining`,
         `kona call timer add '{"id":"t1","seconds":300}'             # +5m, without touching the cursor`,
       ],
-      note: "Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon posts a desktop banner (`kona notify on timer.done`).",
+      note: "Address the countdown by the `id` the start verb handed back — never by moving the cursor, which the human may also be moving. When it hits zero the daemon plays a sound and posts a desktop banner (`kona notify on timer.done`), so a countdown you start reaches them wherever they are.",
     },
     {
       title: "Pause whatever the human is looking at",
@@ -945,9 +1028,12 @@ auto  = true         # false: wait for \`p\` at each phase boundary`,
         t.remaining = 0;
         t.running = false;
         // The whole point of a timer you can walk away from: the daemon counts
-        // down whether or not the view is open, so tell the desktop. A distinct
-        // key per timer lets concurrent completions dedupe independently.
+        // down whether or not the view is open, so make a noise and tell the
+        // desktop. A distinct key per timer lets concurrent completions dedupe
+        // independently.
+        const heard = playCue("done");
         void notify({
+          silent: heard,
           event: "timer.done",
           title: t.label ? `Timer — ${t.label}` : "Timer done",
           body: `${fmt(t.total)} is up.`,

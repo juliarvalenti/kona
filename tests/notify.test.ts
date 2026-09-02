@@ -210,3 +210,46 @@ test("a countdown reaching zero notifies once, with its label", async () => {
   timer.tick!(ctx); // past zero: no second banner
   expect(sent).toHaveLength(1);
 });
+
+test("an event that plays its own cue banners silently — one sound, not two", async () => {
+  // The timer makes a noise of its own now (server/sound.ts). A banner that
+  // added its generic ding on top would be two sounds for one finished timer,
+  // so the applet tells notify() to keep quiet — but only when a cue really
+  // played, which is why the no-player case still gets the banner's sound.
+  const { __setPlayer } = await import("../server/sound.ts");
+  const { resetConfig } = await import("../core/config.ts");
+  const prevDir = process.env.KONA_CONFIG_DIR;
+  process.env.KONA_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kona-notify-cfg-"));
+  resetConfig();
+  try {
+    // A distinct label per run keeps the two banners out of each other's
+    // dedupe window.
+    const run = (label: string) => {
+      const state = structuredClone(timer.initialState);
+      const ctx: AppletCtx<typeof state> = { state, emit: () => {} };
+      timer.verbs.start!({ seconds: 1, label }, ctx);
+      timer.tick!(ctx);
+    };
+
+    __setPlayer(() => true);
+    run("tea");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.silent).toBe(true);
+    expect(buildCommand("osascript", sent[0]!, !sent[0]!.silent)[2]).not.toContain("sound");
+
+    // Nothing can play here, whatever this machine has installed: the banner
+    // keeps its own sound rather than leaving a finished timer inaudible.
+    __setPlayer(null);
+    process.env.KONA_SOUND = "0";
+    sent = [];
+    run("pasta");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.silent).toBe(false);
+  } finally {
+    __setPlayer(null);
+    delete process.env.KONA_SOUND;
+    if (prevDir === undefined) delete process.env.KONA_CONFIG_DIR;
+    else process.env.KONA_CONFIG_DIR = prevDir;
+    resetConfig();
+  }
+});

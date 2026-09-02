@@ -184,7 +184,7 @@ screen however many applets are installed, and typing (or `/`) filters by name,
 id or summary — `enter` opens the match you land on, `esc` clears the filter.
 Each row wears its applet's glyph and color, with its one-liner underneath.
 
-### Desktop notifications
+### Desktop notifications, and sound
 
 The daemon can post native macOS banners when something happens — a countdown
 hits zero, a new PR involves you, unread mail lands — so an always-open dash is
@@ -213,6 +213,22 @@ Repeats of the same `key` inside a window are dropped and a burst is rate
 limited, so a re-sync can't spam you. An applet declares the events it can raise
 in its own `notifications` block — that is what makes one listable and
 toggleable, so a new applet adds a banner without editing `server/notify.ts`.
+
+A banner you have to be looking at is only half of it, so there is an audible
+channel too — `server/sound.ts`, and it is not macOS-only:
+
+```sh
+kona sound                 # the tones, and what plays them here
+kona sound alarm           # hear one before you put it in a config file
+```
+
+A finished countdown plays `alarm`, a pomodoro going to break plays `chime` and
+one coming back plays `rise`; `[applets.timer.sounds]` changes any of them to
+another tone, a path to a sound file, or `false`. A tone names the JOB rather
+than the file — each one maps to a sound macOS ships and to its freedesktop
+equivalent — so the same config makes a sound on both. `KONA_SOUND=0` mutes a
+session. An event that plays a cue posts its banner silently, so one ending is
+one sound.
 
 ## Applets
 

@@ -189,6 +189,7 @@ async function usage() {
   kona logout <provider> [address]     disconnect one account, or all of them
   kona accounts            list connected mailboxes
   kona notify              desktop notifications: list / on / off / test
+  kona sound [tone]        the sound effects a timer can play — and hear one
   kona daemon              run konad in the foreground
 ${lines.length ? `\nApplets with their own arguments:\n${lines.map((l) => `  ${l}`).join("\n")}\n` : ""}`);
 }
@@ -698,6 +699,46 @@ switch (cmd) {
         process.exit(1);
     }
     break;
+  }
+
+  // The audible half of the same idea. There is no per-event switchboard here:
+  // an applet picks its own tones in `[applets.<id>]`, so this is a listing and
+  // a way to actually HEAR one before you commit it to a config file.
+  case "sound": {
+    const { TONES, resolveSound, playerCommand, playSound, soundEnabled } = await import("../server/sound.ts");
+    const want = rest[0];
+
+    if (!want || want === "list") {
+      // The probe is per-machine, not per-file, so any name answers "with what?"
+      const player = playerCommand("sound-file");
+      console.log(
+        player ? `player: ${player[0]}` : "player: none found (install paplay, ffplay, mpv or sox)",
+      );
+      if (!soundEnabled()) console.log("sound is OFF here (KONA_SOUND=0)");
+      console.log();
+      for (const [name, tone] of Object.entries(TONES)) {
+        const file = resolveSound(name);
+        console.log(
+          `${file ? "\x1b[32m ok \x1b[0m" : "\x1b[90mn/a \x1b[0m"} ${name.padEnd(7)} ${tone.summary}${file ? `  \x1b[90m${file}\x1b[0m` : ""}`,
+        );
+      }
+      console.log(`\nkona sound <tone|path>            play one`);
+      console.log(`[applets.timer.sounds] done/break/work    which one a timer plays`);
+      break;
+    }
+
+    const result = await playSound(want, rest[1] ? Number(rest[1]) : 1);
+    if (result === "played") break;
+    console.error(
+      result === "unknown"
+        ? `no sound named ${want} (have: ${Object.keys(TONES).join(", ")}, or a path to a file)`
+        : result === "unsupported"
+          ? "no player on this machine (install paplay, ffplay, mpv or sox, or set KONA_SOUND_PLAYER)"
+          : result === "off"
+            ? "sound is off here (KONA_SOUND=0)"
+            : "the player failed",
+    );
+    process.exit(1);
   }
 
   /**
