@@ -3,7 +3,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fonts, measureText } from "@opentui/core";
-import { BIG_FONTS, bigFits, bigSize, fitBigFont, fontLines, isBigFont, type BigFont } from "../core/fonts.ts";
+import {
+  BIG_FONTS,
+  bigFits,
+  bigSize,
+  fitBigFont,
+  fontLines,
+  isBigFont,
+  resolveBigFont,
+  type BigFont,
+} from "../core/fonts.ts";
 import { loadConfig, resetConfig, theme } from "../core/config.ts";
 import { THEME_PRESETS } from "../core/themes.ts";
 import { renderApplet } from "../sdk/testing.ts";
@@ -156,4 +165,17 @@ test("[theme] font wins over the preset's, and a bogus one is a complaint", () =
   expect(cfg.theme.font).toBe("block"); // the default still stands
   expect(cfg.errors.join(" ")).toContain("comic-sans");
   expect(cfg.errors.join(" ")).toContain("theme.font");
+});
+
+test("a figlet name resolves like a preset name: exact, fuzzy, or refused", () => {
+  expect(resolveBigFont("huge")).toBe("huge");
+  expect(resolveBigFont("  HUGE ")).toBe("huge");
+  expect(resolveBigFont("hug")).toBe("huge");
+  expect(resolveBigFont("pall")).toBe("pallet");
+  expect(resolveBigFont("comic")).toBeNull();
+  expect(resolveBigFont("")).toBeNull();
+  // Ambiguous is a miss, not a guess: `s` is slick AND shade.
+  expect(resolveBigFont("s")).toBeNull();
+  // Every name the host can draw resolves to itself.
+  for (const f of BIG_FONTS) expect(resolveBigFont(f)).toBe(f);
 });

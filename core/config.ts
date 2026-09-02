@@ -427,45 +427,81 @@ export function themePresetId(): string {
 }
 
 /**
- * Write `[theme] preset = "<id>"` into the config file, leaving everything
- * else — comments, per-applet blocks, hand-picked roles — exactly as it was.
+ * Set one key inside an already-sliced `[theme]` section: replace the line if
+ * it is there, insert it at the top of the section if it isn't, and DELETE it
+ * when the value is null. Null is how a key stops being pinned at all, which
+ * is a different thing from pinning it to the value it already has.
+ */
+function setThemeKey(section: string, key: string, value: string | null): string {
+  const line = new RegExp(`^[ \\t]*${key}[ \\t]*=.*$`, "m");
+  if (value === null) return section.replace(new RegExp(`^[ \\t]*${key}[ \\t]*=.*$\\n?`, "m"), "");
+  const assign = `${key} = "${value}"`;
+  if (line.test(section)) return section.replace(line, assign);
+  return `\n${assign}${section.startsWith("\n") ? "" : "\n"}${section}`;
+}
+
+/**
+ * Write `[theme]` keys into the config file, leaving everything else —
+ * comments, per-applet blocks, hand-picked roles — exactly as it was. A key
+ * given as null is removed instead, so a picker can hand a role back to the
+ * preset (the `theme` applet's `auto` figlet) instead of pinning one forever.
  *
  * This is text surgery rather than a TOML round-trip on purpose: the file is
  * hand-written and mostly comments, and re-emitting it from a parsed document
  * would quietly eat them. Returns the path it wrote.
  */
-export function writeThemePreset(id: string): string {
-  if (!themePreset(id)) throw new Error(`unknown theme preset: ${id}`);
+export function writeTheme(next: { preset?: string; font?: BigFont | null }): string {
+  if (next.preset !== undefined && !themePreset(next.preset)) {
+    throw new Error(`unknown theme preset: ${next.preset}`);
+  }
+  if (next.font !== undefined && next.font !== null && !isBigFont(next.font)) {
+    throw new Error(`unknown figlet: ${String(next.font)}`);
+  }
+  // Written in this order, so a fresh file reads `preset` then `font`; each
+  // insert goes to the top of the section, so they are applied back to front.
+  const keys: [string, string | null][] = [];
+  if (next.preset !== undefined) keys.push(["preset", next.preset]);
+  if (next.font !== undefined) keys.push(["font", next.font]);
+
   const path = configPath();
   let text = "";
+  let exists = true;
   try {
     text = readFileSync(path, "utf8");
   } catch {
     text = ""; // no file yet — we are about to write the first one
+    exists = false;
   }
-  const line = `preset = "${id}"`;
   const header = /^[ \t]*\[theme\][ \t]*$/m.exec(text);
   if (!header) {
     const body = text.replace(/\s*$/, "");
-    text = `${body ? `${body}\n\n` : ""}[theme]\n${line}\n`;
+    const lines = keys
+      .filter((k): k is [string, string] => k[1] !== null)
+      .map(([key, value]) => `${key} = "${value}"`);
+    // Nothing to say and nowhere it was said: don't conjure a file (or an
+    // empty `[theme]`) just to unpin a key that was never pinned.
+    if (lines.length) text = `${body ? `${body}\n\n` : ""}[theme]\n${lines.join("\n")}\n`;
+    else if (!exists) return path;
   } else {
     // Only this section's keys are ours to touch: a `preset = ...` under
     // [applets.foo] belongs to that applet.
     const start = header.index + header[0].length;
     const rest = text.slice(start);
-    const next = /^[ \t]*\[/m.exec(rest);
-    const end = next ? start + next.index : text.length;
-    const section = text.slice(start, end);
-    const existing = /^[ \t]*preset[ \t]*=.*$/m;
-    const patched = existing.test(section)
-      ? section.replace(existing, line)
-      : `\n${line}${section.startsWith("\n") ? "" : "\n"}${section}`;
-    text = text.slice(0, start) + patched + text.slice(end);
+    const nextHeader = /^[ \t]*\[/m.exec(rest);
+    const end = nextHeader ? start + nextHeader.index : text.length;
+    let section = text.slice(start, end);
+    for (const [key, value] of [...keys].reverse()) section = setThemeKey(section, key, value);
+    text = text.slice(0, start) + section + text.slice(end);
   }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
   resetConfig();
   return path;
+}
+
+/** Write just `[theme] preset`, leaving every other key where it is. */
+export function writeThemePreset(id: string): string {
+  return writeTheme({ preset: id });
 }
 
 /** The `[applets.<id>]` block, or an empty table. */

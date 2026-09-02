@@ -13,6 +13,7 @@ import {
   setThemeOverride,
   theme,
   themeOverride,
+  writeTheme,
   writeThemePreset,
 } from "../core/config.ts";
 import { DEFAULT_PRESET, THEME_PRESETS, presetIds, resolvePreset, themePreset } from "../core/themes.ts";
@@ -150,6 +151,54 @@ test("writing a preset with no config file writes one", () => {
   expect(writeThemePreset("catppuccin-mocha")).toBe(join(dir, "config.toml"));
   expect(readFileSync(join(dir, "config.toml"), "utf8")).toBe(`[theme]\npreset = "catppuccin-mocha"\n`);
   expect(theme()).toEqual(themePreset("catppuccin-mocha")!.theme);
+});
+
+test("writeTheme pins a figlet beside the preset, and unpins it again", () => {
+  const dir = withConfig(`# mine\ndefault = "dash"\n\n[theme]\naccent = "#ff00ff"\n\n[applets.timer]\ndefault = "12m"\n`);
+  const file = join(dir, "config.toml");
+
+  writeTheme({ preset: "nord", font: "huge" });
+  let written = readFileSync(file, "utf8");
+  expect(written).toContain(`preset = "nord"`);
+  expect(written).toContain(`font = "huge"`);
+  expect(loadConfig().theme.font).toBe("huge");
+  expect(loadConfig().themeOverrides).toEqual({ accent: "#ff00ff", font: "huge" });
+
+  // A second write REPLACES the pin rather than stacking a second line...
+  writeTheme({ preset: "nord", font: "tiny" });
+  written = readFileSync(file, "utf8");
+  expect(written.match(/font =/g)).toHaveLength(1);
+  expect(loadConfig().theme.font).toBe("tiny");
+
+  // ...and a null takes the line back out, so the preset's own face returns.
+  writeTheme({ preset: "nord", font: null });
+  written = readFileSync(file, "utf8");
+  expect(written).not.toContain("font =");
+  expect(loadConfig().theme.font).toBe(themePreset("nord")!.theme.font);
+  // Everything around it is still exactly where it was.
+  expect(written).toContain("# mine");
+  expect(written).toContain(`accent = "#ff00ff"`);
+  expect(written).toContain(`default = "12m"`);
+  expect(written).toContain(`default = "dash"`);
+});
+
+test("writeTheme on a fresh file writes the preset first, then the pin", () => {
+  const dir = withConfig();
+  const file = join(dir, "config.toml");
+  writeTheme({ preset: "dracula", font: "tiny" });
+  expect(readFileSync(file, "utf8")).toBe(`[theme]\npreset = "dracula"\nfont = "tiny"\n`);
+});
+
+test("unpinning a figlet that was never pinned writes no file at all", () => {
+  const dir = withConfig();
+  writeTheme({ font: null });
+  expect(() => readFileSync(join(dir, "config.toml"), "utf8")).toThrow();
+});
+
+test("writeTheme refuses a figlet that doesn't exist", () => {
+  const dir = withConfig();
+  expect(() => writeTheme({ preset: "nord", font: "comic" as never })).toThrow("comic");
+  expect(() => readFileSync(join(dir, "config.toml"), "utf8")).toThrow();
 });
 
 test("writeThemePreset refuses a preset that doesn't exist", () => {

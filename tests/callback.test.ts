@@ -1,12 +1,31 @@
-import { test, expect } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { callbackHtml, callbackPage } from "../server/callback.ts";
-import { DEFAULT_THEME } from "../core/config.ts";
+import { DEFAULT_THEME, resetConfig } from "../core/config.ts";
 
 /**
  * The last thing you see before flipping back to the terminal. It has to be
  * self-contained: by the time the tab renders, the loopback server it came
  * from is about to stop listening.
+ *
+ * The page wears the LIVE theme, so pin the config to an empty dir — otherwise
+ * these assertions (which check the page against DEFAULT_THEME) would fail on
+ * any machine whose real ~/.config/kona sets a non-default preset.
  */
+
+let prevCfgDir: string | undefined;
+beforeAll(() => {
+  prevCfgDir = process.env.KONA_CONFIG_DIR;
+  process.env.KONA_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kona-callback-"));
+  resetConfig();
+});
+afterAll(() => {
+  if (prevCfgDir === undefined) delete process.env.KONA_CONFIG_DIR;
+  else process.env.KONA_CONFIG_DIR = prevCfgDir;
+  resetConfig();
+});
 
 const GMAIL = { name: "Google", login: "gmail" };
 

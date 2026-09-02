@@ -194,3 +194,18 @@ export function fitBigFont(text: string, font: BigFont, limits: FontLimits): Big
     .sort((a, b) => b.size.height - a.size.height || b.size.width - a.size.width);
   return ranked.find((c) => bigFits(text, c.font, limits))?.font ?? ranked[ranked.length - 1]?.font ?? font;
 }
+
+/**
+ * Resolve whatever someone typed to a figlet's name: the name itself, or an
+ * unambiguous substring ("hug" -> huge, "pal" -> pallet). Null when nothing
+ * matches, and when more than one does — the same contract `resolvePreset` has
+ * for palettes, so `theme.font {"font":"s"}` is refused rather than guessed
+ * between `slick` and `shade`.
+ */
+export function resolveBigFont(input: string): BigFont | null {
+  const q = input.trim().toLowerCase();
+  if (!q) return null;
+  if (isBigFont(q)) return q;
+  const hits = BIG_FONTS.filter((f) => f.includes(q));
+  return hits.length === 1 ? hits[0]! : null;
+}

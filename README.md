@@ -72,7 +72,7 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <tr>
 <td width="50%" valign="top">
 <img src="docs/shots/theme.svg" width="100%" alt="Theme — previewing a preset marks the row and says what enter would keep">
-<br><sub><a href="applets/theme/README.md"><code>theme</code></a> — Catppuccin, Nord, Dracula and friends — previewed live, saved on enter.</sub>
+<br><sub><a href="applets/theme/README.md"><code>theme</code></a> — Catppuccin, Nord, Dracula and friends — any palette, any figlet, previewed live.</sub>
 </td>
 <td width="50%" valign="top">
 <img src="docs/shots/ticker.svg" width="100%" alt="Ticker — board lists symbols with price, %chg, and a sparkline">
@@ -678,9 +678,18 @@ Pine in `pallet`, Rosé Pine Dawn in a minimal `tiny`. Switching preset therefor
 reskins **and** re-letters — and `[theme] font` in your config still wins over
 whichever face the preset came with.
 
+That pin is the picker's second axis: `tab` moves the cursor between the palette
+list and the figlet list, ↑↓ move whichever has focus, and both preview live, so
+"Nord's colors, but the `huge` letters" is a combination you *see* before you
+save it. The figlet list opens on `auto` — the row that means "whatever the
+palette brings" — so nothing lands in your config until you deliberately pick a
+face.
+
 ```sh
-kona theme                    # the picker: ↑↓ previews LIVE, enter saves, esc reverts
+kona theme                    # the picker: ↑↓ previews LIVE, tab switches axis, enter saves
 kona theme nord               # apply one from the shell
+kona theme nord huge          # ...with a figlet that isn't its own
+kona theme tiny               # ...or just the letters
 kona call theme list          # ...and the same thing from an agent
 ```
 
@@ -689,10 +698,11 @@ addition to the applet ABI: `theme(state)` returns a palette that stands in for
 the configured one while that applet is open, so the frame, the hint bar and
 every row recolor as the cursor moves — and leaving drops the preview with
 nothing to undo. The `kona` wordmark at the top of the picker is drawn in the
-previewed preset's figlet — and says so, plus the narrower face it would fall
-back to, when that figlet is wider than your terminal. `enter` writes `[theme]
-preset` into your config, and the running TUI (a separate process from the
-daemon that wrote it) picks the file up on its next frame.
+previewed combination — and says so, plus the narrower face it would fall back
+to, when that figlet is wider than your terminal. `enter` writes `[theme] preset`
+(and `font`, when you picked one) into your config, and the running TUI (a
+separate process from the daemon that wrote it) picks the file up on its next
+frame.
 
 ## Writing an applet
 
