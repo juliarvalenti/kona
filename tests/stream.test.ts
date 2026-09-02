@@ -53,14 +53,15 @@ test("a live daemon still streams its greeting snapshot", async () => {
   process.env.KONA_PORT = String(daemon.port);
   process.env.KONA_CONNECT_MS = "5000";
 
-  // onSnapshot throwing is the tidiest way to stop a stream that is otherwise
-  // infinite: it unwinds readStream, which aborts the socket on the way out.
+  // The stream is infinite, so stopping it means stopping the far end — which
+  // is also the honest way to end one. (Throwing from onSnapshot used to do it;
+  // that is exactly the behaviour #92 removed, so it no longer would.)
   let seen: Record<string, unknown> | null = null;
-  await expect(
-    readStream((s) => {
-      seen = s;
-      throw new Error("enough");
-    }, noop),
-  ).rejects.toThrow("enough");
+  const streaming = readStream((s) => {
+    seen = s;
+  }, noop);
+  while (!seen) await Bun.sleep(10);
+  daemon.stop(true);
+  await streaming.catch(() => {}); // a torn-down daemon ends it either way
   expect(seen).not.toBeNull();
 });
