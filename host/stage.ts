@@ -176,14 +176,21 @@ export function createStage(renderer: CliRenderer): Stage {
       const accent = def.accent?.(state) ?? appletAccent(def.id, colors.accent);
       const crumb = def.crumb?.(state);
       const overlay = def.overlay?.(state) ?? null;
-      setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
 
       // The hint bar renders the current INPUT MODE, in the same precedence the
       // host dispatches keys with: an overlay owns the keyboard, and a field
       // inside it owns the keyboard one level further down.
-      if (overlay) setFooter(overlayHints(overlay, focused));
-      else if (focused) setFooter(fieldHints(focused));
+      //
+      // It is sized BEFORE the frame because it can wrap to two lines, and how
+      // tall it is is how much viewport setFrame has to scroll the selection
+      // into. Measured after, an applet with a wrapping hint bar followed its
+      // cursor one line short and parked the selected row just under the fold.
+      const focus = overlay ? findFocusedInput([overlay.node]) : findFocusedInput(nodes);
+      if (overlay) setFooter(overlayHints(overlay, focus));
+      else if (focus) setFooter(fieldHints(focus));
       else setFooter(appletHints(def, state));
+
+      setFrame(crumb ? `${def.title} › ${crumb}` : def.title, accent, nodes, overlay);
     },
     renderLauncher(applets, cursor, opts = {}) {
       repalette();

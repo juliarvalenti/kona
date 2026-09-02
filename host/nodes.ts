@@ -53,53 +53,60 @@ export function bigLines(node: { text: string; font?: BigFont }, width?: number)
 
 /**
  * Line offset of the focused node (the selected list row), so the host can
- * scroll it into view. Approximate heights in lines — good enough because focus
- * only lives on single-line rows in a column. `width` is the pane's, and only
- * matters above a hero: it is what tells a `big` node which figlet it will be
- * drawn in, and so how many lines it pushes the rows below it down by.
+ * scroll it into view — and, because the host reads "is there a focus at all"
+ * off this same answer, what decides whether ↑↓ move a CURSOR or scroll the
+ * viewport. Heights are approximate lines, which is enough: focus only ever
+ * lives on a single-line row.
+ *
+ * Every container is descended, not just the outermost column. A picker with
+ * two lists side by side is a `row` of `col`s, and its selected row is two
+ * levels down — a walk that only checked a row's immediate children called
+ * that screen "no selection" and handed its arrow keys to the scrollbar.
+ *
+ * `width` is the pane's, and only matters above a hero: it is what tells a
+ * `big` node which figlet it will be drawn in, and so how many lines it pushes
+ * the rows below it down by.
  */
 export function focusLineOf(nodes: ViewNode[], width?: number): number | null {
-  let line = 0;
   let found: number | null = null;
-  const visit = (n: ViewNode) => {
-    if (found !== null) return;
-    if (typeof n === "string") {
-      line += 1;
-      return;
-    }
+  /** Height of `n` in lines, noting the line any focused leaf inside it lands on. */
+  const walk = (n: ViewNode, line: number): number => {
+    if (typeof n === "string") return 1;
     switch (n.kind) {
       case "text":
-        if (isFocused(n)) found = line;
-        line += 1;
-        break;
+        if (found === null && isFocused(n)) found = line;
+        return 1;
       case "input":
-        if (isFocused(n)) found = line;
-        line += fieldRows(n);
-        break;
+        if (found === null && isFocused(n)) found = line;
+        return fieldRows(n);
       case "spacer":
       case "bar":
-        line += 1;
-        break;
+        return 1;
       case "big":
-        line += bigLines(n, width);
-        break;
-      case "row":
-        for (const c of n.children) if (isFocused(c)) found = line;
-        line += 1;
-        break;
-      case "col":
-        for (const c of n.children) visit(c);
-        break;
+        return bigLines(n, width);
+      case "row": {
+        // A row's children all start on the same line, and the row is as tall
+        // as the tallest of them — which is how a row of COLUMNS keeps both
+        // its own focus and the rows below it honest.
+        let h = 1;
+        for (const c of n.children) h = Math.max(h, walk(c, line));
+        return h;
+      }
+      case "col": {
+        let h = 0;
+        for (const c of n.children) h += walk(c, line + h);
+        return h;
+      }
       case "box": {
-        const chrome = n.opts.border === false ? 0 : 1; // top border line
-        line += chrome;
-        for (const c of n.children) visit(c);
-        line += chrome; // bottom border line
-        break;
+        const chrome = n.opts.border === false ? 0 : 1; // top/bottom border lines
+        let h = chrome;
+        for (const c of n.children) h += walk(c, line + h);
+        return h + chrome;
       }
     }
   };
-  nodes.forEach(visit);
+  let line = 0;
+  for (const n of nodes) line += walk(n, line);
   return found;
 }
 
