@@ -660,6 +660,40 @@ test("each pomodoro boundary gets its own cue", () => {
   expect(played.map((p) => p.sound)).toEqual(["chime", "rise"]);
 });
 
+test("a warm-up primes the output device, without holding the tick", async () => {
+  // `[sound] warmup` is the wireless-headset setting: a near-silent play wakes
+  // the link, then the real cue lands on a device that is already awake.
+  withSound(`[sound]\nwarmup = "20ms"\n`);
+  const h = harness();
+  h.call("start", { seconds: 1 });
+  h.tick();
+  // The tick came back already — only the primer has gone out so far.
+  expect(played).toEqual([{ sound: "alarm", volume: 0.01 }]);
+  await Bun.sleep(80);
+  expect(played).toEqual([
+    { sound: "alarm", volume: 0.01 },
+    { sound: "alarm", volume: 1 },
+  ]);
+});
+
+test("the timer's own warmup wins over the global one", async () => {
+  // Headphones for the pomodoro, speakers for everything else.
+  withSound(`[sound]\nwarmup = "off"\n\n[applets.timer.sounds]\nwarmup = "20ms"\n`);
+  const h = harness();
+  h.call("start", { seconds: 1 });
+  h.tick();
+  await Bun.sleep(80);
+  expect(played.map((p) => p.volume)).toEqual([0.01, 1]);
+
+  // ...and back off again, for one applet, without touching the global line.
+  withSound(`[sound]\nwarmup = "20ms"\n\n[applets.timer.sounds]\nwarmup = "off"\n`);
+  const g = harness();
+  g.call("start", { seconds: 1 });
+  g.tick();
+  await Bun.sleep(80);
+  expect(played).toEqual([{ sound: "alarm", volume: 1 }]);
+});
+
 test("skipping a phase yourself is silent — you are already at the keyboard", () => {
   withSound();
   const h = harness();

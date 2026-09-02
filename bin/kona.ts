@@ -189,7 +189,7 @@ async function usage() {
   kona logout <provider> [address]     disconnect one account, or all of them
   kona accounts            list connected mailboxes
   kona notify              desktop notifications: list / on / off / test
-  kona sound [tone]        the sound effects a timer can play — and hear one
+  kona sound [tone|test]   the sound effects a timer can play — and hear one
   kona daemon              run konad in the foreground
 ${lines.length ? `\nApplets with their own arguments:\n${lines.map((l) => `  ${l}`).join("\n")}\n` : ""}`);
 }
@@ -626,6 +626,11 @@ switch (cmd) {
     console.log(`${cfg.path}${cfg.exists ? "" : "  (absent — using defaults)"}\n`);
     console.log(`default   ${cfg.defaultApplet ?? "(launcher)"}`);
     console.log(`theme     ${cfg.preset}   (kona theme — the picker previews the rest)`);
+    console.log(
+      cfg.sound.warmupMs
+        ? `sound     warmup ${cfg.sound.warmupMs}ms   (cues prime the output device first)`
+        : `sound     warmup off   (kona sound test — if only the tail is audible, turn it on)`,
+    );
     // Mark the roles the file pins by hand: those are the ones a new preset
     // will NOT change, which is the only surprising thing about presets.
     console.log("\ntheme roles");
@@ -705,14 +710,21 @@ switch (cmd) {
   // an applet picks its own tones in `[applets.<id>]`, so this is a listing and
   // a way to actually HEAR one before you commit it to a config file.
   case "sound": {
-    const { TONES, resolveSound, playerCommand, playSound, soundEnabled } = await import("../server/sound.ts");
+    const { TONES, resolveSound, playerCommand, playSound, soundEnabled, warmupLead } = await import("../server/sound.ts");
+    const { DEFAULT_WARMUP_MS, configPath } = await import("../core/config.ts");
     const want = rest[0];
+    const warmupMs = warmupLead();
 
     if (!want || want === "list") {
       // The probe is per-machine, not per-file, so any name answers "with what?"
       const player = playerCommand("sound-file");
       console.log(
         player ? `player: ${player[0]}` : "player: none found (install paplay, ffplay, mpv or sox)",
+      );
+      console.log(
+        warmupMs
+          ? `warmup: ${warmupMs}ms  (a primer wakes the output device first)`
+          : `warmup: off  ([sound] warmup = "700ms" if you hear only the tail on a headset)`,
       );
       if (!soundEnabled()) console.log("sound is OFF here (KONA_SOUND=0)");
       console.log();
@@ -723,7 +735,49 @@ switch (cmd) {
         );
       }
       console.log(`\nkona sound <tone|path>            play one`);
+      console.log(`kona sound test                   play one warmed up, for wireless output`);
       console.log(`[applets.timer.sounds] done/break/work    which one a timer plays`);
+      break;
+    }
+
+    /**
+     * The wireless check. A Bluetooth headset idles its link between sounds and
+     * eats the front of the next one, so a short tone can be inaudible while a
+     * long one merely sounds quiet — which reads as "kona's sound is broken"
+     * rather than "the device was asleep". This plays the shortest tone twice:
+     * cold, exactly as a cue arrives today, then warmed up. Hearing only the
+     * second one IS the diagnosis, and the fix is one line of config.
+     */
+    if (want === "test") {
+      const tone = rest[1] ?? "bell";
+      console.log(`1/2  ${tone}, cold — what an alert sounds like right now`);
+      const cold = await playSound(tone, 1, { warmup: false });
+      if (cold !== "played") {
+        console.error(
+          cold === "unknown"
+            ? `no sound named ${tone} (have: ${Object.keys(TONES).join(", ")}, or a path to a file)`
+            : cold === "unsupported"
+              ? "no player on this machine (install paplay, ffplay, mpv or sox, or set KONA_SOUND_PLAYER)"
+              : cold === "off"
+                ? "sound is off here (KONA_SOUND=0)"
+                : "the player failed",
+        );
+        process.exit(1);
+      }
+      await Bun.sleep(1_200);
+      const lead = warmupMs || DEFAULT_WARMUP_MS;
+      console.log(`2/2  ${tone}, warmed up — a near-silent primer, ${lead}ms, then the tone`);
+      await playSound(tone, 1, { warmup: lead });
+      console.log(
+        warmupMs
+          ? `\nBoth should sound the same; warmup is already on ([sound] warmup = ${warmupMs}ms).`
+          : `\nHeard the second one but not the first (or only its tail)? Your output is
+asleep between sounds — a Bluetooth headset does that. Put this in
+${configPath()}:
+
+  [sound]
+  warmup = "${lead}ms"`,
+      );
       break;
     }
 

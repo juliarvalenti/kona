@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_SOUND,
   DEFAULT_THEME,
+  DEFAULT_WARMUP_MS,
   appletAccent,
   appletConfig,
   appletList,
@@ -209,4 +211,54 @@ test("a themed palette reaches applets and components", () => {
     color: "#fedcba",
     bg: "#222222",
   });
+});
+
+/**
+ * `[sound]` — one machine-level knob, and the only one whose default is a
+ * compromise: the primer costs latency nobody with wired output wants, so it
+ * ships off and a wireless user turns it on.
+ */
+
+test("[sound] warmup: off by default, a duration turns it on", () => {
+  withConfig();
+  expect(loadConfig().sound).toEqual(DEFAULT_SOUND);
+
+  withConfig(`[sound]\nwarmup = "700ms"\n`);
+  expect(loadConfig().sound.warmupMs).toBe(700);
+  expect(loadConfig().errors).toEqual([]);
+
+  // A bare number is seconds, like every other duration in this file.
+  withConfig(`[sound]\nwarmup = 2\n`);
+  expect(loadConfig().sound.warmupMs).toBe(2000);
+});
+
+test("[sound] warmup: 'off' is an answer, a typo is a complaint", () => {
+  for (const off of [`"off"`, `"none"`, `false`, `0`]) {
+    withConfig(`[sound]\nwarmup = ${off}\n`);
+    expect(loadConfig().sound.warmupMs, off).toBe(0);
+    expect(loadConfig().errors, off).toEqual([]);
+  }
+
+  // 700 SECONDS is what `warmup = 700` says, and nobody means it — a lead
+  // past the cap is a mistake worth naming, not a cue swallowed for 12 minutes.
+  withConfig(`[sound]\nwarmup = 700\n`);
+  expect(loadConfig().sound.warmupMs).toBe(0);
+  expect(loadConfig().errors.join()).toContain("sound.warmup");
+
+  withConfig(`[sound]\nwarmup = "soonish"\n`);
+  expect(loadConfig().sound.warmupMs).toBe(0);
+  expect(loadConfig().errors.join()).toContain("sound.warmup");
+
+  withConfig(`sound = "loud"\n`);
+  expect(loadConfig().errors.join()).toContain("[sound] must be a table");
+});
+
+test("the starter file documents warmup where a headset user will find it", () => {
+  const toml = defaultConfigToml();
+  expect(toml).toContain("[sound]");
+  expect(toml).toContain(`warmup = "${DEFAULT_WARMUP_MS}ms"`);
+  // Commented out: the shipped default is off, and the file must parse to it.
+  const parsed = resolveConfig(Bun.TOML.parse(toml), { path: "x", exists: true });
+  expect(parsed.sound).toEqual(DEFAULT_SOUND);
+  expect(parsed.errors).toEqual([]);
 });

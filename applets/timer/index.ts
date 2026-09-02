@@ -1,7 +1,7 @@
 import { defineApplet, big, text, spacer, col, theme, appletConfig, appletString, type ViewNode, type DashCard } from "../../sdk/index.ts";
 import { progress, divider, recordRow } from "../../sdk/components.ts";
 import { notify } from "../../server/notify.ts";
-import { canPlay, playSound } from "../../server/sound.ts";
+import { canPlay, playSound, warmupOption } from "../../server/sound.ts";
 
 /**
  * timer — several countdowns at once, with quick presets.
@@ -151,9 +151,15 @@ type Cue = "done" | "break" | "work";
 interface Cues extends Record<Cue, string> {
   /** 0..1. Config, not an argument: this is somebody's room, not a mix. */
   volume: number;
+  /**
+   * Wake the output device before the cue — for a headset that sleeps between
+   * sounds and eats the front of a short tone. Undefined = whatever `[sound]
+   * warmup` says globally, which is the right answer for almost everyone.
+   */
+  warmup: number | boolean | undefined;
 }
 
-const DEFAULT_CUES: Cues = { done: "alarm", break: "chime", work: "rise", volume: 1 };
+const DEFAULT_CUES: Cues = { done: "alarm", break: "chime", work: "rise", volume: 1, warmup: undefined };
 
 /** `false`, `""`, `"off"` and `"none"` all mean "not this one" — silence one cue, keep the rest. */
 function toneOf(v: unknown, fallback: string): string {
@@ -179,14 +185,15 @@ function volumeOf(v: unknown, fallback: number): number {
  */
 function configCues(): Cues {
   const raw = appletConfig("timer").sounds;
-  if (raw === false) return { done: "", break: "", work: "", volume: DEFAULT_CUES.volume };
+  if (raw === false) return { ...DEFAULT_CUES, done: "", break: "", work: "" };
   const cfg = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-  if (cfg.enabled === false) return { done: "", break: "", work: "", volume: DEFAULT_CUES.volume };
+  if (cfg.enabled === false) return { ...DEFAULT_CUES, done: "", break: "", work: "" };
   return {
     done: toneOf(cfg.done, DEFAULT_CUES.done),
     break: toneOf(cfg.break, DEFAULT_CUES.break),
     work: toneOf(cfg.work, DEFAULT_CUES.work),
     volume: volumeOf(cfg.volume, DEFAULT_CUES.volume),
+    warmup: warmupOption(cfg.warmup),
   };
 }
 
@@ -203,7 +210,7 @@ function playCue(cue: Cue): boolean {
   const cues = configCues();
   const tone = cues[cue];
   if (!tone || !canPlay(tone)) return false;
-  void playSound(tone, cues.volume);
+  void playSound(tone, cues.volume, { warmup: cues.warmup });
   return true;
 }
 
@@ -702,7 +709,8 @@ auto  = true         # false: wait for \`p\` at each phase boundary
 done   = "alarm"     # a countdown reaches zero
 break  = "chime"     # a work phase ends — break time
 work   = "rise"      # a break ends — back to it
-volume = 1.0`,
+volume = 1.0
+# warmup = "700ms"   # wake a sleeping headset first (overrides [sound] warmup)`,
   initialState: {
     timers: [],
     cursor: 0,
