@@ -37,7 +37,15 @@ export async function startDaemon(port = DEFAULT_PORT) {
   // SSE keepalive knobs. Bun caps idleTimeout at 255s; heartbeat must be well
   // under it. Both env-tunable so tests can force an idle timeout in ~1s.
   const IDLE_TIMEOUT = Math.min(255, Number(process.env.KONA_IDLE_TIMEOUT ?? 120));
-  const HEARTBEAT_MS = Number(process.env.KONA_HEARTBEAT_MS ?? 15_000);
+  // Clamped, not just documented: a heartbeat slower than the socket it keeps
+  // warm is not a heartbeat at all — the connection dies between two of them and
+  // every client drops on a timer, which from the outside is indistinguishable
+  // from kona losing SSE for no reason (#92). Whatever it is set to, it beats at
+  // least twice per idle window.
+  const HEARTBEAT_MS = Math.min(
+    Number(process.env.KONA_HEARTBEAT_MS ?? 15_000),
+    (IDLE_TIMEOUT * 1000) / 2,
+  );
   // How often the cron scheduler asks "what is due?". Cron is minute-granular,
   // but `@every 5s` isn't, so the pass is cheap and frequent.
   const SCHEDULER_MS = Number(process.env.KONA_SCHEDULER_MS ?? 1_000);

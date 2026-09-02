@@ -704,6 +704,30 @@ to, when that figlet is wider than your terminal. `enter` writes `[theme] preset
 separate process from the daemon that wrote it) picks the file up on its next
 frame.
 
+### When the footer says "reconnecting…"
+
+The TUI holds one SSE connection to the daemon and reconnects with backoff if it
+drops, so a sleep/wake or a daemon restart costs you a footer note rather than
+the window. The note is now owned by the connection itself: only a stream that
+is *confirmed* alive — the connect answered and bytes arrived — takes it back
+down, with a brief `reconnected`, and the count it shows is consecutive
+failures, so it starts over every time the stream comes good.
+
+What it deliberately does **not** count is a frame the TUI failed to *draw*.
+Rendering runs on the events the stream delivers, and a render that threw used
+to unwind the reader; the retry loop read that as a lost socket, reconnected,
+was handed the same snapshot and threw again — a permanent "reconnecting… (77)"
+over a connection that was fine the whole time. Drawing is now fenced off from
+reading: a bad frame gets its own footer message and the stream keeps running.
+
+If a connection really does misbehave, `KONA_SSE_LOG=/tmp/kona-sse.log kona`
+writes one timestamped line per connect, drop, render error and consumer error
+— the TUI owns the terminal, so there is nowhere else for it to say so. The
+knobs it is reporting on: `KONA_HEARTBEAT_MS` (daemon keepalive, default 15s,
+clamped to half of `KONA_IDLE_TIMEOUT`), `KONA_STALL_MS` (how long the client
+waits on a silent stream before retrying, default 45s — keep it above the
+heartbeat) and `KONA_CONNECT_MS` (how long a connect may take, default 10s).
+
 ## Writing an applet
 
 An applet is a **package**, and the rule is: adding one edits **no shared file**.

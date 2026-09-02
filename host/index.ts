@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { bindingFor, type AppletDef, type AppletState, type Priority } from "../sdk/index.ts";
 import { loadApplets } from "../core/load.ts";
@@ -118,7 +119,11 @@ export function launcherKey(
 // reader.read() just hangs forever and the reconnect loop below never fires.
 // Race each read against a watchdog so a stalled (not just dropped) stream
 // still gets torn down and retried.
-const STALL_MS = 45_000;
+// Tunable, because it must never end up SHORTER than the daemon's heartbeat
+// (KONA_HEARTBEAT_MS): a client that gives up between two keepalives tears down
+// a perfectly good stream on a timer, over and over, which is indistinguishable
+// from the daemon dropping it.
+const stallMs = () => Number(process.env.KONA_STALL_MS ?? 45_000);
 // Connecting gets its own, shorter budget. /events answers in a millisecond
 // when the daemon is up, so a connect that takes seconds is a socket that will
 // never answer — most often a dead keep-alive connection Bun handed back from
@@ -128,6 +133,46 @@ const STALL_MS = 45_000;
 // "reconnecting… (n)" the last drop wrote, forever (#87).
 // Read per attempt, not once at import: the regression test compresses it.
 const connectMs = () => Number(process.env.KONA_CONNECT_MS ?? 10_000);
+
+/**
+ * Opt-in flight recorder for the stream. This failure class only shows itself
+ * after minutes of real use on someone else's machine, and there is no console
+ * to print to — the TUI owns the terminal, so a stray write corrupts the frame.
+ * `KONA_SSE_LOG=<path>` appends one timestamped line per connect, drop, render
+ * error and consumer error, so the next report of "it just lost SSE" arrives
+ * with a trace instead of a photograph of the footer.
+ */
+function trace(what: string, detail = "") {
+  const path = process.env.KONA_SSE_LOG;
+  if (!path) return;
+  try {
+    appendFileSync(path, `${new Date().toISOString()} ${what}${detail ? ` ${detail}` : ""}\n`);
+  } catch {
+    /* the log is a courtesy; never let it be the thing that breaks the stream */
+  }
+}
+
+/** Run a hook that must not be able to kill the stream that calls it. */
+function safely(fn: (() => void) | undefined, onThrow?: (e: unknown) => void) {
+  if (!fn) return;
+  try {
+    fn();
+  } catch (e) {
+    onThrow?.(e);
+  }
+}
+
+/** The two things a caller wants to know about the stream itself, not its contents. */
+export interface StreamHooks {
+  /**
+   * The stream is CONFIRMED alive — the connect answered *and* bytes arrived.
+   * Fires once per connection, before any consumer code runs, so "we are back"
+   * is reported even when what we do with the events is itself broken.
+   */
+  onLive?: () => void;
+  /** A consumer threw on one frame. Reported, never fatal — see the dispatch. */
+  onConsumerError?: (e: unknown) => void;
+}
 
 /**
  * A promise that rejects after `ms`, plus the cancel that stops its timer.
@@ -145,6 +190,7 @@ function watchdog(ms: number, why: string): { expired: Promise<never>; cancel: (
 export async function readStream(
   onSnapshot: (s: States) => void,
   onState: (id: string, s: AppletState) => void,
+  hooks: StreamHooks = {},
 ) {
   const controller = new AbortController();
   const connecting = fetch(`${base()}/events`, { signal: controller.signal });
@@ -169,13 +215,21 @@ export async function readStream(
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
+  // Bytes on the wire, not merely a socket that opened: the connect can succeed
+  // against something that will never say anything (that is #87), so "alive" is
+  // only claimed once the far end has actually spoken.
+  let live = false;
   try {
     while (true) {
-      const stall = watchdog(STALL_MS, "stream stalled");
+      const stall = watchdog(stallMs(), "stream stalled");
       const read = reader.read();
       read.catch(() => {}); // same deal: the abort below rejects an abandoned read
       const { done, value } = await Promise.race([read, stall.expired]).finally(stall.cancel);
       if (done) break;
+      if (!live) {
+        live = true;
+        safely(hooks.onLive);
+      }
       buf += dec.decode(value, { stream: true });
       let i: number;
       while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -188,9 +242,22 @@ export async function readStream(
           else if (line.startsWith("data:")) data += line.slice(5).trim();
         }
         if (!data) continue;
-        const parsed = JSON.parse(data);
-        if (event === "snapshot") onSnapshot(parsed as States);
-        else if (event === "state") onState(parsed.applet, parsed.state);
+        // A frame the consumer chokes on must not look like a dead socket.
+        // onSnapshot/onState run the host's render, and a render that throws (a
+        // view that hates its new state, a renderer mid-teardown) used to unwind
+        // this whole loop. subscribe() then read that as a drop, reconnected,
+        // was handed the SAME snapshot and threw again — a permanent
+        // "reconnecting… (n)" climbing over a socket that was healthy the entire
+        // time, which is what #92 looks like from the outside. The stream is one
+        // concern; what we draw from it is another. Keep reading.
+        safely(
+          () => {
+            const parsed = JSON.parse(data);
+            if (event === "snapshot") onSnapshot(parsed as States);
+            else if (event === "state") onState(parsed.applet, parsed.state);
+          },
+          (e) => safely(() => hooks.onConsumerError?.(e)),
+        );
       }
     }
   } finally {
@@ -204,21 +271,50 @@ export async function readStream(
 /**
  * Subscribe with auto-reconnect. A dropped stream (idle timeout, daemon blip,
  * transient socket error) reconnects with backoff instead of killing the UI —
- * so a paused applet or a hiccup no longer shows "lost daemon". onDrop reports
- * transient state; a fresh snapshot re-syncs on reconnect.
+ * so a paused applet or a hiccup no longer shows "lost daemon".
+ *
+ * The two reports are a pair, and the second one is the point: onDrop says the
+ * connection is gone, onLive says it is back. Without an explicit "back" there
+ * is no moment a caller can hang the recovery on — clearing the note fell to
+ * whatever happened to render next, so a window that reconnected in 300ms could
+ * still be advertising an outage minutes later (#92).
  */
-async function subscribe(
+export async function subscribe(
   onSnapshot: (s: States) => void,
   onState: (id: string, s: AppletState) => void,
   onDrop: (attempt: number) => void,
+  onLive: () => void,
+  signal?: AbortSignal,
 ) {
   let attempt = 0;
   for (;;) {
+    if (signal?.aborted) return;
     try {
-      await readStream(onSnapshot, onState);
+      await readStream(onSnapshot, onState, {
+        // A stream that delivered a frame is a stream that WORKS, so the
+        // failure count starts over HERE. It used to start over only at a clean
+        // end — which a daemon that never closes its stream does not hand us —
+        // so `attempt` was a lifetime tally rather than a run of consecutive
+        // failures: the backoff stayed pinned at its 2s ceiling for the rest of
+        // the session, ensureDaemon() ran on every single drop forever after the
+        // second one, and the footer counted into the dozens over a connection
+        // that had been fine for hours (#92).
+        onLive: () => {
+          attempt = 0;
+          trace("live");
+          onLive();
+        },
+        onConsumerError: (e) => trace("consumer-error", String(e)),
+      });
+      trace("ended");
       attempt = 0; // clean end (rare) — reconnect immediately
-    } catch {
+    } catch (e) {
+      // Shutting down looks exactly like a drop from in here. Check first, or
+      // the last gasp of a quitting host is a *spawn* of the daemon it is
+      // leaving behind.
+      if (signal?.aborted) return;
       attempt++;
+      trace("drop", `attempt=${attempt} ${e instanceof Error ? e.message : String(e)}`);
       onDrop(attempt);
       // If the daemon itself died (not just a socket blip), bring it back.
       if (attempt >= 2) await ensureDaemon().catch(() => {});
@@ -242,9 +338,14 @@ export async function runHost(startAppletId: string | null) {
   const stage = createStage(renderer);
 
   let alive = true;
+  // The reconnect loop outlives the renderer unless someone tells it not to —
+  // and a loop still retrying through a teardown is how a quitting host ends up
+  // respawning the daemon it was about to leave.
+  const streaming = new AbortController();
   function shutdown() {
     if (!alive) return;
     alive = false;
+    streaming.abort();
     try {
       (renderer as unknown as { destroy?: () => void }).destroy?.();
     } catch {
@@ -286,8 +387,12 @@ export async function runHost(startAppletId: string | null) {
   }
 
   let filling = false;
-  function render() {
-    if (!alive) return; // never touch renderables after teardown
+  /**
+   * Draw one frame. This one MAY throw: an applet's `view` is arbitrary code
+   * over state we did not choose, and OpenTUI can be mid-teardown. Everything
+   * else goes through `render()` below, which is the door with the guard on it.
+   */
+  function draw() {
     const def = current ? byId.get(current) : null;
     // Theming is live, from both ends. The file may have changed under us (the
     // picker's `set`, or an editor), and the applet on screen may be standing a
@@ -345,8 +450,40 @@ export async function runHost(startAppletId: string | null) {
     }
   }
 
+  /**
+   * Render, survivably. A frame that threw used to take out whoever called it:
+   * from a keypress it was an unhandled rejection, and from the SSE reader it
+   * unwound the entire stream — which the retry loop below then misreported as a
+   * lost connection and never recovered from, because the very next snapshot
+   * threw the same way (#92). One bad frame is now one bad frame: the error goes
+   * to the footer, the process lives, and esc still gets you to the launcher.
+   */
+  function render() {
+    if (!alive) return; // never touch renderables after teardown
+    try {
+      draw();
+    } catch (e) {
+      const what = current ?? "kona";
+      const msg = e instanceof Error ? e.message : String(e);
+      trace("render-error", `${what}: ${msg}`);
+      try {
+        stage.footerNote(`${what} failed to draw: ${msg} — esc for the launcher`, theme().error);
+      } catch {
+        /* the renderer itself is gone — there is nowhere left to say so */
+      }
+    }
+  }
+
   // Subscribe in the background; re-render whenever our applet's state moves.
   // Auto-reconnects, so a dropped stream just shows a brief footer note.
+  //
+  // `offline` is who owns that note: onDrop writes it, and only a CONFIRMED-live
+  // stream is allowed to take it back. Nothing used to take it back at all —
+  // clearing rode on some incidental render(), which on the launcher, or on an
+  // applet quiet enough to emit nothing, may be minutes away or never come. So a
+  // window that had reconnected perfectly well still read "reconnecting… (77)",
+  // indistinguishable from a dead one without going to lsof (#92).
+  let offline = false;
   subscribe(
     (snap) => {
       if (!alive) return;
@@ -359,8 +496,18 @@ export async function runHost(startAppletId: string | null) {
       if (id === current) render();
     },
     (attempt) => {
+      offline = true;
       if (alive) stage.footerNote(`reconnecting… (${attempt})`);
     },
+    () => {
+      if (!offline || !alive) return;
+      offline = false;
+      // Say it, briefly, then let the hint bar back in: "it came back" is the
+      // one thing the old footer could never tell you.
+      stage.footerNote("reconnected", theme().ok);
+      setTimeout(() => render(), 1500);
+    },
+    streaming.signal,
   );
 
   /** Browser-like back: pop the applet's internal view, else exit to the launcher. */
