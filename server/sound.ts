@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_WARMUP_MS, MAX_WARMUP_MS, parseWarmup, soundConfig } from "../core/config.ts";
 
 /**
  * Sound effects — the other half of "you can walk away from a countdown".
@@ -18,6 +19,12 @@ import { join } from "node:path";
  *                 so `done = "~/snd/gong.wav"` needs no code here.
  *   - the PLAYER: `afplay` on macOS; whichever of paplay/pw-play/ffplay/mpv/play
  *                 a Linux session has. `KONA_SOUND_PLAYER` overrides both.
+ *
+ * And one thing the OS will not do for you: a WIRELESS output device is asleep
+ * between sounds, so the first half-second of a cue is eaten while the link
+ * comes back and a short tone is never heard at all. `[sound] warmup` plays a
+ * near-silent primer first and gives the device a beat to wake up (see
+ * `PlayOptions`).
  *
  * Nothing here throws and nothing blocks a tick: fire it as `void playSound(…)`.
  * `KONA_SOUND=0` silences the process (and `bun test` is silent by default —
@@ -189,15 +196,68 @@ async function spawnPlayer(cmd: string[]): Promise<boolean> {
 }
 
 /**
- * Play a tone name, an OS sound name or a path. Never throws — a missing file
- * or a machine with no player is a quiet timer, not a crashed daemon.
+ * The primer's volume. Not zero — silence is exactly what a power-saving link
+ * ignores — but far enough down that a wired listener hears nothing where a
+ * headset hears the device wake up.
+ *
+ * It is the cue's own file, played whole rather than clipped to a blip: every
+ * player spells "stop after 400ms" differently (and paplay doesn't spell it at
+ * all), and a primer that ends early would let an eager device idle again
+ * before the real cue lands. A whole file at one percent holds the link open
+ * for exactly as long as it is useful and is heard by nobody.
  */
-export async function playSound(sound: string, volume = 1): Promise<PlayResult> {
-  if (!soundEnabled()) return "off";
-  const file = playerSeam ? sound : resolveSound(sound);
-  if (!file) return "unknown";
-  const cmd = playerSeam ? soundCommand(sound, volume) : playerCommand(file, volume);
-  if (playerSeam) return (await playerSeam(cmd, sound, clampVolume(volume))) ? "played" : "failed";
+const PRIMER_VOLUME = 0.01;
+
+export interface PlayOptions {
+  /**
+   * Wake the output device before playing, for wireless output that sleeps
+   * between sounds:
+   *   - a number  — milliseconds of lead between the primer and the real cue
+   *   - `true`    — DEFAULT_WARMUP_MS
+   *   - `false`/0 — no primer, whatever the config says
+   *   - omitted   — `[sound] warmup` from the config (off by default)
+   */
+  warmup?: number | boolean;
+}
+
+/**
+ * An applet's own `warmup` key -> a `PlayOptions.warmup`. Anything unset OR
+ * unreadable comes back undefined, which means "defer to `[sound] warmup`":
+ * the global setting is the one a wireless user turned on, and a typo in one
+ * applet's block must not quietly take their cue away again.
+ */
+export function warmupOption(v: unknown): number | boolean | undefined {
+  const w = parseWarmup(v);
+  return w === null ? undefined : w;
+}
+
+/**
+ * The lead this call actually takes: the option if it named one, else `[sound]
+ * warmup`, clamped either way. Exported because "how long would a cue wait
+ * here?" is a question `kona sound` answers out loud.
+ */
+export function warmupLead(opts: PlayOptions = {}): number {
+  const want =
+    opts.warmup === undefined
+      ? soundConfig().warmupMs
+      : opts.warmup === true
+        ? DEFAULT_WARMUP_MS
+        : opts.warmup === false
+          ? 0
+          : opts.warmup;
+  if (!Number.isFinite(want) || want <= 0) return 0;
+  return Math.min(want, MAX_WARMUP_MS);
+}
+
+/** One play, start to finish: the seam, the dry run, or a real process. */
+async function fire(cmd: string[] | null, sound: string, volume: number): Promise<PlayResult> {
+  if (playerSeam) {
+    try {
+      return (await playerSeam(cmd, sound, clampVolume(volume))) ? "played" : "failed";
+    } catch {
+      return "failed";
+    }
+  }
   if (!cmd) return "unsupported";
   if (process.env.KONA_SOUND_DRY) {
     console.error(`[sound] ${cmd.join(" ")}`);
@@ -208,4 +268,32 @@ export async function playSound(sound: string, volume = 1): Promise<PlayResult> 
   } catch {
     return "failed";
   }
+}
+
+/**
+ * Play a tone name, an OS sound name or a path. Never throws — a missing file
+ * or a machine with no player is a quiet timer, not a crashed daemon.
+ *
+ * With a warm-up asked for (or configured), this makes TWO plays: the same file
+ * at a whisper to wake the device, a beat, then the real one. The primer is not
+ * awaited — it is a whole file at PRIMER_VOLUME, and waiting for it to finish
+ * would put the cue after the sound it is priming for. The caller waits the
+ * lead, not the file. Still `void playSound(…)`: the lead is inside the
+ * promise, so no tick is held.
+ */
+export async function playSound(sound: string, volume = 1, opts: PlayOptions = {}): Promise<PlayResult> {
+  if (!soundEnabled()) return "off";
+  const file = playerSeam ? sound : resolveSound(sound);
+  if (!file) return "unknown";
+  const cmd = playerSeam ? soundCommand(sound, volume) : playerCommand(file, volume);
+  if (!playerSeam && !cmd) return "unsupported";
+  const lead = warmupLead(opts);
+  if (lead > 0) {
+    const primer = playerSeam ? soundCommand(sound, PRIMER_VOLUME) : playerCommand(file, PRIMER_VOLUME);
+    // A primer that fails is just a cue with no head start — never an error the
+    // caller hears about, and never an unhandled rejection.
+    void fire(primer, sound, PRIMER_VOLUME).catch(() => "failed" as PlayResult);
+    await Bun.sleep(lead);
+  }
+  return fire(cmd, sound, volume);
 }

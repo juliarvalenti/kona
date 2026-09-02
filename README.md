@@ -220,6 +220,7 @@ channel too — `server/sound.ts`, and it is not macOS-only:
 ```sh
 kona sound                 # the tones, and what plays them here
 kona sound alarm           # hear one before you put it in a config file
+kona sound test            # a cue cold, then warmed up — for wireless output
 ```
 
 A finished countdown plays `alarm`, a pomodoro going to break plays `chime` and
@@ -229,6 +230,22 @@ than the file — each one maps to a sound macOS ships and to its freedesktop
 equivalent — so the same config makes a sound on both. `KONA_SOUND=0` mutes a
 session. An event that plays a cue posts its banner silently, so one ending is
 one sound.
+
+**On a Bluetooth headset, turn on `warmup`.** Wireless output powers its link
+down between sounds and eats the first half-second of the next one, so a short
+tone (`bell`, `alarm`, `soft`) can finish before the device is even awake — you
+hear nothing, and the long ones merely sound quiet. `kona sound test` plays a
+cue cold and then warmed up; if only the second one lands, add:
+
+```toml
+[sound]
+warmup = "700ms"     # "off" (the default) for wired output
+```
+
+kona then plays a near-silent primer, waits that long, and plays the real cue on
+an awake device. It is off by default because wired output wakes instantly and
+would only pay the latency; `[applets.timer.sounds] warmup` overrides it for one
+applet either way.
 
 ## Applets
 

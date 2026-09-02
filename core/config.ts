@@ -128,6 +128,59 @@ export const DEFAULT_SECURITY: SecurityConfig = {
   expireMs: DEFAULT_APPROVAL_EXPIRY_MS,
 };
 
+/**
+ * `[sound]` — the machine's audio quirks, not any one applet's taste in tones.
+ *
+ * There is one, and it is a real-hardware one: wireless output (a Bluetooth
+ * headset, some speakers) drops its link to a low-power idle when nothing is
+ * playing, and the first half-second of the next sound is eaten while the codec
+ * comes back. A short tone finishes inside that window and is never heard at
+ * all. `warmup` buys the device that half-second with a near-silent primer.
+ */
+export interface SoundConfig {
+  /** Lead time in ms between the primer and the real cue. 0 = no primer. */
+  warmupMs: number;
+}
+
+/**
+ * Off. Wired output wakes instantly, and everyone would pay the lead time for
+ * the headset users — so this is the one setting a wireless user turns on, and
+ * the reason `kona sound test` says so out loud.
+ */
+export const DEFAULT_SOUND: SoundConfig = { warmupMs: 0 };
+
+/**
+ * The lead a warm-up takes when something asks for one without naming a length
+ * — and the number `[sound] warmup = "700ms"` documents. Long enough for a
+ * Bluetooth codec to re-activate, short enough that a countdown still lands on
+ * the second it ended.
+ */
+export const DEFAULT_WARMUP_MS = 700;
+
+/**
+ * The longest lead we will take on trust. A primer is meant to be the beat
+ * before a cue, not a delay you notice; past this it is likelier that someone
+ * wrote `warmup = 700` meaning milliseconds, where a bare number is seconds.
+ */
+export const MAX_WARMUP_MS = 5_000;
+
+/**
+ * A `warmup` value as somebody writes it -> milliseconds of lead, `false` for
+ * "off, explicitly", `undefined` for "not set here", or null when it is not a
+ * duration at all. Shared, so an applet offering its own `warmup` key means by
+ * it exactly what the global `[sound]` one means.
+ */
+export function parseWarmup(v: unknown): number | false | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === true) return DEFAULT_WARMUP_MS;
+  // "off" is a real answer, not a malformed one: it is how you turn the primer
+  // back off without deleting the line you will want again next flight.
+  if (v === false || v === 0) return false;
+  if (typeof v === "string" && /^\s*(off|none|no|false|0)\s*$/i.test(v)) return false;
+  const ms = durationMs(v);
+  return ms === null || ms > MAX_WARMUP_MS ? null : ms;
+}
+
 /** `"90"` / `"90s"` / `"10m"` / `"1h"` -> ms. Null when it isn't a duration. */
 function durationMs(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) && v > 0 ? v * 1000 : null;
@@ -168,6 +221,8 @@ export interface KonaConfig {
   themeOverrides: Partial<Theme>;
   /** `[security]` — which agent-fired verbs need a human first. */
   security: SecurityConfig;
+  /** `[sound]` — how cues reach output that has to wake up first. */
+  sound: SoundConfig;
   /** Raw `[applets.<id>]` blocks, keyed by applet id. */
   applets: Record<string, Record<string, unknown>>;
   /**
@@ -301,6 +356,22 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     }
   }
 
+  // --- [sound]: what a cue has to do to be heard on this machine's output
+  const sound: SoundConfig = { ...DEFAULT_SOUND };
+  const rawSound = doc.sound;
+  if (rawSound !== undefined && !isTable(rawSound)) {
+    errors.push("[sound] must be a table");
+  } else if (isTable(rawSound)) {
+    const warmup = parseWarmup(rawSound.warmup);
+    if (warmup === null) {
+      errors.push(
+        `sound.warmup: must be a duration up to ${MAX_WARMUP_MS}ms, like "700ms", or "off" (got ${JSON.stringify(rawSound.warmup)})`,
+      );
+    } else if (warmup !== undefined) {
+      sound.warmupMs = warmup === false ? 0 : warmup;
+    }
+  }
+
   // --- external plugin roots
   const plugins: string[] = [];
   const rawPlugins = doc.plugins;
@@ -321,6 +392,7 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     preset,
     themeOverrides,
     security,
+    sound,
     applets,
     plugins,
     path: meta.path,
@@ -419,6 +491,14 @@ export function theme(): Theme {
  */
 export function securityConfig(): SecurityConfig {
   return loadConfig().security;
+}
+
+/**
+ * How sound reaches this machine's output. Read at call time like `theme()`,
+ * so plugging in a headset and adding one line is enough — no daemon restart.
+ */
+export function soundConfig(): SoundConfig {
+  return loadConfig().sound;
 }
 
 /** The named preset the palette starts from. */
@@ -597,6 +677,18 @@ ${blocks.join("\n\n")}
 # allow = ["spotify.playPause"]   # these run regardless of the level rule
 # guard = ["notes.clear"]         # ...and these are always held
 # expire = "10m"                  # how long a pending action waits for you
+
+# Sound, when your output has to wake up first.
+#
+# WIRELESS USERS, READ THIS. A Bluetooth headset (and many wireless speakers)
+# powers its link down between sounds and eats the first half-second of the
+# next one — so the long tones arrive quiet and the short ones (\`bell\`,
+# \`alarm\`, \`soft\`) never arrive at all. \`warmup\` plays a near-silent primer,
+# waits, and then plays the real cue on a device that is already awake.
+# Off by default: on wired output it would only add latency.
+[sound]
+# warmup = "700ms"                # lead time before the real cue
+# warmup = "off"                  # ...the default (also \`0\` or \`false\`)
 
 # The palette AND the display typeface. \`preset\` picks a named one (\`kona
 # theme\` lists them, and the \`theme\` applet previews them live); the roles
