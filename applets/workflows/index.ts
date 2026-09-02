@@ -344,6 +344,34 @@ export default defineApplet<WorkflowsState>({
   },
   initialState: { workflows: [], runs: [], cursor: 0, open: null, dialog: null, running: [], error: null },
 
+  /**
+   * A workflow is a sequence of OTHER applets' verbs, and the honest place to
+   * ask about one of those is the step itself — "post this text to ship-kona",
+   * not "run the workflow called triage". So `run` is `local`: an agent may
+   * start one, and the engine's own `ctx.call` carries the agent's authority
+   * into every step, so the run PAUSES at the first guarded step with that
+   * step's real arguments in the tray and resumes when a human approves it.
+   * (A paused run holds the agent's HTTP call open, which the daemon's idle
+   * timeout may cut — watch `/approvals` and `kona state workflows` rather than
+   * the response.)
+   *
+   * `schedule` is the exception, and is `high`: a scheduled run fires
+   * unattended, from the daemon, with nobody to ask — so putting a workflow on
+   * the calendar is the decision a human has to make, once, up front. `run` and
+   * `runStep` stay `low` — the STEP re-guards through the same seam.
+   */
+  priority: {
+    run: "low",
+    runStep: "low",
+    schedule: "high",
+    define: "low",
+    addStep: "low",
+    removeStep: "low",
+    remove: "low",
+    import: "low",
+    clear: "low",
+  },
+
   docs: {
     define: {
       doc:

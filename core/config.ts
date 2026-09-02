@@ -90,6 +90,73 @@ const THEME_ROLES = Object.keys(DEFAULT_THEME) as (keyof Theme)[];
 /** Every role but `font` — the ones a hex color is the right answer for. */
 export const COLOR_ROLES = THEME_ROLES.filter((r) => r !== "font") as Exclude<keyof Theme, "font">[];
 
+/**
+ * `[security]` — the policy that decides which agent-fired verbs need a human.
+ *
+ * The default is the interesting one: an untrusted caller's `high` and
+ * `critical` priority verbs are HELD (parked as a pending action for you to
+ * approve), everything else runs. `hold` moves the line wholesale; `allow` and
+ * `guard` move it one verb at a time and always win over `hold`.
+ */
+export interface SecurityConfig {
+  /**
+   * Which verbs an untrusted caller must ask about:
+   *   - `"default"`     high + critical priority (the shipped policy).
+   *   - `"all-writes"`  anything past a pure read/local (priority >= medium).
+   *   - `"none"`        nothing — agents act freely (same as KONA_TRUST_AGENTS=1).
+   */
+  hold: SecurityHold;
+  /** Verbs that run regardless — `"spotify.playPause"`, `"spotify.*"`, `"notes"`. */
+  allow: string[];
+  /** Verbs that are held regardless, same spellings. */
+  guard: string[];
+  /** How long a pending action waits for you before it is dropped. */
+  expireMs: number;
+}
+
+export type SecurityHold = "default" | "all-writes" | "none";
+
+const HOLDS: SecurityHold[] = ["default", "all-writes", "none"];
+
+/** Ten minutes: long enough to walk back to the terminal, short enough to forget. */
+export const DEFAULT_APPROVAL_EXPIRY_MS = 10 * 60_000;
+
+export const DEFAULT_SECURITY: SecurityConfig = {
+  hold: "default",
+  allow: [],
+  guard: [],
+  expireMs: DEFAULT_APPROVAL_EXPIRY_MS,
+};
+
+/** `"90"` / `"90s"` / `"10m"` / `"1h"` -> ms. Null when it isn't a duration. */
+function durationMs(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) && v > 0 ? v * 1000 : null;
+  if (typeof v !== "string") return null;
+  const m = /^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\s*$/i.exec(v);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = (m[2] ?? "s").toLowerCase();
+  const scale = unit === "ms" ? 1 : unit === "s" ? 1_000 : unit === "m" ? 60_000 : 3_600_000;
+  return n * scale;
+}
+
+/** A list-of-strings key, tolerating the bare string people type. */
+function stringList(v: unknown, label: string, errors: string[]): string[] {
+  if (v === undefined) return [];
+  if (typeof v === "string") return v.trim() ? [v.trim()] : [];
+  if (!Array.isArray(v)) {
+    errors.push(`${label}: must be a list of "<applet>.<verb>" names (got ${JSON.stringify(v)})`);
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of v) {
+    if (typeof entry === "string" && entry.trim()) out.push(entry.trim());
+    else errors.push(`${label}: not a verb name (got ${JSON.stringify(entry)})`);
+  }
+  return out;
+}
+
 export interface KonaConfig {
   /** Applet a bare `kona` opens. null = show the launcher. */
   defaultApplet: string | null;
@@ -99,6 +166,8 @@ export interface KonaConfig {
   preset: string;
   /** The roles the file named EXPLICITLY — what still wins over a new preset. */
   themeOverrides: Partial<Theme>;
+  /** `[security]` — which agent-fired verbs need a human first. */
+  security: SecurityConfig;
   /** Raw `[applets.<id>]` blocks, keyed by applet id. */
   applets: Record<string, Record<string, unknown>>;
   /**
@@ -209,6 +278,29 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     }
   }
 
+  // --- [security]: the human-in-the-loop policy for untrusted callers
+  const security: SecurityConfig = { ...DEFAULT_SECURITY };
+  const rawSecurity = doc.security;
+  if (rawSecurity !== undefined && !isTable(rawSecurity)) {
+    errors.push("[security] must be a table");
+  } else if (isTable(rawSecurity)) {
+    const rawHold = rawSecurity.hold;
+    if (rawHold !== undefined) {
+      if (typeof rawHold === "string" && HOLDS.includes(rawHold as SecurityHold)) {
+        security.hold = rawHold as SecurityHold;
+      } else {
+        errors.push(`security.hold: must be one of ${HOLDS.join(", ")} (got ${JSON.stringify(rawHold)})`);
+      }
+    }
+    security.allow = stringList(rawSecurity.allow, "security.allow", errors);
+    security.guard = stringList(rawSecurity.guard, "security.guard", errors);
+    if (rawSecurity.expire !== undefined) {
+      const ms = durationMs(rawSecurity.expire);
+      if (ms === null) errors.push(`security.expire: must be a duration like "10m" (got ${JSON.stringify(rawSecurity.expire)})`);
+      else security.expireMs = ms;
+    }
+  }
+
   // --- external plugin roots
   const plugins: string[] = [];
   const rawPlugins = doc.plugins;
@@ -228,6 +320,7 @@ export function resolveConfig(raw: unknown, meta: { path: string; exists: boolea
     theme,
     preset,
     themeOverrides,
+    security,
     applets,
     plugins,
     path: meta.path,
@@ -318,6 +411,14 @@ export function themeOverride(): Theme | null {
 /** The palette. This is the call sites' entry point; never hardcode a hex. */
 export function theme(): Theme {
   return override ?? loadConfig().theme;
+}
+
+/**
+ * The approval policy in force. Read at call time (like `theme()`), so editing
+ * the config file changes what the running daemon holds without a restart.
+ */
+export function securityConfig(): SecurityConfig {
+  return loadConfig().security;
 }
 
 /** The named preset the palette starts from. */
@@ -444,6 +545,22 @@ ${blocks.join("\n\n")}
 # Load applets from outside the repo: a plugin package (a dir with index.ts)
 # or a dir full of them. \`~/.config/kona/plugins/*\` is always scanned.
 # plugins = ["~/src/my-kona-applet"]
+
+# Which agent-fired verbs need YOU first.
+#
+# Applets declare how much oversight each of their verbs needs — "low" (reads
+# and kona-local state), "medium" (reversible remote effects), "high" (acts as
+# you and commits) or "critical" (irreversible loss) — and this decides which
+# of those an UNTRUSTED caller may fire on its own. The TUI is always trusted:
+# you pressed the key. Anything held is parked in the \`approvals\` applet for
+# you to approve or deny.
+[security]
+# hold = "default"                # hold high + critical (the default)
+# hold = "all-writes"             # ...or anything past a read/local (>= medium)
+# hold = "none"                   # ...or nothing (same as KONA_TRUST_AGENTS=1)
+# allow = ["spotify.playPause"]   # these run regardless of the level rule
+# guard = ["notes.clear"]         # ...and these are always held
+# expire = "10m"                  # how long a pending action waits for you
 
 # The palette AND the display typeface. \`preset\` picks a named one (\`kona
 # theme\` lists them, and the \`theme\` applet previews them live); the roles

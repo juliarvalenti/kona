@@ -7,12 +7,13 @@ import { loadConfig, configDir, defaultConfigToml, resetConfig } from "../core/c
 import { loadPackages, type AppletPackage } from "../core/load.ts";
 import { catalogLines, catalogMarkdown } from "../core/catalog.ts";
 import { skillMarkdown } from "../core/skill.ts";
+import { wouldHold } from "../core/guard.ts";
 import { appletPrompt, surfacePrompt } from "../core/prompt.ts";
 import { copyToClipboard, clipboardHelpers } from "../core/clipboard.ts";
 import { scaffoldApplet, validId } from "../core/scaffold.ts";
 import { linkApplet, linkPath, linksFile, readLinks, unlinkApplet } from "../core/links.ts";
 import { installPlugin, listPlugins, pluginsDir, removePlugin, type Installed, type Plugin } from "../core/plugins.ts";
-import type { AnyApplet, AppletCall, AuthProvider, ToolSpec } from "../sdk/index.ts";
+import type { AnyApplet, AppletCall, AuthProvider, Priority, ToolSpec } from "../sdk/index.ts";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -138,10 +139,12 @@ async function openApplet(def: AnyApplet, args: string[]): Promise<void> {
     const state = ((await api(`/applets/${def.id}/state`).catch(() => ({}))) ?? {}) as Record<string, unknown>;
     const wanted = open(args, state);
     const calls: AppletCall[] = wanted ? (Array.isArray(wanted) ? wanted : [wanted]) : [];
-    for (const c of calls) await callVerb(def.id, c.verb, c.args ?? {});
+    // A human typed this command line, which is the same confirmation a
+    // keypress is — so these run outright rather than queueing for approval.
+    for (const c of calls) await callVerb(def.id, c.verb, c.args ?? {}, { trusted: true });
   }
   // Applets with a `refresh` verb (e.g. email) get an initial load on open.
-  await callVerb(def.id, "refresh", {}).catch(() => {});
+  await callVerb(def.id, "refresh", {}, { trusted: true }).catch(() => {});
   const { runHost } = await import("../host/index.ts");
   await runHost(def.id);
 }
@@ -177,7 +180,10 @@ async function usage() {
                            them) — --copy puts it on the clipboard, --skill
                            renders it as a SKILL.md stanza
   kona state <applet>      print an applet's current state
-  kona call <applet> <verb> [json]   fire a verb (this is what the agent does)
+  kona call <applet> <verb> [json]   fire a verb (this is what the agent does;
+                           a guarded verb comes back parked for you to approve)
+  kona approvals           open the tray of what your agents asked to run
+  kona approvals list      ...print it instead — approve <id> / deny <id> decide
   kona config [init]       show the resolved config (init writes a starter file)
   kona login [${providers.join("|") || "provider"}]  connect an account
   kona logout <provider> [address]     disconnect one account, or all of them
@@ -487,7 +493,10 @@ switch (cmd) {
       // Rendered from the applets on this machine, not from the daemon: the
       // skill is docs, and asking for docs shouldn't start a background
       // process (a SessionStart hook regenerates it on every session).
-      const md = skillMarkdown((await packages()).map((p) => p.def));
+      const policy = loadConfig().security;
+      const md = skillMarkdown((await packages()).map((p) => p.def), {
+        guard: (ref) => wouldHold(ref, policy),
+      });
       // `--install` is the common case spelled out: the project-local skill dir
       // Claude Code (and friends) already look in.
       const dest = out ?? (rest.includes("--install") ? ".claude/skills/kona/SKILL.md" : null);
@@ -506,9 +515,14 @@ switch (cmd) {
       console.log(JSON.stringify(tools, null, 2));
       break;
     }
-    // Names, plus the one-liner when the applet documents the verb.
+    // Names, plus the one-liner when the applet documents the verb — and a mark
+    // on the ones an agent cannot fire unattended, since that is the first
+    // thing you want to know about a verb you are about to hand to one.
     const width = Math.max(...tools.map((t) => t.name.length), 0);
-    for (const t of tools) console.log(t.doc ? `${t.name.padEnd(width)}  ${t.doc}` : t.name);
+    for (const t of tools) {
+      const held = t.guarded ? "  \x1b[33m(needs approval)\x1b[0m" : "";
+      console.log(`${t.doc ? `${t.name.padEnd(width)}  ${t.doc}` : t.name}${held}`);
+    }
     break;
   }
 
@@ -525,6 +539,10 @@ switch (cmd) {
     const id = rest.find((a) => !a.startsWith("--"));
     const defs = (await packages()).map((p) => p.def);
     const skill = flags.has("--skill");
+    // What THIS machine holds for a human, so a pasted prompt warns about the
+    // verbs that will actually wait here rather than the shipped defaults.
+    const policy = loadConfig().security;
+    const guard = (ref: { applet: string; verb: string; priority: Priority }) => wouldHold(ref, policy);
     let text: string;
     if (id) {
       const def = defs.find((d) => d.id === id);
@@ -532,9 +550,11 @@ switch (cmd) {
         console.error(`no such applet: ${id}`);
         process.exit(1);
       }
-      text = skill ? skillMarkdown([def], { name: `kona-${id}` }) : appletPrompt(def, { base: base() });
+      text = skill
+        ? skillMarkdown([def], { name: `kona-${id}`, guard })
+        : appletPrompt(def, { base: base(), guard });
     } else {
-      text = skill ? skillMarkdown(defs) : surfacePrompt(defs, { base: base() });
+      text = skill ? skillMarkdown(defs, { guard }) : surfacePrompt(defs, { base: base(), guard });
     }
     if (!flags.has("--copy")) {
       console.log(text);
@@ -576,7 +596,15 @@ switch (cmd) {
         process.exit(1);
       }
     }
-    console.log(JSON.stringify(await callVerb(id, verb, args), null, 2));
+    // NOT trusted: `kona call` is the agent's seam (it is what the skill tells
+    // an agent to run), so a guarded verb comes back parked. Say so in words —
+    // an exit code and a `pending` id beat a silent no-op.
+    const res = (await callVerb(id, verb, args)) as { pending?: string; hint?: string };
+    console.log(JSON.stringify(res, null, 2));
+    if (res?.pending) {
+      console.error(`\nheld for approval — \`kona approvals\` to decide, or \`kona approvals approve ${res.pending}\``);
+      process.exit(2);
+    }
     break;
   }
 
@@ -672,6 +700,82 @@ switch (cmd) {
     break;
   }
 
+  /**
+   * The tray from the shell: what your agents asked for, and yes or no.
+   *
+   * These calls are TRUSTED (a human is typing them), which is the whole point
+   * — `kona call approvals approve` from an agent is refused by the daemon,
+   * because an approval an agent can grant itself is not an approval.
+   *
+   * A bare `kona approvals` still opens the applet, like every other id: the
+   * tray is a surface first, and this is the headless way at it.
+   */
+  case "approvals": {
+    await ensureDaemon();
+    const [action, id] = rest;
+    if (!action) {
+      const pkg = (await packages()).find((p) => p.def.id === "approvals");
+      if (pkg) {
+        await openApplet(pkg.def, []);
+        break;
+      }
+    }
+
+    const tray = () =>
+      api("/approvals") as Promise<{
+        pending: Array<{ id: string; applet: string; verb: string; args: unknown; priority: string; requestedBy: string; reason: string; expiresAt: number }>;
+        log: Array<{ id: string; applet: string; verb: string; outcome: string; by: string; error?: string; allowed?: boolean }>;
+      }>;
+
+    const list = async () => {
+      const { pending, log } = await tray();
+      if (!pending.length) console.log("nothing waiting on you\n");
+      for (const p of pending) {
+        const mins = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60_000));
+        console.log(`${p.id}  ${p.applet}.${p.verb}  \x1b[90m(${p.priority}, by ${p.requestedBy}, ${mins}m left)\x1b[0m`);
+        console.log(`     ${JSON.stringify(p.args)}`);
+      }
+      if (log.length) {
+        console.log(`\nrecent activity`);
+        for (const e of log.slice(0, 10)) {
+          const mark = e.outcome === "ran" ? "\x1b[32m✓\x1b[0m" : e.outcome === "denied" ? "\x1b[90m✕\x1b[0m" : "\x1b[33m⧗\x1b[0m";
+          console.log(`  ${mark} ${`${e.applet}.${e.verb}`.padEnd(24)} ${e.outcome}  \x1b[90mby ${e.by}\x1b[0m`);
+        }
+      }
+      console.log(`\nkona approvals approve|deny <id>   ·   kona approvals — the same tray in the TUI`);
+    };
+
+    switch (action) {
+      case "list":
+        await list();
+        break;
+      case "approve":
+      case "deny": {
+        const { pending } = await tray();
+        // With one thing waiting, "approve" without an id means that one.
+        const which = id ?? (pending.length === 1 ? pending[0]!.id : undefined);
+        if (!which) {
+          console.error(pending.length ? `which one? ${pending.map((p) => p.id).join(", ")}` : "nothing waiting");
+          process.exit(1);
+        }
+        const res = (await callVerb("approvals", action, { id: which }, { trusted: true })) as {
+          result?: { error?: string; outcome?: string; result?: string };
+        };
+        const out = res.result ?? {};
+        if (out.error) {
+          console.error(out.error);
+          process.exit(1);
+        }
+        console.log(`${which}: ${out.outcome ?? action}${out.result ? `  ${out.result}` : ""}`);
+        break;
+      }
+      default:
+        console.error("usage: kona approvals [list|approve <id>|deny <id>]   (no argument opens the applet)");
+        process.exit(1);
+    }
+    break;
+  }
+
   case undefined: {
     // A bare `kona` opens the configured default applet; with none set (or one
     // that doesn't exist) you get the launcher.
@@ -683,7 +787,7 @@ switch (cmd) {
       if (applets.some((a) => a.id === want)) start = want;
       else console.error(`config: default = "${want}" is not an applet — opening the launcher`);
     }
-    if (start) await callVerb(start, "refresh", {}).catch(() => {});
+    if (start) await callVerb(start, "refresh", {}, { trusted: true }).catch(() => {});
     const { runHost } = await import("../host/index.ts");
     await runHost(start);
     break;

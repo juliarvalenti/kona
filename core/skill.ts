@@ -1,4 +1,4 @@
-import type { AnyApplet, Recipe, ToolSpec } from "../sdk/index.ts";
+import type { AnyApplet, Priority, Recipe, ToolSpec } from "../sdk/index.ts";
 import { toolsForApplet } from "../sdk/index.ts";
 
 /**
@@ -20,6 +20,12 @@ export interface SkillOpts {
   name?: string;
   /** Base URL to document for the HTTP seam. */
   base?: string;
+  /**
+   * Would an agent's call be held for a human? Passed by a caller that has the
+   * machine's `[security]` policy in hand (the daemon, the CLI), so the skill
+   * marks the verbs that will actually wait HERE. Omitted, nothing is marked.
+   */
+  guard?: (ref: { applet: string; verb: string; priority: Priority }) => boolean;
 }
 
 /**
@@ -57,6 +63,8 @@ export function exampleCall(t: ToolSpec): string {
  */
 export function verbLine(t: ToolSpec): string {
   const bits = [`- \`${t.name}\``];
+  // A verb you cannot fire unattended is the first thing to know about it.
+  if (t.guarded) bits.push("**(needs approval)**");
   if (t.doc) bits.push(`— ${t.doc}`);
   const trail: string[] = [`\`${exampleCall(t)}\``];
   if (t.key) trail.push(`key \`${t.key}\``);
@@ -74,8 +82,8 @@ export function recipeBlock(r: Recipe): string {
  * alone, and its search seam. `level` is the heading depth, so the skill can
  * nest it under "Applets on this machine" and a copied prompt can lead with it.
  */
-export function appletSection(def: AnyApplet, level = 3): string {
-  const tools = toolsForApplet(def);
+export function appletSection(def: AnyApplet, level = 3, guard?: SkillOpts["guard"]): string {
+  const tools = toolsForApplet(def, guard);
   const acting = tools.filter((t) => !t.nav);
   const cursor = tools.filter((t) => t.nav);
   const out: string[] = [`${"#".repeat(level)} ${def.id} — ${def.title}`, ""];
@@ -105,6 +113,14 @@ export function skillMarkdown(applets: AnyApplet[], opts: SkillOpts = {}): strin
   const ids = applets.map((a) => a.id);
   // Which applets actually have a refresh verb is the manifest's business too.
   const refreshable = applets.filter((a) => "refresh" in a.verbs).map((a) => `\`${a.id}\``);
+  // What THIS machine holds, from the same manifest the verbs come from — so
+  // the skill can never promise an agent a verb it will actually have to wait
+  // for, or warn about one it won't.
+  const guarded = applets
+    // The tray's own verbs are guarded too, but they are not YOURS to propose —
+    // naming them here would read like a queue you could join.
+    .filter((a) => a.id !== "approvals")
+    .flatMap((a) => toolsForApplet(a, opts.guard).filter((t) => t.guarded).map((t) => t.name));
 
   const head = `---
 name: ${name}
@@ -152,13 +168,53 @@ state after the call — so you rarely need a follow-up read.
    in state rather than throwing HTTP errors.
 4. **Refresh before you read** an applet backed by a network service, unless its
    tick has been running${refreshable.length ? ` — \`refresh\` on ${list(refreshable)}` : ""}.
+5. **A guarded verb is a proposal, not a failure.** See below.
+
+## Verbs that need a human
+
+You are not the human, and the daemon knows it: a keypress confirms itself,
+your POST does not. So every verb carries a PRIORITY — \`low\` (reads and
+kona-local state), \`medium\` (reversible remote effects: playback, mark-read),
+\`high\` (acts as them: sends the mail, posts the message) or \`critical\` (does
+not come back) — and this machine's \`[security]\` policy decides which of those
+you may fire on your own.${
+    guarded.length
+      ? `
+
+On this machine that holds ${list(guarded.slice(0, 6).map((n) => `\`${n}\``))}${
+          guarded.length > 6 ? ` and ${guarded.length - 6} more` : ""
+        } — every one of them marked **(needs approval)** in the list below.`
+      : ""
+  }
+
+A held call comes back \`202\` with the verb NOT run:
+
+\`\`\`json
+{ "ok": false, "pending": "p3", "hint": "held for a human: high-priority verbs need a human" }
+\`\`\`
+
+What to do with that:
+
+- **Wait, don't retry.** Poll \`GET ${base}/approvals/<id>\` (or watch the
+  \`approval\` event on \`/events\`) — it answers \`pending\`, then \`ran\` with the
+  verb's real result, or \`denied\`/\`expired\`. Firing it again just parks a
+  second copy of the same proposal.
+- **A denial is an answer.** Don't route around it, and never try to approve
+  your own: \`approvals.approve\` refuses any caller but the human.
+- **Say what you are proposing.** The human sees your exact args, so send the
+  real message, not a placeholder you meant to fix up later.
+- **Check first.** \`kona tools --json\` marks each verb's \`priority\`, and
+  \`"guarded": true\` on the ones that will wait — plan the order of a job
+  around them instead of discovering it halfway through.
+- **A workflow pauses mid-run.** A run you start stops at its first guarded
+  step and continues when that step is approved.
 
 ## Applets on this machine
 
 Installed: ${list(ids.map((i) => `\`${i}\``))}.
 `;
 
-  const body = applets.map((a) => appletSection(a)).join("\n\n");
+  const body = applets.map((a) => appletSection(a, 3, opts.guard)).join("\n\n");
 
   const tail = recipes.length
     ? `\n\n## Worked examples\n\n${recipes.map(recipeBlock).join("\n\n")}`

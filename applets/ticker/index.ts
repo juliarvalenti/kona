@@ -130,6 +130,9 @@ export default defineApplet<TickerState>({
     updatedAt: 0,
   },
 
+  /** A watchlist is a list: dropping a symbol or resetting it costs a retype. */
+  priority: { remove: "low", reset: "low" },
+
   docs: {
     refresh: "Poll quotes now, ignoring the every-45s gate.",
     add: { doc: "Add symbols to the watchlist (comma- or space-separated).", args: { symbols: "NVDA, BTC-USD" } },

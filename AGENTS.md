@@ -83,6 +83,43 @@ and your branch cannot conflict with another agent's. `CONTRIBUTING.md` has the
 full contract; if you find yourself editing a file outside your package to make
 your applet work, that is a platform bug worth reporting.
 
+## Verbs that need a human
+
+You are not the human at the keyboard, and the daemon can tell: a keypress
+confirms itself, an HTTP call does not. So every verb carries a **priority** —
+`low` (reads and kona-local state), `medium` (reversible remote effects:
+playback, mark-read), `high` (acts as them: sends the mail, posts the message)
+or `critical` (does not come back) — and the machine's `[security]` policy in
+`config.toml` decides which of those you may fire on your own. By default `high`
+and `critical` are **held**.
+
+A held call runs nothing and answers `202`:
+
+```json
+{ "ok": false, "pending": "p3", "hint": "held for a human: high-priority verbs need a human" }
+```
+
+It is a proposal, and it is now in front of them — in the `approvals` applet,
+on the dash, and as a desktop banner. Approving runs the verb and hands you its
+real result; denying or letting it expire drops it.
+
+```sh
+kona tools --json                # every verb's `priority`, and `guarded: true`
+kona call email send '{...}'     # -> { pending: "p3" }, exit code 2
+curl -s localhost:4177/approvals/p3   # "pending", then "ran" with the result
+```
+
+Four rules: **wait, don't retry** (re-firing queues a second copy — poll
+`/approvals/<id>` or watch the `approval` event on `/events`); **a denial is an
+answer**, not an obstacle to route around; **send the real arguments**, because
+the human approves what they can see; and **never try to approve your own** —
+`approvals.approve` refuses every caller but the human. A workflow you start
+pauses at its first guarded step and resumes when that step is approved.
+
+If you are being asked to act unattended and the waiting is wrong for the job,
+say so — the human can `allow` a verb, or set `hold = "none"`, in one line of
+config. Don't work around the tray.
+
 ## Notifications
 
 Verbs you fire can reach the human's screen: applets call `notify()` from

@@ -172,6 +172,14 @@ export default defineApplet<NotesState>({
   labels: ["scratch"],
   initialState: { notes: [], cursor: 0, query: "", open: null, draft: null, history: [] },
 
+  /**
+   * Nothing here leaves the machine, and `remove` pushes an undo snapshot — so
+   * curating a single note is `low`. `clear` wipes the WHOLE pad, though: even
+   * with `u` in reach that is the one loss worth pausing an agent for, so it is
+   * `critical` and held by default.
+   */
+  priority: { remove: "low", clear: "critical" },
+
   docs: {
     add: {
       doc: "Write a note. `{title, body}`, or `{text}` whose first line titles it. Newest first.",

@@ -75,6 +75,7 @@ The fields that used to be entries in shared files:
 | `configSample` | a block in the starter file `kona config init` writes |
 | `labels` / `requires` | a paragraph appended to the README |
 | `dash` | a branch in the dashboard's aggregator — your own line on the cockpit |
+| `effects` | a hardcoded list of "dangerous verbs" somewhere central |
 
 ```ts
 export default defineApplet<PomodoroState>({
@@ -87,6 +88,7 @@ export default defineApplet<PomodoroState>({
   requires: ["nothing"],
   initialState: { round: 0 },
   verbs: { start: (args, { state, emit }) => { /* ... */ } },
+  priority: { start: "low", announce: "high" },   // how much oversight each verb needs
   docs: { start: { doc: "Start a round.", args: { minutes: 25 } } },
   notifications: { "pomodoro.done": { summary: "a round ends", default: true } },
   cli: { usage: "kona pomodoro 50m", open: (args) => (args[0] ? { verb: "start", args: { minutes: args[0] } } : null) },
@@ -95,6 +97,27 @@ export default defineApplet<PomodoroState>({
   view: (state) => [/* ... */],
 });
 ```
+
+### Say how much oversight a verb needs
+
+Your verbs run for a human pressing a key AND for an agent that nobody
+confirmed. `priority` is where you say how far each one reaches, per verb:
+
+```ts
+priority: { send: "high", trash: "critical", playPause: "medium", draft: "low" },
+```
+
+`low` is a read or your own state slice; `medium` is a reversible remote effect
+(playback, mark-read, archive); `high` acts as the user and commits (sends the
+mail, posts the message); `critical` does not come back. Anything you leave out
+is guessed from the verb's NAME, and the guess is deliberately jumpy — `clear`
+reads as critical — so declare the ones where you know better. `spotify.playPause`
+is `medium` because a paused track is a reversible nudge; `email.send` is `high`.
+
+By default an untrusted caller's `high` and `critical` verbs are parked for the
+human in the `approvals` applet instead of running. That is a promise your
+applet is making on its own behalf: mark a verb `medium` (or `low`) because you
+know it is recoverable, never to spare an agent the wait.
 
 ### Say what is live, and land on the dashboard
 

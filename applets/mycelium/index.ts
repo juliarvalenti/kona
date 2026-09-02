@@ -340,6 +340,15 @@ agent = "kona"       # the name your messages are posted under`,
     postedAt: {},
   },
 
+  /**
+   * `post` is SPEECH — it lands in a room the human is reading, under your
+   * name, and cannot be unsaid — so it is `high`, as is `create` (a new room
+   * that others will see). `status` and `remember` are the reversible remote
+   * half: a presence field and a room's scratchpad, overwritten by the next
+   * call — `medium`.
+   */
+  priority: { post: "high", create: "high", status: "medium", remember: "medium" },
+
   docs: {
     refresh: "Re-read the room list (and the open room) from the backend.",
     open: { doc: "Drill into a room by `room` id — agents, recent messages, shared memory.", args: { room: "ship-kona" } },

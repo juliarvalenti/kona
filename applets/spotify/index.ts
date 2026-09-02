@@ -207,6 +207,25 @@ accent = "#1db954"   # Spotify green`,
     stack: [],
   },
 
+  /**
+   * Playback is not local state: these move the speakers someone may be
+   * listening to. But every one of them is REVERSIBLE — pause what you started,
+   * turn the volume back down — so transport is `medium`, not `high`: it runs
+   * free by default and a human never has to approve a skipped track.
+   */
+  priority: {
+    playPause: "medium",
+    next: "medium",
+    previous: "medium",
+    shuffle: "medium",
+    repeat: "medium",
+    seek: "medium",
+    volume: "medium",
+    queue: "medium",
+    transfer: "medium",
+    devices: "low",
+  },
+
   docs: {
     refresh: "Re-read now-playing, the queue, and the active device. Call this before you read state.",
     playPause: "Toggle playback.",
