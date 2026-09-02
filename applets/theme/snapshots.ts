@@ -3,8 +3,8 @@ import { defineSnapshots } from "../../sdk/testing.ts";
 /**
  * The picker draws every preset in its OWN colors, so these fixtures pin the
  * text around them: which row is ticked (applied), which is previewing, that
- * the sample cells are on the row — and the figlet line, which is the half of
- * a theme the colors can't show in plain text.
+ * the sample cells are on the row — and the figlet column beside it, which is
+ * the half of a theme the colors can't show in plain text.
  */
 export default defineSnapshots([
   {
@@ -23,7 +23,19 @@ export default defineSnapshots([
       "Dracula",
       "code", // the per-row mini sample
       "slick — the figlet every hero is lettered in",
+      "figlet", // ...and the second axis, beside the palettes
+      "✓ auto",
     ],
+  },
+  {
+    // The mix the picker exists for: Nord's colors, a face Nord never shipped.
+    // The figlet list has the arrows (`tab`), so `huge` is the filled row and
+    // the wordmark above is lettered in it.
+    name: "a figlet picked on its own axis composes with the palette",
+    state: { cursor: 5, fontCursor: 5, axis: "font", applied: "nord", appliedFont: "grid", note: null },
+    width: 80,
+    height: 30,
+    contains: ["previewing Nord · huge", "▸ huge", "✓ auto", "huge — the figlet every hero is lettered in"],
   },
   {
     // Dracula letters in `huge`, which wants 50 cells for "kona" — more than
@@ -45,9 +57,14 @@ export default defineSnapshots([
   },
   {
     name: "a save says what it wrote",
-    state: { cursor: 5, applied: "nord", note: "saved Nord to ~/.config/kona/config.toml" },
+    state: {
+      cursor: 5,
+      applied: "nord",
+      appliedFont: "grid",
+      note: "saved Nord · grid (its own) to ~/.config/kona/config.toml",
+    },
     width: 72,
-    height: 20,
-    contains: ["saved Nord to ~/.config/kona/config.toml", "✓ Nord"],
+    height: 28,
+    contains: ["saved Nord · grid (its own) to ~/.config/kona/config.toml", "✓ Nord"],
   },
 ]);
