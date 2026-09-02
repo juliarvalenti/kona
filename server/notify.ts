@@ -3,7 +3,7 @@ import { join, dirname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 
 /**
- * Desktop notifications — the daemon's one outward-facing side effect.
+ * Desktop notifications — the daemon reaching your screen.
  *
  * The dash is meant to be left open, but nobody stares at a terminal all day.
  * This is the ambient half: an applet's tick or verb calls notify() and the OS
@@ -21,7 +21,8 @@ import { mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
  *                         bad first sync can't carpet the screen.
  *
  * Backend: terminal-notifier when installed (clickable, grouped), else
- * `osascript -e 'display notification'`. Anywhere but macOS this is a no-op.
+ * `osascript -e 'display notification'`. Anywhere but macOS this is a no-op —
+ * which is why the audible half lives in `server/sound.ts` and not in here.
  */
 
 export interface EventSpec {
@@ -83,6 +84,12 @@ export interface Notification {
   url?: string;
   /** Dedupe identity. Defaults to the event + text. */
   key?: string;
+  /**
+   * Post this banner without the notification sound. For an event that already
+   * plays its own cue (`server/sound.ts`), so the human hears one sound rather
+   * than a ding on top of a ding.
+   */
+  silent?: boolean;
   /** How long this key stays deduped. Default DEDUPE_MS. */
   dedupeMs?: number;
 }
@@ -260,7 +267,7 @@ export async function notify(n: Notification): Promise<NotifyResult> {
   if (throttled(now)) return "throttled";
 
   const be = backend();
-  const cmd = be ? buildCommand(be, n, readConfig().sound !== false) : [];
+  const cmd = be ? buildCommand(be, n, readConfig().sound !== false && !n.silent) : [];
 
   if (sender) return (await sender(cmd, n)) ? "sent" : "failed";
   if (process.env.KONA_NOTIFY_DRY) {

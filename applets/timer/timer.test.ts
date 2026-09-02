@@ -1,5 +1,10 @@
-import { test, expect } from "bun:test";
+import { test, expect, afterEach } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { theme, type AppletCtx, type ViewNode } from "../../sdk/index.ts";
+import { resetConfig } from "../../core/config.ts";
+import { __setPlayer } from "../../server/sound.ts";
 import timer from "./index.ts";
 
 /**
@@ -597,4 +602,98 @@ test("state persisted before the two shared a cursor selects the session", () =>
   expect(h.state.focus).toBe("pomodoro");
   h.call("toggle");
   expect(h.state.pomodoro.running).toBe(false);
+});
+
+// --- sounds -----------------------------------------------------------------
+//
+// A countdown you walked away from has to reach you somehow, and the desktop
+// banner only reaches macOS. These pin the audible half: which moment plays
+// which cue, that a manual skip stays quiet, and that the config can silence
+// one cue or all of them. The player is faked, so nothing here makes a noise.
+
+const soundDirs: string[] = [];
+const prevConfigDir = process.env.KONA_CONFIG_DIR;
+let played: Array<{ sound: string; volume: number }> = [];
+
+/** A throwaway `[applets.timer]` block, plus a player that only records. */
+function withSound(toml?: string) {
+  const dir = mkdtempSync(join(tmpdir(), "kona-timer-"));
+  soundDirs.push(dir);
+  if (toml !== undefined) writeFileSync(join(dir, "config.toml"), toml);
+  process.env.KONA_CONFIG_DIR = dir;
+  resetConfig();
+  played = [];
+  __setPlayer((_cmd, sound, volume) => {
+    played.push({ sound, volume });
+    return true;
+  });
+}
+
+afterEach(() => {
+  __setPlayer(null);
+  if (prevConfigDir === undefined) delete process.env.KONA_CONFIG_DIR;
+  else process.env.KONA_CONFIG_DIR = prevConfigDir;
+  resetConfig();
+  for (const d of soundDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+test("a countdown reaching zero plays the done cue, once", () => {
+  withSound();
+  const h = harness();
+  h.call("start", { seconds: 2, label: "pasta" });
+  h.tick();
+  expect(played).toEqual([]); // still counting
+  h.tick();
+  expect(played).toEqual([{ sound: "alarm", volume: 1 }]);
+  h.tick(); // a finished countdown does not keep ringing
+  expect(played).toHaveLength(1);
+});
+
+test("each pomodoro boundary gets its own cue", () => {
+  withSound();
+  const h = harness();
+  pomo(h); // work 2s -> short 1s -> work 2s
+  h.tick();
+  h.tick(); // work ran out: break time
+  expect(played.map((p) => p.sound)).toEqual(["chime"]);
+  h.tick(); // ...and the break ran out: back to it
+  expect(played.map((p) => p.sound)).toEqual(["chime", "rise"]);
+});
+
+test("skipping a phase yourself is silent — you are already at the keyboard", () => {
+  withSound();
+  const h = harness();
+  pomo(h);
+  h.call("pomodoro.skip");
+  h.call("pomodoro.stop");
+  expect(played).toEqual([]);
+});
+
+test("config picks the tone, the volume, and silence", () => {
+  withSound(`[applets.timer.sounds]\ndone = "Frog"\nvolume = 0.25\n`);
+  const h = harness();
+  h.call("start", { seconds: 1 });
+  h.tick();
+  expect(played).toEqual([{ sound: "Frog", volume: 0.25 }]);
+
+  // One cue off, the others untouched.
+  withSound(`[applets.timer.sounds]\ndone = false\n`);
+  const g = harness();
+  g.call("start", { seconds: 1 });
+  g.tick();
+  expect(played).toEqual([]);
+  pomo(g);
+  g.tick();
+  g.tick();
+  expect(played.map((p) => p.sound)).toEqual(["chime"]);
+
+  // ...and the whole applet muted, which is what an open-plan office needs.
+  withSound(`[applets.timer]\nsounds = false\n`);
+  const q = harness();
+  q.call("start", { seconds: 1 });
+  q.tick();
+  pomo(q);
+  q.tick();
+  q.tick();
+  expect(played).toEqual([]);
 });
