@@ -119,24 +119,62 @@ export function launcherKey(
 // Race each read against a watchdog so a stalled (not just dropped) stream
 // still gets torn down and retried.
 const STALL_MS = 45_000;
+// Connecting gets its own, shorter budget. /events answers in a millisecond
+// when the daemon is up, so a connect that takes seconds is a socket that will
+// never answer — most often a dead keep-alive connection Bun handed back from
+// an attempt we aborted a moment ago. That await used to be the one unguarded
+// wait in this function, and hanging there wedges subscribe()'s retry loop for
+// good: no throw, no next attempt, no render — the window sits on whatever
+// "reconnecting… (n)" the last drop wrote, forever (#87).
+// Read per attempt, not once at import: the regression test compresses it.
+const connectMs = () => Number(process.env.KONA_CONNECT_MS ?? 10_000);
 
-async function readStream(
+/**
+ * A promise that rejects after `ms`, plus the cancel that stops its timer.
+ * Raced against a hang; the timer must be cleared whichever side wins, or an
+ * idle-but-pending watchdog keeps the process (and its event loop) awake.
+ */
+function watchdog(ms: number, why: string): { expired: Promise<never>; cancel: () => void } {
+  let timer!: ReturnType<typeof setTimeout>;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(why)), ms);
+  });
+  return { expired, cancel: () => clearTimeout(timer) };
+}
+
+export async function readStream(
   onSnapshot: (s: States) => void,
   onState: (id: string, s: AppletState) => void,
 ) {
   const controller = new AbortController();
-  const res = await fetch(`${base()}/events`, { signal: controller.signal });
-  if (!res.body) throw new Error("no event stream");
+  const connecting = fetch(`${base()}/events`, { signal: controller.signal });
+  // The race below abandons this promise when the watchdog wins; the abort that
+  // follows then rejects it with nobody listening. Claim it here so an aborted
+  // attempt can't surface as an unhandled rejection.
+  connecting.catch(() => {});
+  const connect = watchdog(connectMs(), "connect timed out");
+  let res: Response;
+  try {
+    res = await Promise.race([connecting, connect.expired]);
+  } catch (err) {
+    controller.abort(); // don't leave the half-open socket for the pool to hand back
+    throw err;
+  } finally {
+    connect.cancel();
+  }
+  if (!res.body) {
+    controller.abort();
+    throw new Error("no event stream");
+  }
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
   try {
     while (true) {
-      let timer!: ReturnType<typeof setTimeout>;
-      const stall = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("stream stalled")), STALL_MS);
-      });
-      const { done, value } = await Promise.race([reader.read(), stall]).finally(() => clearTimeout(timer));
+      const stall = watchdog(STALL_MS, "stream stalled");
+      const read = reader.read();
+      read.catch(() => {}); // same deal: the abort below rejects an abandoned read
+      const { done, value } = await Promise.race([read, stall.expired]).finally(stall.cancel);
       if (done) break;
       buf += dec.decode(value, { stream: true });
       let i: number;
