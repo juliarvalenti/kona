@@ -21,38 +21,48 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <table>
 <tr>
 <td width="50%" valign="top">
+<img src="docs/shots/2048.svg" width="100%" alt="2048 — a board mid-game, with the score as a hero beside it">
+<br><sub><a href="applets/2048/README.md"><code>2048</code></a> — Slide, merge, repeat. Turn-based, so an agent can play it too.</sub>
+</td>
+<td width="50%" valign="top">
 <img src="docs/shots/approvals.svg" width="100%" alt="Approvals — a queued send shows its exact arguments and what is holding it">
 <br><sub><a href="applets/approvals/README.md"><code>approvals</code></a> — Agent-proposed actions waiting on you, and what your agents did</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/clock.svg" width="100%" alt="World Clock — renders a hero time plus a row per zone">
 <br><sub><a href="applets/clock/README.md"><code>clock</code></a> — Every city you care about, at a glance. Add zones by hand or by agent.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/dash.svg" width="100%" alt="Dashboard — the cockpit: one card per applet with something live, urgent first">
 <br><sub><a href="applets/dash/README.md"><code>dash</code></a> — Live cockpit — whatever your applets say is happening right now.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/email.svg" width="100%" alt="Email — the unified inbox: both mailboxes, newest first, unread led">
 <br><sub><a href="applets/email/README.md"><code>email</code></a> — Read, write, reply and file mail from Gmail and Outlook in one list.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/mycelium.svg" width="100%" alt="Mycelium — room view shows agents, messages, and shared memory">
 <br><sub><a href="applets/mycelium/README.md"><code>mycelium</code></a> — The coordination layer — rooms, agents, and what you say to them.</sub>
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/notes.svg" width="100%" alt="Notes — lists titles with a preview and a count">
 <br><sub><a href="applets/notes/README.md"><code>notes</code></a> — A notepad: titled, multi-line notes that survive restarts.</sub>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="docs/shots/rss.svg" width="100%" alt="RSS — the river: every feed merged, newest first, unread lit">
 <br><sub><a href="applets/rss/README.md"><code>rss</code></a> — Your feeds as one river. Agents can search and open items too.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/shots/snake.svg" width="100%" alt="Snake — a game in play: board, snake, food and the score as a hero">
+<br><sub><a href="applets/snake/README.md"><code>snake</code></a> — The C64 classic. Eat, grow, don't bite yourself.</sub>
 </td>
 <td width="50%" valign="top">
 <img src="docs/shots/spotify.svg" width="100%" alt="Spotify — now-playing shows the active device and its volume">
