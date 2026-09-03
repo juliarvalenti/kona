@@ -25,8 +25,6 @@
 <text x="476" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
 <rect x="501.2" y="84" width="50.4" height="18" fill="#7aa2f7"/>
 <text x="551.6" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -43,8 +41,6 @@
 <text x="509.6" y="115" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
 <rect x="526.4" y="102" width="33.6" height="18" fill="#7aa2f7"/>
 <text x="560" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -60,8 +56,6 @@
 <text x="534.8" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
 <rect x="543.2" y="120" width="16.8" height="18" fill="#7aa2f7"/>
 <text x="560" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -78,8 +72,6 @@
 <text x="526.4" y="151" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
 <rect x="543.2" y="138" width="16.8" height="18" fill="#7aa2f7"/>
 <text x="560" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -92,8 +84,6 @@
 <text x="492.8" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
 <rect x="501.2" y="156" width="50.4" height="18" fill="#7aa2f7"/>
 <text x="551.6" y="169" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -105,8 +95,6 @@
 <text x="341.6" y="187" fill="#7aa2f7" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚══════╝</text>
 <text x="459.2" y="187" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
 <text x="501.2" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -115,8 +103,6 @@
 <text x="165.2" y="205" fill="#6a6a6a" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · </text>
 <path d="M320.6 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="341.6" y="205" fill="#6a6a6a" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">SCORE</text>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
@@ -124,65 +110,46 @@
 <rect x="114.8" y="210" width="50.4" height="18" fill="#00d488" opacity="0.75"/>
 <text x="165.2" y="223" fill="#6a6a6a" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · </text>
 <path d="M320.6 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="47.6" y="241" fill="#6a6a6a" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · · · · · · · · </text>
 <path d="M320.6 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="341.6" y="241" fill="#bb9af7" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">HI      0450</text>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="47.6" y="259" fill="#6a6a6a" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · · · · · · · · </text>
 <path d="M320.6 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="341.6" y="259" fill="#d0d0d0" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">LENGTH    08</text>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="47.6" y="277" fill="#6a6a6a" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · · · · · · · · </text>
 <path d="M320.6 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="341.6" y="277" fill="#d0d0d0" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">SPEED      4</text>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="47.6" y="295" fill="#6a6a6a" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · · · · · · · · </text>
 <path d="M320.6 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M43.4 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="47.6" y="313" fill="#6a6a6a" textLength="268.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">· · · · · · · · · · · · · · · · </text>
 <path d="M320.6 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="341.6" y="313" fill="#00d488" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">RUNNING</text>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M47.6 327H45.2M43.4 318V325.2M45.2 327Q43.4 327 43.4 325.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M47.6 327H316.4" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M316.4 327H318.8M320.6 318V325.2M318.8 327Q320.6 327 320.6 325.2" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="372" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 390V408" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M673.4 390V408" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>

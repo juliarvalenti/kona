@@ -3,34 +3,32 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createStage, type Stage } from "../host/stage.ts";
-import { focusLineOf } from "../host/nodes.ts";
 import { clampScroll, scrollToShow } from "../host/scroll.ts";
 import { box, col, defineApplet, text, type AppletDef, type LayoutOpts, type ViewNode } from "../sdk/index.ts";
 
 /**
  * Scrolling, measured against the frame that actually gets drawn.
  *
- * Every scroll bug we have shipped has the same shape: the follow math and the
- * renderer disagree about the SIZE OF THINGS. The math counts a row as one
- * line; the renderer wraps it to three. The math counts a box's borders; the
- * renderer draws none. The math sizes the viewport from the terminal; the
- * renderer sizes it from the layout. Each disagreement is invisible in a test
- * that asks the math to check its own arithmetic — which is what
- * `tests/nodes.test.ts` does, and why it has been green through every one of
- * these regressions.
+ * Every scroll bug we shipped had the same shape: the follow math and the
+ * renderer disagreed about the SIZE OF THINGS. The math counted a row as one
+ * line; the renderer wrapped it to three. The math counted a box's borders;
+ * the renderer drew none. The math sized the viewport from the terminal; the
+ * renderer sized it from the layout. None of that is visible to a test that
+ * asks the math to check its own arithmetic, which is why the focus tests
+ * stayed green through every one of those regressions.
  *
  * So nothing here trusts a number the host computed. Every test renders a real
  * frame through the real stage, reads the CHARACTERS back, and asks where the
- * selected row landed on screen. The rules being checked are the two the host
- * claims:
+ * selected row landed on screen. The two rules, in the terms a human would put
+ * them:
  *
  *   1. the selected row is always on screen, and
  *   2. the view moves ONLY when it has to — a row with space below it does not
  *      drag the whole list down with it.
  *
- * Tests marked `test.failing` are live reproductions: they describe the rule,
- * they fail against today's host, and bun reports them as failures the day the
- * bug is fixed — at which point drop the `.failing`.
+ * The host now keeps them by MEASURING (host/stage.ts asks the layout where
+ * the row it just built ended up), so the way to break these tests again is to
+ * reintroduce a prediction. If you are adding one, add it here first.
  */
 
 // --- The harness -----------------------------------------------------------
@@ -130,31 +128,6 @@ async function session(def: AppletDef, size = SIZE) {
   };
 }
 
-/**
- * The line a focused row is REALLY drawn on, counted from the top of the
- * content — the number `focusLineOf` is trying to predict.
- *
- * Measured, not derived: rendered in a viewport tall enough that nothing
- * scrolls, with a sentinel as the first node so the origin needs no assumption
- * about how many lines of chrome sit above the content.
- */
-async function measuredLine(header: ViewNode[], opts: LayoutOpts = {}, cursor = 0) {
-  const ORIGIN = "◇origin◇";
-  const def = listApplet([text(ORIGIN), ...header], opts);
-  const s = await session(def, { width: SIZE.width, height: 60 });
-  const frame = await s.press(cursor);
-  const lines = frame.text.split("\n");
-  const origin = lines.findIndex((l) => l.includes(ORIGIN));
-  s.done();
-  expect(origin).toBeGreaterThanOrEqual(0);
-  expect(frame.selectedRow).toBeGreaterThanOrEqual(0); // it all fitted, as intended
-  const nodes = (def.view as (s: unknown) => ViewNode[])({ cursor }) as ViewNode[];
-  return {
-    measured: frame.selectedRow - origin,
-    counted: focusLineOf(nodes, SIZE.width - 7),
-  };
-}
-
 // --- The arithmetic, on its own --------------------------------------------
 
 test("clampScroll never leaves the content", () => {
@@ -172,28 +145,29 @@ test("scrollToShow moves only for a row that is off screen", () => {
   expect(scrollToShow(6, null, 10)).toBe(6); // no selection: leave the view alone
 });
 
-test.failing("the stage follows the selection with the arithmetic in host/scroll.ts", () => {
-  // `scrollToShow` is the tested, documented, pure version of the follow — and
-  // the stage does not call it. It has an inline copy (with a `peek` term the
-  // pure one has never heard of), so fixing the rule in scroll.ts fixes
-  // nothing on screen, and the tests above pass while the host misbehaves.
+test("the stage follows the selection with the arithmetic in host/scroll.ts", () => {
+  // The rule above has to be the one that RUNS. The stage used to keep an
+  // inline copy of it (with a `peek` term this one had never heard of), so the
+  // tests above passed while the screen misbehaved and every fix to scroll.ts
+  // changed nothing at all. One copy, called from one place.
   const src = readFileSync(join(import.meta.dir, "..", "host", "stage.ts"), "utf8");
   expect(src.includes("scrollToShow(")).toBe(true);
 });
 
 // --- The viewport the follow math thinks it has ----------------------------
 
-test.failing("the viewport the follow math measures is the viewport the frame draws", async () => {
+test("the viewport the follow math measures is the viewport the frame draws", async () => {
   const s = await session(listApplet());
   const frame = await s.press(0);
-  // The follow decides "off screen" against `innerHeight()`, derived from the
-  // terminal size minus a chrome constant. The frame is laid out by flexbox.
-  // They disagree by a line, so every list starts scrolling a row early.
+  // "Off screen" is only meaningful against the height the body actually got.
+  // The estimate the stage makes from the terminal size (`innerHeight()`, for
+  // sizing a view before there is a frame) comes out a line shorter than
+  // flexbox's answer — follow against that and every list scrolls a row early.
   expect(s.stage.viewportHeight()).toBe(frame.shown.length);
   s.done();
 });
 
-test.failing("the first frame draws as many rows as the second", async () => {
+test("the first frame draws as many rows as the second", async () => {
   const { renderer, renderOnce, captureCharFrame } = await createTestRenderer(SIZE);
   const stage = createStage(renderer);
   const def = listApplet();
@@ -207,34 +181,33 @@ test.failing("the first frame draws as many rows as the second", async () => {
   const second = rows();
   renderer.destroy();
 
-  // setFrame lays the CONTENT out before it follows the selection, but reads
-  // the viewport's height off the terminal — so on the first frame it is
-  // scrolling against a viewport that has not been sized yet.
+  // The ScrollBox reserves a row for a horizontal scrollbar until it works out
+  // that it has nothing to scroll sideways, so the first frame of every screen
+  // used to be a line shorter than the rest — and was followed as such.
   expect(first).toBe(second);
 });
 
 // --- Rule 2: the view moves only when it has to ----------------------------
 
-test.failing("↓ does not scroll while there is still a row below the selection", async () => {
+test("↓ does not scroll while there is still a row below the selection", async () => {
   const s = await session(listApplet());
   const frames = await s.walkDown(20);
   s.done();
 
-  // The frame BEFORE the first scroll still has room under the cursor: the
-  // list moved while the selected row had a drawn row below it.
+  // The frame BEFORE the first scroll must have the cursor on the last drawn
+  // row: if it still had a row under it, the list moved for nothing.
   const firstScroll = frames.findIndex((f) => f.scrollTop > 0);
   expect(firstScroll).toBeGreaterThan(0);
   const before = frames[firstScroll - 1]!;
   expect(before.lastRow - before.selectedRow).toBe(0);
 });
 
-test.failing("an unbordered box above the list does not drag the view with the cursor", async () => {
-  // The reported bug, in the smallest shape that shows it: a plain `box` — no
-  // border asked for, and the renderer draws none — sitting above a list.
-  // `focusLineOf` counts two border lines the frame never drew, so the follow
-  // believes the selection is two lines lower than it is, and from there every
-  // ↓ scrolls the whole list while the cursor sits parked THREE rows above the
-  // bottom of the frame with list still visible underneath it.
+test("an unbordered box above the list does not drag the view with the cursor", async () => {
+  // The reported bug, in the smallest shape that showed it: a plain `box` — no
+  // border asked for, and none drawn — above a list. The follow used to count
+  // two border lines the frame never drew, believed the selection was two
+  // lines lower than it was, and from there dragged the whole list on every ↓
+  // while the cursor sat parked THREE rows above the bottom of the frame.
   const s = await session(listApplet([box([text("alpha"), text("beta")])]));
   const frames = await s.walkDown(14);
   s.done();
@@ -267,28 +240,6 @@ test("walking the whole list keeps the selection on screen", async () => {
   expect(lost).toEqual([]);
 });
 
-test.failing("a `col` with a gap keeps the selection on screen", async () => {
-  // `gap: 1` draws a blank line between rows; `focusLineOf` counts none of
-  // them, so its idea of the selection's line is half the truth. Past the
-  // halfway point the follow is convinced the row is still on screen, the view
-  // never moves again, and the cursor is simply gone.
-  const s = await session(listApplet([], { gap: 1 }));
-  const frames = await s.walkDown(20);
-  s.done();
-  const lost = frames.flatMap((f, i) => (f.selectedRow < 0 ? [i] : []));
-  expect(lost).toEqual([]);
-});
-
-test.failing("a wrapped line above the list keeps the selection on screen", async () => {
-  // One long line — an email subject, a note's first paragraph — wraps to three
-  // rows on screen and counts as one in the follow math. Every row below it is
-  // two lines lower than the host believes.
-  const s = await session(listApplet([text("wrap ".repeat(40))]));
-  const frames = await s.walkDown(20);
-  s.done();
-  const lost = frames.flatMap((f, i) => (f.selectedRow < 0 ? [i] : []));
-  expect(lost).toEqual([]);
-});
 
 test("walking back up returns the view to the top", async () => {
   const s = await session(listApplet());
@@ -300,70 +251,66 @@ test("walking back up returns the view to the top", async () => {
   expect(top.shown[0]).toBe(label(0));
 });
 
-// --- Where the focused row really is ---------------------------------------
+// --- Every shape of list, walked ------------------------------------------
 //
-// One assertion, six shapes: does `focusLineOf` predict the line the renderer
-// actually draws the selection on? Everything above is a consequence of these.
+// One table, one walk each: the header above a list is what decides where its
+// rows really are, and each of these used to break the follow in its own way.
 
-test("a plain list: the counted line is the drawn line", async () => {
-  const { measured, counted } = await measuredLine([], {}, 5);
-  expect(counted).toBe(measured);
-});
+const SHAPES: { name: string; header?: ViewNode[]; opts?: LayoutOpts }[] = [
+  { name: "a plain list", },
+  { name: "a list under a titled box", header: [box([text("a"), text("b")], { title: "hi" })] },
+  { name: "a list under an unbordered box", header: [box([text("a"), text("b")])] },
+  { name: "a list under a padded box", header: [box([text("a")], { border: true, padding: 1 })] },
+  { name: "a list with a gap between its rows", opts: { gap: 1 } },
+  { name: "a list under a line that wraps", header: [text("wrap ".repeat(40))] },
+];
 
-test("a titled box above the list: counted line is the drawn line", async () => {
-  const { measured, counted } = await measuredLine([box([text("a"), text("b")], { title: "hi" })], {}, 5);
-  expect(counted).toBe(measured);
-});
+for (const shape of SHAPES) {
+  test(`${shape.name}: ↓ keeps the selection on screen, and moves the view only when it must`, async () => {
+    const s = await session(listApplet(shape.header ?? [], shape.opts ?? {}));
+    const frames = await s.walkDown(24);
+    s.done();
 
-test.failing("an UNBORDERED box above the list: counted line is the drawn line", async () => {
-  // `box()` with no `border` and no `title` renders without a frame
-  // (renderables.ts: `o.border ?? o.title !== undefined`) but is counted as
-  // bordered (nodes.ts: `border === false ? 0 : 1`). Two phantom lines.
-  const { measured, counted } = await measuredLine([box([text("a"), text("b")])], {}, 5);
-  expect(counted).toBe(measured);
-});
+    // Rule 1: the cursor is never off screen.
+    expect(frames.flatMap((f, i) => (f.selectedRow < 0 ? [i] : []))).toEqual([]);
+    // Rule 2: nothing scrolls while the selection still has a row under it.
+    for (const [i, f] of frames.entries()) {
+      if (f.scrollTop === 0) continue;
+      expect({ cursor: i, roomBelow: f.lastRow - f.selectedRow }).toEqual({ cursor: i, roomBelow: 0 });
+    }
+    // And the view only ever moved down, a line at a time — no jumps.
+    const steps = frames.slice(1).map((f, i) => f.scrollTop - frames[i]!.scrollTop);
+    expect(steps.every((d) => d >= 0)).toBe(true);
+  });
+}
 
-test.failing("a padded box above the list: counted line is the drawn line", async () => {
-  // `padding` reaches the renderer through layoutProps and adds a line above
-  // and below the box's children. The focus math never looks at it.
-  const { measured, counted } = await measuredLine([box([text("a")], { border: true, padding: 1 })], {}, 5);
-  expect(counted).toBe(measured);
-});
+test("a body that changes height under the cursor still follows it", async () => {
+  // The theme picker's shape, boiled down: the header re-letters as you move,
+  // so the list is a different height on every frame. That is the case where
+  // the ScrollBox recalculates mid-flight — new viewport height, old content
+  // height — and re-clamps the scroll offset to a maximum that has just
+  // stopped being true, dropping the selected row one line under the fold.
+  const def = defineApplet({
+    id: "probe",
+    title: "probe",
+    summary: "a list under a header that breathes",
+    initialState: { cursor: 0 },
+    verbs: {},
+    view: (s: { cursor: number }) => [
+      // 1 to 6 lines of header, cycling — the hero of a picker, in miniature.
+      col(Array.from({ length: 1 + (s.cursor % 6) }, (_, i) => text(`header ${i}`))),
+      col(
+        Array.from({ length: ROWS }, (_, i) =>
+          text(`${i === s.cursor ? "▸" : " "} ${label(i)}`, { focus: i === s.cursor }),
+        ),
+      ),
+    ],
+  }) as unknown as AppletDef;
 
-test.failing("a `col` with a gap: counted line is the drawn line", async () => {
-  const { measured, counted } = await measuredLine([], { gap: 1 }, 5);
-  expect(counted).toBe(measured);
-});
-
-test.failing("a wrapping line above the list: counted line is the drawn line", async () => {
-  const { measured, counted } = await measuredLine([text("wrap ".repeat(40))], {}, 5);
-  expect(counted).toBe(measured);
-});
-
-// --- The same three defects, as pure arithmetic ----------------------------
-//
-// The rendered tests above are the proof; these are the fast red lights to fix
-// against. Note that tests/nodes.test.ts asserts the OPPOSITE of the first one
-// ("counts a box's borders", with a box the renderer draws no borders for), so
-// fixing this means fixing that expectation too.
-
-test.failing("an unbordered box is not counted as two lines of chrome", () => {
-  // `box()` with neither `border` nor `title` draws no frame.
-  expect(focusLineOf([box([text("a")]), text("row", { focus: true })])).toBe(1);
-});
-
-test.failing("a col's gap is counted", () => {
-  const rows = [text("a"), text("b"), text("row", { focus: true })];
-  expect(focusLineOf([col(rows, { gap: 1 })])).toBe(4);
-});
-
-test.failing("a box's padding is counted", () => {
-  expect(focusLineOf([box([text("a")], { border: true, padding: 1 }), text("row", { focus: true })])).toBe(5);
-});
-
-test.failing("a line that wraps is counted at the height it wraps to", () => {
-  // 100 characters in a 37-cell pane is three rows on screen, not one.
-  expect(focusLineOf([text("x".repeat(100)), text("row", { focus: true })], 37)).toBe(3);
+  const s = await session(def);
+  const frames = await s.walkDown(ROWS - 1);
+  s.done();
+  expect(frames.flatMap((f, i) => (f.selectedRow < 0 ? [i] : []))).toEqual([]);
 });
 
 // --- The launcher, which is the same rules on a two-line row ---------------
@@ -383,7 +330,7 @@ function many(n: number): AppletDef[] {
   );
 }
 
-test.failing("↓ through the launcher does not scroll while entries are still below", async () => {
+test("↓ through the launcher does not scroll while entries are still below", async () => {
   const applets = many(30);
   const { renderer, renderOnce, captureCharFrame } = await createTestRenderer(SIZE);
   const stage = createStage(renderer);
@@ -402,12 +349,13 @@ test.failing("↓ through the launcher does not scroll while entries are still b
   }
   renderer.destroy();
 
-  // A launcher entry is two lines (title + summary), so `peek` keeps one line
-  // below the selection on screen. Anything MORE than that is the view being
-  // dragged along by a cursor that had room to move.
+  // A launcher entry is two lines (title + summary), and `peek` keeps the
+  // summary on screen with its title — so at the fold the selected title is the
+  // LAST title drawn, with only its own summary under it. A further title still
+  // on screen means the view was dragged by a cursor that had room to move.
   for (const [i, f] of frames.entries()) {
     if (f.scrollTop === 0) continue;
-    expect({ cursor: i, roomBelow: f.lastRow - f.selectedRow }).toEqual({ cursor: i, roomBelow: 1 });
+    expect({ cursor: i, titlesBelow: f.lastRow - f.selectedRow }).toEqual({ cursor: i, titlesBelow: 0 });
   }
 });
 
@@ -443,12 +391,11 @@ test("the wheel can reach the last row of a list", async () => {
   expect(frame).toContain(label(ROWS - 1));
 });
 
-test.failing("the wheel and the follow math agree on how tall the viewport is", async () => {
-  // Two paths, two answers. `scrollBy` (the wheel) clamps against the
-  // ScrollBox's REAL viewport height; the follow (↑↓) measures the viewport
-  // itself, off the terminal size. So the bottom of the list is a different
-  // place depending on which one put you there — and the follow's answer is
-  // the one that is a line short.
+test("the wheel and the follow math agree on how tall the viewport is", async () => {
+  // Two paths, one answer. The wheel (`scrollBy`) and the follow (↑↓) both
+  // clamp against the height of the body, so the bottom of a list is the same
+  // place however you got there. They used to differ by a line, which is the
+  // last row of every list being unreachable one way and not the other.
   const { renderer, renderOnce } = await createTestRenderer(SIZE);
   const stage = createStage(renderer);
   stage.renderApplet(listApplet(), { cursor: 0 } as never);
@@ -461,12 +408,12 @@ test.failing("the wheel and the follow math agree on how tall the viewport is", 
   expect(ROWS - vh).toBe(bottom);
 });
 
-test.failing("a wheel scroll survives a repaint that did not move the cursor", async () => {
+test("a wheel scroll survives a repaint that did not move the cursor", async () => {
   // The other half of the report: scroll-into-view eating a scroll you made
-  // yourself. Wheel down a cursored list to read ahead, and the next repaint —
-  // an SSE state push, a poll, anything at all — yanks the view back to the
-  // cursor, because the follow re-runs from scratch on every frame with no
-  // notion that the human moved the viewport on purpose.
+  // yourself. Wheel down a cursored list to read ahead and the next repaint —
+  // an SSE state push, a scrubber tick, a poll — used to yank the view back to
+  // the cursor, which in a live applet meant you could not read ahead at all.
+  // A hand scroll now holds until the SELECTION moves.
   const { renderer, renderOnce } = await createTestRenderer(SIZE);
   const stage = createStage(renderer);
   const def = listApplet();

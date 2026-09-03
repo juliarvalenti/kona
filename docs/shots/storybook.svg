@@ -37,7 +37,7 @@
 <rect x="198.8" y="156" width="7.35" height="18" fill="#00d488"/>
 <rect x="207.2" y="156" width="100.8" height="18" fill="#00d488" opacity="0.25"/>
 <rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="9" fill="#9a9ea3"/>
+<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="187" fill="#6a6a6a" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">gauge    </text>
@@ -108,6 +108,10 @@
 <rect x="652.4" y="372" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 390V408" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
+<text x="39.2" y="403" fill="#6a6a6a" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> inbox </text>
+<text x="106.4" y="403" fill="#6a6a6a" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> sent </text>
+<rect x="165.2" y="390" width="67.2" height="18" fill="#bb9af7"/>
+<text x="165.2" y="403" fill="#0b0b0b" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> drafts </text>
 <rect x="652.4" y="390" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 390V408" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 408V426" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>

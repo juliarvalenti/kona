@@ -14,141 +14,110 @@
 <path d="M26.6 66V84" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M673.4 66V84" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 84V102" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="182" y="84" width="50.4" height="18" fill="#00d488"/>
-<text x="232.4" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="257.6" y="84" width="50.4" height="18" fill="#00d488"/>
-<text x="308" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="375.2" y="84" width="50.4" height="18" fill="#00d488"/>
-<text x="425.6" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="450.8" y="84" width="58.8" height="18" fill="#00d488"/>
-<text x="509.6" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="190.4" y="84" width="50.4" height="18" fill="#00d488"/>
+<text x="240.8" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="266" y="84" width="50.4" height="18" fill="#00d488"/>
+<text x="316.4" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="383.6" y="84" width="50.4" height="18" fill="#00d488"/>
+<text x="434" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="459.2" y="84" width="58.8" height="18" fill="#00d488"/>
+<text x="518" y="97" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
 <path d="M673.4 84V102" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="173.6" y="102" width="16.8" height="18" fill="#00d488"/>
-<text x="190.4" y="115" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
-<rect x="207.2" y="102" width="33.6" height="18" fill="#00d488"/>
-<text x="240.8" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<text x="257.6" y="115" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
-<rect x="299.6" y="102" width="16.8" height="18" fill="#00d488"/>
-<text x="316.4" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="333.2" y="102" width="16.8" height="18" fill="#00d488"/>
-<text x="350" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="366.8" y="102" width="16.8" height="18" fill="#00d488"/>
-<text x="383.6" y="115" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
-<rect x="400.4" y="102" width="33.6" height="18" fill="#00d488"/>
-<text x="434" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="450.8" y="102" width="16.8" height="18" fill="#00d488"/>
-<text x="467.6" y="115" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔════╝</text>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="182" y="102" width="16.8" height="18" fill="#00d488"/>
+<text x="198.8" y="115" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
+<rect x="215.6" y="102" width="33.6" height="18" fill="#00d488"/>
+<text x="249.2" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<text x="266" y="115" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
+<rect x="308" y="102" width="16.8" height="18" fill="#00d488"/>
+<text x="324.8" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="341.6" y="102" width="16.8" height="18" fill="#00d488"/>
+<text x="358.4" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="375.2" y="102" width="16.8" height="18" fill="#00d488"/>
+<text x="392" y="115" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
+<rect x="408.8" y="102" width="33.6" height="18" fill="#00d488"/>
+<text x="442.4" y="115" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="459.2" y="102" width="16.8" height="18" fill="#00d488"/>
+<text x="476" y="115" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔════╝</text>
 <path d="M673.4 102V120" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="173.6" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="190.4" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="198.8" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="215.6" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
-<rect x="224" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="240.8" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="266" y="120" width="42" height="18" fill="#00d488"/>
-<text x="308" y="133" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<text x="333.2" y="133" fill="#00d488" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
-<rect x="366.8" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="383.6" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="392" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="408.8" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
-<rect x="417.2" y="120" width="16.8" height="18" fill="#00d488"/>
-<text x="434" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="450.8" y="120" width="58.8" height="18" fill="#00d488"/>
-<text x="509.6" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="182" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="198.8" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="207.2" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="224" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
+<rect x="232.4" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="249.2" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="274.4" y="120" width="42" height="18" fill="#00d488"/>
+<text x="316.4" y="133" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<text x="341.6" y="133" fill="#00d488" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<rect x="375.2" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="392" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="400.4" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="417.2" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
+<rect x="425.6" y="120" width="16.8" height="18" fill="#00d488"/>
+<text x="442.4" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="459.2" y="120" width="58.8" height="18" fill="#00d488"/>
+<text x="518" y="133" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
 <path d="M673.4 120V138" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="173.6" y="138" width="33.6" height="18" fill="#00d488"/>
-<text x="207.2" y="151" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="224" y="138" width="16.8" height="18" fill="#00d488"/>
-<text x="240.8" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="257.6" y="138" width="16.8" height="18" fill="#00d488"/>
-<text x="274.4" y="151" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═══╝</text>
-<rect x="333.2" y="138" width="16.8" height="18" fill="#00d488"/>
-<text x="350" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="366.8" y="138" width="33.6" height="18" fill="#00d488"/>
-<text x="400.4" y="151" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="417.2" y="138" width="16.8" height="18" fill="#00d488"/>
-<text x="434" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<text x="450.8" y="151" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
-<rect x="492.8" y="138" width="16.8" height="18" fill="#00d488"/>
-<text x="509.6" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="182" y="138" width="33.6" height="18" fill="#00d488"/>
+<text x="215.6" y="151" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="232.4" y="138" width="16.8" height="18" fill="#00d488"/>
+<text x="249.2" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<rect x="266" y="138" width="16.8" height="18" fill="#00d488"/>
+<text x="282.8" y="151" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═══╝</text>
+<rect x="341.6" y="138" width="16.8" height="18" fill="#00d488"/>
+<text x="358.4" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<rect x="375.2" y="138" width="33.6" height="18" fill="#00d488"/>
+<text x="408.8" y="151" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="425.6" y="138" width="16.8" height="18" fill="#00d488"/>
+<text x="442.4" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
+<text x="459.2" y="151" fill="#00d488" textLength="42" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚════</text>
+<rect x="501.2" y="138" width="16.8" height="18" fill="#00d488"/>
+<text x="518" y="151" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
 <path d="M673.4 138V156" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<text x="173.6" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
-<rect x="182" y="156" width="50.4" height="18" fill="#00d488"/>
-<text x="232.4" y="169" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="257.6" y="156" width="58.8" height="18" fill="#00d488"/>
-<text x="316.4" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<text x="333.2" y="169" fill="#00d488" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
-<text x="366.8" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
-<rect x="375.2" y="156" width="50.4" height="18" fill="#00d488"/>
-<text x="425.6" y="169" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="450.8" y="156" width="58.8" height="18" fill="#00d488"/>
-<text x="509.6" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
+<text x="182" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="190.4" y="156" width="50.4" height="18" fill="#00d488"/>
+<text x="240.8" y="169" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="266" y="156" width="58.8" height="18" fill="#00d488"/>
+<text x="324.8" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
+<text x="341.6" y="169" fill="#00d488" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
+<text x="375.2" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
+<rect x="383.6" y="156" width="50.4" height="18" fill="#00d488"/>
+<text x="434" y="169" fill="#00d488" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
+<rect x="459.2" y="156" width="58.8" height="18" fill="#00d488"/>
+<text x="518" y="169" fill="#00d488" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
 <path d="M673.4 156V174" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<text x="182" y="187" fill="#00d488" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
-<text x="257.6" y="187" fill="#00d488" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚══════╝</text>
-<text x="375.2" y="187" fill="#00d488" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
-<text x="450.8" y="187" fill="#00d488" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚══════╝</text>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
+<text x="190.4" y="187" fill="#00d488" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
+<text x="266" y="187" fill="#00d488" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚══════╝</text>
+<text x="383.6" y="187" fill="#00d488" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
+<text x="459.2" y="187" fill="#00d488" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚══════╝</text>
 <path d="M673.4 174V192" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="224" y="210" width="92.4" height="18" fill="#00d488"/>
-<rect x="316.4" y="210" width="5.25" height="18" fill="#00d488"/>
-<rect x="324.8" y="210" width="134.4" height="18" fill="#00d488" opacity="0.25"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="232.4" y="210" width="92.4" height="18" fill="#00d488"/>
+<rect x="324.8" y="210" width="5.25" height="18" fill="#00d488"/>
+<rect x="333.2" y="210" width="134.4" height="18" fill="#00d488" opacity="0.25"/>
 <path d="M673.4 210V228" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="282.8" y="259" fill="#00d488" textLength="126" lengthAdjust="spacingAndGlyphs" xml:space="preserve">running  ·  tea</text>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 354V372" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M673.4 372V390" stroke="#00d488" stroke-width="1.2" fill="none"/>

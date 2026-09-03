@@ -22,8 +22,6 @@
 <text x="408.8" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
 <rect x="442.4" y="84" width="50.4" height="18" fill="#7aa2f7"/>
 <text x="492.8" y="97" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <rect x="190.4" y="102" width="16.8" height="18" fill="#7aa2f7"/>
@@ -42,8 +40,6 @@
 <text x="450.8" y="115" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔═</text>
 <rect x="467.6" y="102" width="33.6" height="18" fill="#7aa2f7"/>
 <text x="501.2" y="115" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╗</text>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <rect x="190.4" y="120" width="16.8" height="18" fill="#7aa2f7"/>
@@ -68,8 +64,6 @@
 <text x="476" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔</text>
 <rect x="484.4" y="120" width="16.8" height="18" fill="#7aa2f7"/>
 <text x="501.2" y="133" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 120V138" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <rect x="190.4" y="138" width="33.6" height="18" fill="#7aa2f7"/>
@@ -88,8 +82,6 @@
 <text x="467.6" y="151" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
 <rect x="484.4" y="138" width="16.8" height="18" fill="#7aa2f7"/>
 <text x="501.2" y="151" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">║</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="190.4" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
@@ -104,63 +96,43 @@
 <text x="434" y="169" fill="#7aa2f7" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚</text>
 <rect x="442.4" y="156" width="50.4" height="18" fill="#7aa2f7"/>
 <text x="492.8" y="169" fill="#7aa2f7" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╔╝</text>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="198.8" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
 <text x="282.8" y="187" fill="#7aa2f7" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═╝</text>
 <text x="358.4" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
 <text x="442.4" y="187" fill="#7aa2f7" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝</text>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="224" y="192" width="176.4" height="18" fill="#7aa2f7"/>
-<rect x="400.4" y="192" width="58.8" height="18" fill="#7aa2f7" opacity="0.25"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="232.4" y="192" width="176.4" height="18" fill="#7aa2f7"/>
+<rect x="408.8" y="192" width="58.8" height="18" fill="#7aa2f7" opacity="0.25"/>
 <path d="M673.4 192V210" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="198.8" y="241" fill="#7aa2f7" textLength="294" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Tokyo  ·  Wed 2 Sep (+1d)  ·  UTC+9</text>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M39.2 273H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="295" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  San Francisco                           Tue      09:00            UTC-7</text>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="313" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  New York                                Tue      12:00            UTC-4</text>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="331" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  London                                  Tue      17:00            UTC+1</text>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="349" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  Berlin                                  Tue      18:00            UTC+2</text>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
+<rect x="39.2" y="354" width="613.2" height="18" fill="#7aa2f7"/>
+<text x="39.2" y="367" fill="#0b0b0b" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  Tokyo                                   Wed      01:00   +1d      UTC+9</text>
+<rect x="652.4" y="354" width="8.4" height="18" fill="#7aa2f7"/>
 <path d="M673.4 354V372" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>
 <path d="M673.4 372V390" stroke="#7aa2f7" stroke-width="1.2" fill="none"/>

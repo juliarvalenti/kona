@@ -16,13 +16,9 @@
 <path d="M26.6 84V102" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="97" fill="#00d488" textLength="184.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">MARKETS  ·  2/3 quoted</text>
 <text x="224" y="97" fill="#6a6a6a" textLength="142.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   updated 0s ago</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M39.2 111H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <rect x="39.2" y="120" width="613.2" height="18" fill="#ff5c57"/>
@@ -35,8 +31,7 @@
 <rect x="383.6" y="135.75" width="8.4" height="2.25" fill="#0b0b0b"/>
 <rect x="392" y="129" width="8.4" height="9" fill="#0b0b0b"/>
 <text x="400.4" y="133" fill="#0b0b0b" textLength="252" lengthAdjust="spacingAndGlyphs" xml:space="preserve">             316.85     -0.89%</text>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#ff5c57"/>
 <path d="M673.4 120V138" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="151" fill="#ff5c57" textLength="302.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  BTC-USD     Bitcoin USD           </text>
@@ -47,56 +42,31 @@
 <rect x="375.2" y="149.25" width="8.4" height="6.75" fill="#ff5c57"/>
 <rect x="383.6" y="153.75" width="8.4" height="2.25" fill="#ff5c57"/>
 <text x="392" y="151" fill="#ff5c57" textLength="260.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">           77,859.73     -0.77%</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="169" fill="#6a6a6a" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ETH-USD     …                                              —           </text>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 354V372" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#ff5c57" stroke-width="1.2" fill="none"/>
 <path d="M673.4 372V390" stroke="#ff5c57" stroke-width="1.2" fill="none"/>

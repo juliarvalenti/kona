@@ -15,17 +15,11 @@
 <path d="M673.4 66V84" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 84V102" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="97" fill="#7aa2f7" textLength="252" lengthAdjust="spacingAndGlyphs" xml:space="preserve">laptop  ·  darwin  ·  up 3d 2h</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M39.2 111H576.8" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 120V138" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="151" fill="#6a6a6a" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">CPU   </text>
@@ -34,20 +28,14 @@
 <rect x="224" y="138" width="168" height="18" fill="#00d488" opacity="0.25"/>
 <text x="392" y="151" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   42%</text>
 <text x="442.4" y="151" fill="#6a6a6a" textLength="176.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  8 cores · load 1.24</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <rect x="89.6" y="169.5" width="8.4" height="4.5" fill="#6a6a6a"/>
 <rect x="98" y="167.25" width="8.4" height="6.75" fill="#6a6a6a"/>
 <rect x="106.4" y="160.5" width="8.4" height="13.5" fill="#6a6a6a"/>
 <rect x="114.8" y="165" width="8.4" height="9" fill="#6a6a6a"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="205" fill="#6a6a6a" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">MEM   </text>
@@ -55,12 +43,8 @@
 <rect x="274.4" y="192" width="117.6" height="18" fill="#00d488" opacity="0.25"/>
 <text x="392" y="205" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   61%</text>
 <text x="442.4" y="205" fill="#6a6a6a" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  9.8G / 16.0G</text>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="241" fill="#6a6a6a" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">DISK  </text>
@@ -69,12 +53,8 @@
 <rect x="215.6" y="228" width="176.4" height="18" fill="#00d488" opacity="0.25"/>
 <text x="392" y="241" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   40%</text>
 <text x="442.4" y="241" fill="#6a6a6a" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  184G / 460G  /</text>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="277" fill="#6a6a6a" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">BATT  </text>
@@ -83,31 +63,18 @@
 <rect x="358.4" y="264" width="33.6" height="18" fill="#00d488" opacity="0.25"/>
 <text x="392" y="277" fill="#00d488" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   87%</text>
 <text x="442.4" y="277" fill="#6a6a6a" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  on battery · 3:12 left</text>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 354V372" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#00d488" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="372" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 372V390" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M26.6 390V408" stroke="#00d488" stroke-width="1.2" fill="none"/>
 <path d="M673.4 390V408" stroke="#00d488" stroke-width="1.2" fill="none"/>
