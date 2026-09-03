@@ -15,75 +15,45 @@
 <path d="M673.4 66V84" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 84V102" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="97" fill="#6a6a6a" textLength="445.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">6 spaces  ·  2 unread  ·  ada@example.com  ·  20s ago</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M39.2 111H644" stroke="#6a6a6a" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <rect x="39.2" y="120" width="613.2" height="18" fill="#00cfa0"/>
 <text x="39.2" y="133" fill="#0b0b0b" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●     ship-kona                                         space        3m</text>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="652.4" y="120" width="8.4" height="18" fill="#00cfa0"/>
 <path d="M673.4 120V138" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="151" fill="#00d488" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  ●  ●  Grace Hopper                                      active      40m</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="169" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        platform-oncall                                   space        1h</text>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="187" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">     ○  Alan Turing                                       seen 40m     4h</text>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="205" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        design-review                                     space        1d</text>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="223" fill="#d0d0d0" textLength="613.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">        random                                            space        3d</text>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 354V372" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#00cfa0" stroke-width="1.2" fill="none"/>
 <path d="M673.4 372V390" stroke="#00cfa0" stroke-width="1.2" fill="none"/>

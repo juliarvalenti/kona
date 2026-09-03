@@ -17,79 +17,48 @@
 <text x="39.2" y="97" fill="#7aa2f7" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▸ pending</text>
 <text x="140" y="97" fill="#5a5a5a" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  activity</text>
 <text x="249.2" y="97" fill="#f0b000" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">[2 waiting]</text>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="84" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 84V102" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 102V120" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M39.2 111H425.6" stroke="#5a5a5a" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="102" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 102V120" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 120V138" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <rect x="39.2" y="120" width="579.6" height="18" fill="#f7768e"/>
 <text x="39.2" y="133" fill="#0b0b0b" textLength="579.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  email.send               {"to":"ada@example.com","subjec…        8m</text>
-<rect x="618.8" y="120" width="33.6" height="18" fill="#f7768e"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="120" width="8.4" height="18" fill="#9a9ea3"/>
+<rect x="618.8" y="120" width="42" height="18" fill="#f7768e"/>
 <path d="M673.4 120V138" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 138V156" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="151" fill="#f0b000" textLength="579.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  mycelium.post            {"room":"ship-kona","text":"pic…        9m</text>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="138" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 138V156" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 156V174" stroke="#f7768e" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="156" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 156V174" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 174V192" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="187" fill="#6a6a6a" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">what it would do</text>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="174" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 174V192" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 192V210" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="205" fill="#f0b000" textLength="84" lengthAdjust="spacingAndGlyphs" xml:space="preserve">email.send</text>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="192" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 192V210" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 210V228" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="223" fill="#5a5a5a" textLength="243.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">high · asked by claude 2m ago</text>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="210" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 210V228" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 228V246" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="241" fill="#d0d0d0" textLength="176.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  to: ada@example.com</text>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="228" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 228V246" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 246V264" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="259" fill="#d0d0d0" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  subject: ship it</text>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="246" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 246V264" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 264V282" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="277" fill="#d0d0d0" textLength="302.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  body: rc1 is up — merging at noon.</text>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="264" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 264V282" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 282V300" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <text x="39.2" y="295" fill="#5a5a5a" textLength="378" lengthAdjust="spacingAndGlyphs" xml:space="preserve">held because high-priority verbs need a human</text>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="282" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 282V300" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 300V318" stroke="#f7768e" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="300" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 300V318" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 318V336" stroke="#f7768e" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="318" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 318V336" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 336V354" stroke="#f7768e" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#252527"/>
-<rect x="652.4" y="336" width="8.4" height="18" fill="#9a9ea3"/>
 <path d="M673.4 336V354" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 354V372" stroke="#f7768e" stroke-width="1.2" fill="none"/>
-<rect x="652.4" y="354" width="8.4" height="18" fill="#252527"/>
 <path d="M673.4 354V372" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M26.6 372V390" stroke="#f7768e" stroke-width="1.2" fill="none"/>
 <path d="M673.4 372V390" stroke="#f7768e" stroke-width="1.2" fill="none"/>

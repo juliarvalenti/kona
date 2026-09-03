@@ -9,7 +9,7 @@ import {
 } from "@opentui/core";
 import type { BigFont, Color, InputNode, ViewNode } from "../sdk/index.ts";
 import { fitBigFont } from "../core/fonts.ts";
-import { layoutProps } from "./nodes.ts";
+import { isFocused, layoutProps } from "./nodes.ts";
 
 /**
  * The node -> renderable mapping: the ONE place that knows how a `ViewNode`
@@ -37,6 +37,14 @@ export interface NodeRendererOpts {
   inputLines: (node: InputNode) => TextChunk[][];
   /** Register a row as a mouse target (it carried an `index`). */
   claim: (index: number, node: Renderable) => void;
+  /**
+   * Hand back the widget a FOCUSED node became, with the node itself. This is
+   * how the stage finds the selected row without predicting where it will
+   * land: it scrolls to the thing it just built, wherever the layout ends up
+   * putting it — and the node is what tells it, next frame, whether the
+   * selection MOVED or the screen merely repainted.
+   */
+  focus: (widget: Renderable, node: ViewNode) => void;
 }
 
 // Sub-cell resolution for `bar`: full blocks + one fractional block = 8x
@@ -49,7 +57,7 @@ const PARTIALS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
  */
 export function createNodeRenderer(
   renderer: CliRenderer,
-  { colors, width, inputChunks, inputLines, claim }: NodeRendererOpts,
+  { colors, width, inputChunks, inputLines, claim, focus }: NodeRendererOpts,
 ): (node: ViewNode, id: string) => Renderable {
   function nodeToRenderable(node: ViewNode, id: string): Renderable {
     const { fg: FG, dim: DIM, accent: ACCENT, font: FONT } = colors();
@@ -78,6 +86,9 @@ export function createNodeRenderer(
         });
         const claimed = (n: Renderable) => {
           if (node.index !== undefined) claim(node.index, n);
+          // The OUTERMOST widget, so a selected row reports the full-width
+          // highlight bar rather than the label sitting inside it.
+          if (isFocused(node)) focus(n, node);
           return n;
         };
         if (!node.bg) return claimed(label);
@@ -105,13 +116,19 @@ export function createNodeRenderer(
         return box;
       }
       case "input": {
+        const focused = (n: Renderable) => {
+          if (isFocused(node)) focus(n, node);
+          return n;
+        };
         if (!node.multiline)
-          return new TextRenderable(renderer, {
-            id,
-            content: new StyledText(inputChunks(node)),
-            wrapMode: "none",
-            flexShrink: 0,
-          });
+          return focused(
+            new TextRenderable(renderer, {
+              id,
+              content: new StyledText(inputChunks(node)),
+              wrapMode: "none",
+              flexShrink: 0,
+            }),
+          );
         // A textarea is a stack of one-line renderables: the wrapping is the
         // editor's (it owns the caret's row and column), never OpenTUI's.
         const area = new BoxRenderable(renderer, { id, flexDirection: "column", flexShrink: 0 });
@@ -125,7 +142,7 @@ export function createNodeRenderer(
             }),
           ),
         );
-        return area;
+        return focused(area);
       }
       case "box": {
         const o = node.opts;

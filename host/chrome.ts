@@ -54,6 +54,12 @@ export function createChrome(renderer: CliRenderer, accent: Color): Chrome {
     scrollY: true,
     contentOptions: { flexDirection: "column", alignItems: "stretch" },
   });
+  // Only the vertical bar is ever wanted: the body is clamped to the pane's
+  // width, so a horizontal one has nothing to scroll — and until the ScrollBox
+  // works that out for itself it reserves the row anyway, which cost the FIRST
+  // frame of every screen a line of viewport (the follow then scrolled against
+  // a body one row shorter than every frame after it).
+  scroll.horizontalScrollBar.visible = false;
   frame.add(scroll);
   // The overlay layer: absolutely positioned over the whole content area and
   // stacked above it, so a modal floats instead of taking part in the flow.
