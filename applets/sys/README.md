@@ -1,7 +1,12 @@
 # sys
 
-Live CPU, memory, disk and battery gauges, sampled in the daemon, with a
-sparkline of recent CPU. Metrics the machine doesn't have are dimmed, not blank.
+The machine as a cockpit gauge, built to be left on screen: the CPU percentage
+lettered in the theme's figlet, a thermal area graph of the last few minutes
+that scrolls in from the right edge (green at the floor, amber, red at the
+ceiling), and memory, swap, disk and battery gauges beneath. The frame goes
+amber, then red, with whichever gauge is worst. Metrics the machine doesn't
+have are dimmed, not blank, and a pane too narrow for the figlet gets a
+one-line readout in its place.
 
 ```sh
 kona sys

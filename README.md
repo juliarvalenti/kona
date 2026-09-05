@@ -75,7 +75,7 @@ is hand-placed: add an applet, re-run it, and its portrait slots in.
 <br><sub><a href="applets/storybook/README.md"><code>storybook</code></a> — Live gallery of kona components.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="docs/shots/sys.svg" width="100%" alt="System — draws a labeled gauge per metric with a cpu history line">
+<img src="docs/shots/sys.svg" width="100%" alt="System — a figlet CPU readout over a thermal graph of the last few minutes, gauges beneath">
 <br><sub><a href="applets/sys/README.md"><code>sys</code></a> — Live CPU, memory, disk, and battery gauges.</sub>
 </td>
 </tr>
